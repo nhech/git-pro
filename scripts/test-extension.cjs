@@ -91,4 +91,9 @@ const { runTests, downloadAndUnzipVSCode } = require('@vscode/test-electron');
       await fs.rm(extensionRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
     }
   }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => {
+  console.error(error);
+  // Job logs need a signed-in viewer; an Actions annotation keeps the failure readable from the run page.
+  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error title=Git Pro extension tests::${String(error).slice(0, 2000).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')}`);
+  process.exitCode = 1;
+});

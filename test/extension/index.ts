@@ -29,6 +29,11 @@ async function webviewTab(label: string): Promise<void> {
 export async function run(): Promise<void> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try { await Promise.race([runHostChecks(), new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Extension host checks exceeded time budget; inspect modal/errors in host logs.')), process.env.GIT_PRO_STRESS_HOST==='1'?300_000:90_000); })]); }
+  catch (error) {
+    // Job logs need a signed-in viewer; an Actions annotation keeps the failing assertion readable from the run page.
+    if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error title=Git Pro host checks (VS Code ${vscode.version}, ${process.platform})::${String(error).slice(0, 2000).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')}`);
+    throw error;
+  }
   finally { if (timeout) clearTimeout(timeout); }
 }
 async function runHostChecks(): Promise<void> {

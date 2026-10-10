@@ -111,6 +111,9 @@ export async function verifyHistoryRendererUx(extension: vscode.Extension<unknow
     // The desktop checks need a desktop-width editor. Newer hosts open Chat in the secondary side bar by default,
     // which leaves a default 1024px window with a ~626px editor, so the owned profile closes the side areas first.
     for(const command of ['workbench.action.closeAuxiliaryBar','workbench.action.closePanel','workbench.action.closeSidebar'])await vscode.commands.executeCommand(command);
+    // The focus checks need OS window focus. Newer hosts on macOS may not activate a window launched by a background
+    // process; their Focus Window command forces activation there and only focuses the window elsewhere (1.100 lacks it).
+    if((await vscode.commands.getCommands(true)).includes('workbench.action.focusWindow'))await vscode.commands.executeCommand('workbench.action.focusWindow');
     panel=vscode.window.createWebviewPanel('gitPro.rendererUxFixture','Git Pro: Renderer UX Check',vscode.ViewColumn.Active,
       {enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(extension.extensionUri,'media'),vscode.Uri.file(root)],retainContextWhenHidden:false});
     const session=randomUUID(),nonce=randomUUID().replace(/-/g,''),resource=(name:string)=>panel!.webview.asWebviewUri(vscode.Uri.joinPath(extension.extensionUri,'media',name)).toString();
@@ -122,7 +125,7 @@ export async function verifyHistoryRendererUx(extension: vscode.Extension<unknow
         if(!message||typeof message!=='object')return;const item=message as Record<string,unknown>;if(item.session!==session)return;
         // Focus checks need the webview to hold workbench focus, which startup views such as Chat can take.
         if(item.type==='ready'){panel!.reveal(undefined,false);void panel!.webview.postMessage({type:'page',session,commits,rows,refs:[],tips:[commits[0]!.oid],filters:{},hasMore:false,ref:'HEAD'});}
-        if(item.type==='uxProbeError')void recordHostMetric({firstRenderGeometry:item.diagnostic,originalAssertionFailure:item.message,windowFocused:vscode.window.state.focused,panelActive:panel!.active}).then(()=>reject(new Error(`Renderer UX probe failed: ${String(item.message).slice(0,300)}`)),reject);
+        if(item.type==='uxProbeError')void recordHostMetric({firstRenderGeometry:item.diagnostic,originalAssertionFailure:item.message,windowFocused:vscode.window.state.focused,panelActive:panel!.active}).then(()=>reject(new Error(`Renderer UX probe failed: ${String(item.message).slice(0,300)} (windowFocused=${vscode.window.state.focused}, panelActive=${panel!.active})`)),reject);
         if(['select','workingDiff','comparePage'].includes(String(item.type))){if(observed.length>=100){reject(new Error('Renderer UX message bound exceeded.'));return;}observed.push(item);}
         if(item.type==='uxRendererReport')resolve(item);
       });
