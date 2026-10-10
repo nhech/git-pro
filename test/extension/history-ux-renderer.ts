@@ -108,6 +108,9 @@ export async function verifyHistoryRendererUx(extension: vscode.Extension<unknow
   let panel:vscode.WebviewPanel|undefined,receiver:vscode.Disposable|undefined,timer:ReturnType<typeof setTimeout>|undefined;
   try {
     const script=vscode.Uri.file(path.join(root,'probe.js'));await writeFile(script.fsPath,driver);
+    // The desktop checks need a desktop-width editor. Newer hosts open Chat in the secondary side bar by default,
+    // which leaves a default 1024px window with a ~626px editor, so the owned profile closes the side areas first.
+    for(const command of ['workbench.action.closeAuxiliaryBar','workbench.action.closePanel','workbench.action.closeSidebar'])await vscode.commands.executeCommand(command);
     panel=vscode.window.createWebviewPanel('gitPro.rendererUxFixture','Git Pro: Renderer UX Check',vscode.ViewColumn.Active,
       {enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(extension.extensionUri,'media'),vscode.Uri.file(root)],retainContextWhenHidden:false});
     const session=randomUUID(),nonce=randomUUID().replace(/-/g,''),resource=(name:string)=>panel!.webview.asWebviewUri(vscode.Uri.joinPath(extension.extensionUri,'media',name)).toString();
@@ -117,8 +120,9 @@ export async function verifyHistoryRendererUx(extension: vscode.Extension<unknow
       timer=setTimeout(()=>reject(new Error('Real webview UX fixture exceeded 45 seconds.')),45_000);
       receiver=panel!.webview.onDidReceiveMessage((message:unknown)=>{
         if(!message||typeof message!=='object')return;const item=message as Record<string,unknown>;if(item.session!==session)return;
-        if(item.type==='ready')void panel!.webview.postMessage({type:'page',session,commits,rows,refs:[],tips:[commits[0]!.oid],filters:{},hasMore:false,ref:'HEAD'});
-        if(item.type==='uxProbeError')void recordHostMetric({firstRenderGeometry:item.diagnostic,originalAssertionFailure:item.message}).then(()=>reject(new Error(`Renderer UX probe failed: ${String(item.message).slice(0,300)}`)),reject);
+        // Focus checks need the webview to hold workbench focus, which startup views such as Chat can take.
+        if(item.type==='ready'){panel!.reveal(undefined,false);void panel!.webview.postMessage({type:'page',session,commits,rows,refs:[],tips:[commits[0]!.oid],filters:{},hasMore:false,ref:'HEAD'});}
+        if(item.type==='uxProbeError')void recordHostMetric({firstRenderGeometry:item.diagnostic,originalAssertionFailure:item.message,windowFocused:vscode.window.state.focused,panelActive:panel!.active}).then(()=>reject(new Error(`Renderer UX probe failed: ${String(item.message).slice(0,300)}`)),reject);
         if(['select','workingDiff','comparePage'].includes(String(item.type))){if(observed.length>=100){reject(new Error('Renderer UX message bound exceeded.'));return;}observed.push(item);}
         if(item.type==='uxRendererReport')resolve(item);
       });
