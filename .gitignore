@@ -1,0 +1,32 @@
+node_modules/
+dist/
+out/
+.test-build/
+.test-build-*/
+.vscode-test/
+*.vsix
+*.log
+.npm-cache/
+artifacts/
+
+# Local development and generated material
+designs/
+examples/
+benchmarks/
+test/performance/
+docs/PHASE_*
+docs/*_REPORT.md
+docs/*_REVIEW.md
+docs/*_PLAN.md
+docs/IMPLEMENTATION_PLAN.md
+docs/EXECUTION_STATUS.md
+docs/PERFORMANCE.md
+*.bundle
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Copied from @vscode/codicons by esbuild.mjs
+media/codicons/

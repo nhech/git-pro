@@ -1,0 +1,178 @@
+/* Git Pro commit composer: native Source Control look. Theme colours only; the brand accent is not used on this surface. */
+/* === Git Pro shared tokens v1: identical in changes.css, commit.css, history.css, rebase.css === */
+:root{
+  color-scheme:dark;
+  --gp-font:var(--vscode-font-family,system-ui,sans-serif);
+  --gp-mono:var(--vscode-editor-font-family,ui-monospace,monospace);
+  --gp-fs:var(--vscode-font-size,13px);
+  --gp-fs-label:12px;
+  --gp-fs-meta:11px;
+  --gp-fw:400;
+  --gp-fw-strong:600;
+  --gp-lh:18px;
+  --gp-s1:2px;--gp-s2:4px;--gp-s3:6px;--gp-s4:8px;--gp-s5:12px;--gp-s6:16px;--gp-s7:20px;
+  --gp-radius-sm:var(--vscode-cornerRadius-small,2px);
+  --gp-radius-md:var(--vscode-cornerRadius-medium,4px);
+  --gp-row:22px;
+  --gp-row-history:24px;
+  --gp-row-rebase:28px;
+  --gp-control:26px;
+  --gp-icon:16px;
+  --gp-icon-button:22px;
+  --gp-toolbar:32px;
+  --gp-indent:8px;
+  --gp-focus-width:2px;
+  --gp-focus:var(--gp-focus-width) solid var(--vscode-focusBorder);
+  --gp-accent:var(--vscode-gitPro-accent,#f2542d);
+  --gp-on-accent:#1a0702;
+  --gp-fg:var(--vscode-foreground);
+  --gp-muted:var(--vscode-descriptionForeground);
+  --gp-disabled:var(--vscode-disabledForeground,var(--vscode-descriptionForeground));
+  --gp-border:var(--vscode-panel-border,var(--vscode-widget-border,transparent));
+  --gp-icon-fg:var(--vscode-icon-foreground,var(--vscode-foreground));
+  --gp-toolbar-hover:var(--vscode-toolbar-hoverBackground,var(--vscode-list-hoverBackground));
+  --gp-toolbar-active:var(--vscode-toolbar-activeBackground,var(--gp-toolbar-hover));
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 70%,#fff);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#b180d7);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground,#81b88b);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d);
+  --gp-st-deleted:color-mix(in srgb,var(--vscode-gitDecoration-deletedResourceForeground,#c74e39) 75%,#fff);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#73c991);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#73c991);
+  --gp-st-conflict:color-mix(in srgb,var(--vscode-gitDecoration-conflictingResourceForeground,#e4676b) 85%,#fff);
+  --gp-progress:var(--vscode-progressBar-background,#0e70c0);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.36));
+  --gp-ease:100ms ease;
+}
+body.vscode-light{
+  color-scheme:light;
+  --gp-accent:var(--vscode-gitPro-accent,#c2410c);
+  --gp-on-accent:#fff;
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-lane-1:color-mix(in srgb,var(--vscode-scmGraph-foreground1,#ffb000) 75%,#000);
+  --gp-lane-2:color-mix(in srgb,var(--vscode-scmGraph-foreground2,#dc267f) 75%,#000);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 75%,#000);
+  --gp-lane-4:color-mix(in srgb,var(--vscode-scmGraph-foreground4,#40b0a6) 75%,#000);
+  --gp-lane-5:color-mix(in srgb,var(--vscode-scmGraph-foreground5,#b66dff) 75%,#000);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#652d90);
+  --gp-st-added:color-mix(in srgb,var(--vscode-gitDecoration-addedResourceForeground,#587c0c) 85%,#000);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#895503);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground,#ad0707);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#007100);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#007100);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground,#ad0707);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.16));
+}
+body.vscode-high-contrast,body.vscode-high-contrast-light{
+  --gp-accent:var(--vscode-gitPro-accent,var(--vscode-contrastActiveBorder,#f38518));
+  --gp-on-accent:var(--vscode-editor-background,#000);
+  --gp-border:var(--vscode-contrastBorder,#6fc3df);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:var(--vscode-scmGraph-foreground3,#994f00);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground);
+  --gp-shadow:none;
+}
+body.vscode-high-contrast{color-scheme:dark}
+body.vscode-high-contrast-light{color-scheme:light}
+/* === shared base rules v1 (also verbatim) === */
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+:focus-visible{outline:var(--gp-focus);outline-offset:2px}
+input:not([type=checkbox]):focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:-2px}
+.codicon[class*='codicon-']{flex:none}
+@keyframes gp-progress{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* === end shared === */
+
+:root{--gp-warn-bg:var(--vscode-inputValidation-warningBackground,#352a05);--gp-warn-border:var(--vscode-inputValidation-warningBorder,#b89500)}
+body.vscode-light{--gp-warn-bg:var(--vscode-inputValidation-warningBackground,#f6f5d2)}
+body{margin:0;padding:8px 12px 12px;background:var(--vscode-sideBar-background);color:var(--gp-fg);font:var(--gp-fs)/var(--gp-lh) var(--gp-font)}
+p{margin:0;overflow-wrap:anywhere}
+
+/* Message box: one line, grows with the text, stops at ten lines (native Source Control input) */
+#message{display:block;width:100%;height:auto;min-height:26px;max-height:188px;field-sizing:content;resize:none;overflow-y:auto;padding:3px 6px;border:1px solid var(--vscode-input-border,transparent);border-radius:var(--gp-radius-sm);background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:var(--gp-fs)/18px var(--gp-font)}
+#message::placeholder{color:var(--vscode-input-placeholderForeground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* An empty box stays one line: a long branch name in the placeholder is cut with an ellipsis instead of growing the box */
+#message:placeholder-shown{field-sizing:fixed;height:26px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#message:disabled,#history:disabled{opacity:.5;cursor:default}
+/* Subject-length warning, attached under the box in inputValidation colours */
+#warning:empty{display:none}
+#warning:not(:empty){padding:3px 6px;border:1px solid var(--gp-warn-border);border-top:0;border-radius:0 0 var(--gp-radius-sm) var(--gp-radius-sm);background:var(--gp-warn-bg);color:var(--vscode-inputValidation-warningForeground,var(--gp-fg));font-size:12px;line-height:16px}
+#message:has(+ #warning:not(:empty)){border-color:var(--gp-warn-border);border-bottom-left-radius:0;border-bottom-right-radius:0}
+
+/* Split button: ✓ Commit | chevron menu */
+.actions{position:relative;display:flex;margin-top:6px}
+#commit,.split-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:26px;padding:0 8px;border:1px solid var(--vscode-button-border,transparent);border-radius:var(--gp-radius-sm);background:var(--vscode-button-background);color:var(--vscode-button-foreground);font:var(--gp-fw) var(--gp-fs)/16px var(--gp-font);cursor:pointer;white-space:nowrap;transition:background-color var(--gp-ease)}
+#commit{flex:1 1 auto;min-width:0;border-right:0;border-radius:var(--gp-radius-sm) 0 0 var(--gp-radius-sm)}
+#commit:hover:not(:disabled),.split-toggle:hover,.split-menu[open]>.split-toggle{background:var(--vscode-button-hoverBackground)}
+#commit:disabled{opacity:.5;cursor:default}
+#commit-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.split-menu{flex:0 0 auto}
+/* A closed menu must not lay out its controls (Chromium still sizes content-visibility:hidden details content). */
+.split-menu:not([open])>.menu{display:none}
+.split-toggle{position:relative;width:26px;padding:0;border-left:0;border-radius:0 var(--gp-radius-sm) var(--gp-radius-sm) 0;list-style:none}
+.split-toggle::-webkit-details-marker{display:none}
+.split-toggle::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:var(--vscode-button-separator,color-mix(in srgb,var(--vscode-button-foreground) 40%,transparent))}
+/* Both halves dim together while Commit is disabled (native ButtonWithDropdown); the chevron stays operable, and hover, focus or an open menu restore it */
+.actions:has(>#commit:disabled) .split-menu:not([open])>.split-toggle:not(:hover):not(:focus-visible){opacity:.5}
+
+/* Menu: Commit & Push, option toggles, message history */
+/* The Commit view is short (about 150-180px), so the popover is capped to the space below it and scrolls inside itself; commit.js refines the cap on open */
+.split-menu>.menu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:10;max-height:calc(100vh - 78px);overflow-y:auto;overscroll-behavior:contain;padding:4px 0;border:1px solid var(--vscode-menu-border,var(--vscode-widget-border,transparent));border-radius:var(--gp-radius-md);background:var(--vscode-menu-background,var(--vscode-editorWidget-background));color:var(--vscode-menu-foreground,var(--vscode-foreground));box-shadow:var(--gp-shadow)}
+.menu-item{display:flex;align-items:center;gap:6px;width:100%;min-height:24px;padding:3px 8px;border:0;background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;text-align:left;cursor:pointer}
+.menu-item:focus-visible{outline-offset:-2px}
+.menu-check{display:flex;align-items:center;gap:6px;min-height:24px;padding:3px 8px;font-size:13px;line-height:18px;cursor:pointer}
+/* VS Code checkbox (checkbox.* colours, codicon check), 16px like the Commit & Push icon so the labels line up */
+.menu-check input{appearance:none;display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;width:16px;height:16px;margin:0;border:1px solid var(--vscode-checkbox-border,var(--vscode-input-border,var(--gp-border)));border-radius:3px;background:var(--vscode-checkbox-background,var(--vscode-input-background));color:var(--vscode-checkbox-foreground,var(--gp-fg));cursor:pointer}
+.menu-check input:checked::before{content:"\eab2";font:14px/1 codicon}
+.menu-check input:disabled{opacity:.5;cursor:default}
+.menu-item:hover:not(:disabled),.menu-item:focus-visible,.menu-check:hover:not(:has(input:disabled)),.menu-check:has(input:focus-visible){background:var(--vscode-menu-selectionBackground,var(--vscode-list-hoverBackground));color:var(--vscode-menu-selectionForeground,inherit)}
+/* On the highlighted row the blue focus ring and the dark box would melt into the selection colour, so the box takes the selection foreground as its edge */
+.menu-check:hover:not(:has(input:disabled)) input,.menu-check:has(input:focus-visible) input{border-color:var(--vscode-menu-selectionForeground,var(--vscode-checkbox-border,var(--vscode-input-border,var(--gp-border))))}
+.menu-item:disabled,.menu-check:has(input:disabled){color:var(--gp-disabled);cursor:default}
+body.vscode-high-contrast :is(.menu-item:hover:not(:disabled):not(:focus-visible),.menu-check:hover:not(:has(input:disabled))),body.vscode-high-contrast-light :is(.menu-item:hover:not(:disabled):not(:focus-visible),.menu-check:hover:not(:has(input:disabled))){outline:1px dashed var(--vscode-contrastActiveBorder);outline-offset:-1px}
+.menu-separator{height:1px;margin:4px 0;background:var(--vscode-menu-separatorBackground,var(--vscode-widget-border,transparent))}
+.menu-label{display:block;padding:4px 8px 2px;font-size:11px;line-height:16px;color:var(--gp-muted)}
+#history{display:block;width:calc(100% - 16px);height:26px;margin:0 8px;padding:0 4px;border:1px solid var(--vscode-dropdown-border,var(--vscode-input-border,transparent));border-radius:var(--gp-radius-sm);background:var(--vscode-dropdown-background,var(--vscode-input-background));color:var(--vscode-dropdown-foreground,var(--vscode-input-foreground));font:var(--gp-fs)/18px var(--gp-font)}
+#clearHistory{display:block;height:22px;margin:2px 8px;padding:0;border:0;background:transparent;color:var(--vscode-textLink-foreground);font:12px/22px var(--gp-font);cursor:pointer}
+#clearHistory:hover:not(:disabled){text-decoration:underline}
+#clearHistory:disabled{color:var(--gp-disabled);cursor:default}
+
+/* Meta lines: selected options, then repository · staged description as muted text. The description flows like a sentence and wraps
+   in narrow views; only the repository name is cut with an ellipsis. */
+.option-flags{margin-top:4px;font-size:11px;line-height:16px;color:var(--gp-muted)}
+.context{margin-top:6px;font-size:11px;line-height:16px;color:var(--gp-muted);text-wrap:pretty}
+#repository{display:inline-block;max-width:60%;vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+#staged{display:inline}
+#staged:not(:empty)::before{content:"\00a0·\00a0"}
+
+/* Feedback */
+#result:empty{display:none}
+#result:not(:empty){margin-top:6px;padding:4px 6px;border:1px solid var(--vscode-inputValidation-errorBorder,var(--vscode-errorForeground));border-radius:var(--gp-radius-sm);background:var(--vscode-inputValidation-errorBackground,transparent);color:var(--vscode-inputValidation-errorForeground,var(--gp-fg));font-size:12px;line-height:16px}
+/* The staging hint shows only when it helps: an open repository with nothing ready to commit. aria-describedby still reads it when hidden. */
+.helper{display:none;margin-top:8px;font-size:11px;line-height:16px;color:var(--gp-muted);text-wrap:pretty}
+body:has(#staged[data-ready="false"]):has(#message:enabled) .helper{display:block}
+
+/* Busy: spinning icon on Commit and the thin progress bar at the top */
+body[aria-busy="true"] #commit .codicon::before{content:"\eb19"}
+body[aria-busy="true"] #commit .codicon{animation:codicon-spin 1.5s steps(30) infinite}
+body[aria-busy="true"]::before{content:"";position:fixed;top:0;left:0;z-index:20;width:25%;height:2px;background:var(--gp-progress);animation:gp-progress 1.2s linear infinite;pointer-events:none}
+@media (prefers-reduced-motion:reduce){body[aria-busy="true"]::before{width:100%;opacity:.6}}
+
+@media (forced-colors:active){#commit,.split-toggle{border:1px solid ButtonText}.split-menu>.menu{border:1px solid CanvasText}.menu-check input{border-color:CanvasText}.menu-item:hover:not(:disabled),.menu-check:hover{outline:1px solid Highlight;outline-offset:-1px}}

@@ -1,0 +1,185 @@
+/* === Git Pro shared tokens v1: identical in changes.css, commit.css, history.css, rebase.css === */
+:root{
+  color-scheme:dark;
+  --gp-font:var(--vscode-font-family,system-ui,sans-serif);
+  --gp-mono:var(--vscode-editor-font-family,ui-monospace,monospace);
+  --gp-fs:var(--vscode-font-size,13px);
+  --gp-fs-label:12px;
+  --gp-fs-meta:11px;
+  --gp-fw:400;
+  --gp-fw-strong:600;
+  --gp-lh:18px;
+  --gp-s1:2px;--gp-s2:4px;--gp-s3:6px;--gp-s4:8px;--gp-s5:12px;--gp-s6:16px;--gp-s7:20px;
+  --gp-radius-sm:var(--vscode-cornerRadius-small,2px);
+  --gp-radius-md:var(--vscode-cornerRadius-medium,4px);
+  --gp-row:22px;
+  --gp-row-history:24px;
+  --gp-row-rebase:28px;
+  --gp-control:26px;
+  --gp-icon:16px;
+  --gp-icon-button:22px;
+  --gp-toolbar:32px;
+  --gp-indent:8px;
+  --gp-focus-width:2px;
+  --gp-focus:var(--gp-focus-width) solid var(--vscode-focusBorder);
+  --gp-accent:var(--vscode-gitPro-accent,#f2542d);
+  --gp-on-accent:#1a0702;
+  --gp-fg:var(--vscode-foreground);
+  --gp-muted:var(--vscode-descriptionForeground);
+  --gp-disabled:var(--vscode-disabledForeground,var(--vscode-descriptionForeground));
+  --gp-border:var(--vscode-panel-border,var(--vscode-widget-border,transparent));
+  --gp-icon-fg:var(--vscode-icon-foreground,var(--vscode-foreground));
+  --gp-toolbar-hover:var(--vscode-toolbar-hoverBackground,var(--vscode-list-hoverBackground));
+  --gp-toolbar-active:var(--vscode-toolbar-activeBackground,var(--gp-toolbar-hover));
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 70%,#fff);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#b180d7);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground,#81b88b);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d);
+  --gp-st-deleted:color-mix(in srgb,var(--vscode-gitDecoration-deletedResourceForeground,#c74e39) 75%,#fff);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#73c991);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#73c991);
+  --gp-st-conflict:color-mix(in srgb,var(--vscode-gitDecoration-conflictingResourceForeground,#e4676b) 85%,#fff);
+  --gp-progress:var(--vscode-progressBar-background,#0e70c0);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.36));
+  --gp-ease:100ms ease;
+}
+body.vscode-light{
+  color-scheme:light;
+  --gp-accent:var(--vscode-gitPro-accent,#c2410c);
+  --gp-on-accent:#fff;
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-lane-1:color-mix(in srgb,var(--vscode-scmGraph-foreground1,#ffb000) 75%,#000);
+  --gp-lane-2:color-mix(in srgb,var(--vscode-scmGraph-foreground2,#dc267f) 75%,#000);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 75%,#000);
+  --gp-lane-4:color-mix(in srgb,var(--vscode-scmGraph-foreground4,#40b0a6) 75%,#000);
+  --gp-lane-5:color-mix(in srgb,var(--vscode-scmGraph-foreground5,#b66dff) 75%,#000);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#652d90);
+  --gp-st-added:color-mix(in srgb,var(--vscode-gitDecoration-addedResourceForeground,#587c0c) 85%,#000);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#895503);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground,#ad0707);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#007100);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#007100);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground,#ad0707);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.16));
+}
+body.vscode-high-contrast,body.vscode-high-contrast-light{
+  --gp-accent:var(--vscode-gitPro-accent,var(--vscode-contrastActiveBorder,#f38518));
+  --gp-on-accent:var(--vscode-editor-background,#000);
+  --gp-border:var(--vscode-contrastBorder,#6fc3df);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:var(--vscode-scmGraph-foreground3,#994f00);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground);
+  --gp-shadow:none;
+}
+body.vscode-high-contrast{color-scheme:dark}
+body.vscode-high-contrast-light{color-scheme:light}
+/* === shared base rules v1 (also verbatim) === */
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+:focus-visible{outline:var(--gp-focus);outline-offset:2px}
+input:not([type=checkbox]):focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:-2px}
+.codicon[class*='codicon-']{flex:none}
+@keyframes gp-progress{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* === end shared === */
+
+/* Git Pro interactive rebase planner: compact rows on a vertical rail (GitLens pattern), action colours from the theme. The accent is only the 2px rebase-in-progress strip. */
+/* Drop text: errorForeground is 4.14:1 on the Dark Modern hover row, so dark mixes in 15% white (4.84:1), like --gp-st-conflict. */
+:root{--gp-drop:color-mix(in srgb,var(--vscode-errorForeground,#f85149) 85%,#fff)}
+body.vscode-light{--gp-drop:var(--vscode-errorForeground,#c72e0f)}
+body.vscode-high-contrast,body.vscode-high-contrast-light{--gp-drop:var(--vscode-errorForeground)}
+
+/* Page */
+body{margin:0;padding:10px 0 0;border-top:2px solid var(--gp-accent);background:var(--vscode-editor-background);color:var(--gp-fg);font:var(--gp-fs)/var(--gp-lh) var(--gp-font)}
+/* Title and range share a line with an 8px gap (-12px + 20px). When the two-line range (root, then Base → HEAD) wraps below the title it keeps the 20px gutter and sits 2px under it; the 12px top space is body padding plus these 2px. */
+h1{display:inline-block;margin:2px -12px 0 20px;font-size:13px;font-weight:600;line-height:20px}
+p{white-space:pre-wrap;overflow-wrap:anywhere}
+#range{display:inline-block;max-width:calc(100% - 40px);margin:2px 20px 0;vertical-align:top;font:12px/20px var(--gp-mono);color:var(--gp-muted)}#range:empty{display:none}
+#range + p{margin:2px 20px 8px;font-size:12px;color:var(--gp-muted)}
+#status{margin:0 20px 8px;font-size:12px;color:var(--vscode-errorForeground)}#status:empty{display:none}
+
+/* Layout */
+main{display:grid;grid-template-columns:minmax(0,1fr) 320px;border-top:1px solid var(--gp-border);border-bottom:1px solid var(--gp-border)}
+main>section{min-width:0}
+main>section:first-child{padding:4px 0}
+main>section:last-child{padding:12px 16px;border-left:1px solid var(--gp-border)}
+@media (max-width:650px){main{grid-template-columns:minmax(0,1fr)}main>section:last-child{padding:12px 20px;border-left:0;border-top:1px solid var(--gp-border)}}
+#commits{display:block;max-height:60vh;overflow:auto}
+
+/* Commit rows: gripper | rail+node | order | action | subject | sha */
+.commit{display:grid;grid-template-columns:16px 24px 28px 88px minmax(0,1fr) auto;align-items:center;width:100%;min-height:28px;margin:0;padding:0 12px 0 4px;border:0;border-radius:0;background:transparent;color:var(--gp-fg);font:13px/28px var(--gp-font);text-align:left;cursor:grab;--gp-action:var(--gp-muted);--gp-action-text:var(--gp-fg);--gp-row-bg:var(--vscode-editor-background)}
+.commit-identity{display:contents}
+.commit-identity::before{grid-column:1;grid-row:1;content:"\eb04";font:16px/1 codicon;color:var(--gp-icon-fg);opacity:0}
+.commit:hover .commit-identity::before,.commit[aria-selected=true] .commit-identity::before{opacity:1}
+.commit::before{content:"";grid-column:2;grid-row:1;justify-self:center;align-self:stretch;width:2px;background:var(--gp-muted)}
+.commit:first-child::before{margin-top:14px}.commit:last-child::before{margin-bottom:14px}
+/* The node is filled with the row colour over the editor background, so translucent theme hover/selection colours still hide the rail behind it. */
+.commit::after{content:"";grid-column:2;grid-row:1;justify-self:center;width:12px;height:12px;border:2px solid var(--gp-action);border-radius:50%;background:linear-gradient(var(--gp-row-bg),var(--gp-row-bg)),var(--vscode-editor-background)}
+.commit-order{grid-column:3;grid-row:1;padding-right:8px;text-align:right;font-size:12px;color:var(--gp-muted);font-variant-numeric:tabular-nums}
+.action-badge{grid-column:4;grid-row:1;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--gp-action-text)}
+.commit-subject{grid-column:5;grid-row:1;min-width:0;padding-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commit-sha{grid-column:6;grid-row:1;padding-left:12px;font:12px/28px var(--gp-mono);color:var(--gp-muted)}
+/* Narrow editor groups: drop the SHA column like History does below 480px (the full id stays in the row label and the side panel). */
+@media (max-width:479px){.commit-sha{display:none}}
+
+/* Per-action colours */
+.commit.pick{--gp-action:var(--gp-muted);--gp-action-text:var(--gp-fg)}
+.commit.reword,.commit.edit{--gp-action:var(--gp-st-added);--gp-action-text:var(--gp-st-added)}
+.commit.squash,.commit.fixup{--gp-action:var(--gp-st-modified);--gp-action-text:var(--gp-st-modified)}
+.commit.squash::after,.commit.fixup::after{display:none}
+.commit.squash .commit-subject,.commit.fixup .commit-subject{color:var(--gp-muted)}
+.commit.fixup .commit-subject{text-decoration:line-through}
+.commit.drop{--gp-action:var(--gp-drop);--gp-action-text:var(--gp-drop)}
+.commit.drop .commit-subject{color:var(--gp-muted);text-decoration:line-through}
+
+/* Row states (the listbox owns focus) */
+.commit:hover{--gp-row-bg:var(--vscode-list-hoverBackground);background:var(--gp-row-bg);color:var(--vscode-list-hoverForeground,inherit)}
+.commit[aria-selected=true]{--gp-row-bg:var(--vscode-list-inactiveSelectionBackground);background:var(--gp-row-bg);color:var(--vscode-list-inactiveSelectionForeground,inherit)}
+#commits:focus .commit[aria-selected=true]{--gp-row-bg:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground,inherit)}
+.commit[aria-selected=true] :is(.action-badge,.commit-order,.commit-sha,.commit-subject){color:inherit}
+.commit:active{cursor:grabbing}
+.commit:disabled{cursor:default}
+body.vscode-high-contrast .commit:hover,body.vscode-high-contrast-light .commit:hover{outline:1px dashed var(--vscode-contrastActiveBorder);outline-offset:-1px}
+body.vscode-high-contrast .commit[aria-selected=true],body.vscode-high-contrast-light .commit[aria-selected=true]{outline:1px solid var(--vscode-contrastActiveBorder);outline-offset:-1px}
+body #commits:focus-visible,body .commit:focus-visible,body.vscode-high-contrast #commits:focus-visible,body.vscode-high-contrast .commit:focus-visible,body.vscode-high-contrast-light #commits:focus-visible,body.vscode-high-contrast-light .commit:focus-visible{outline:2px solid var(--vscode-list-focusOutline,var(--vscode-focusBorder));outline-offset:-2px}
+body:has(#commits[aria-busy="true"])::before{content:"";position:fixed;top:0;left:0;z-index:20;width:25%;height:2px;background:var(--gp-progress);animation:gp-progress 1.2s linear infinite;pointer-events:none}
+@media (prefers-reduced-motion:reduce){body:has(#commits[aria-busy="true"])::before{width:100%;opacity:.6}}
+
+/* Side panel */
+h2{margin:0 0 4px;font-size:13px;font-weight:600;line-height:20px}
+#subject{margin:0 0 12px;color:var(--gp-fg)}
+label{display:block;margin-top:12px;font-size:12px;color:var(--gp-muted)}
+#action{display:block;width:100%;height:26px;margin:4px 0 0;padding:0 4px;border:1px solid var(--vscode-dropdown-border,var(--vscode-input-border,transparent));border-radius:var(--gp-radius-sm);background:var(--vscode-dropdown-background,var(--vscode-input-background));color:var(--vscode-dropdown-foreground,var(--vscode-input-foreground));font:var(--gp-fs)/18px var(--gp-font)}
+#action:disabled{opacity:.5;cursor:default}
+#action-help{margin:6px 0 12px;font-size:12px;color:var(--gp-muted)}
+.buttons{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+#up,#down,#message,#review,#cancel,#native{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:26px;padding:0 8px;border:1px solid var(--vscode-button-border,transparent);border-radius:var(--gp-radius-sm);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);font:var(--gp-fw) var(--gp-fs)/16px var(--gp-font);cursor:pointer;white-space:nowrap;transition:background-color var(--gp-ease)}
+:is(#up,#down,#message,#cancel,#native):hover:not(:disabled){background:var(--vscode-button-secondaryHoverBackground)}
+#review{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}
+#review:hover:not(:disabled){background:var(--vscode-button-hoverBackground)}
+:is(#up,#down,#message,#review,#cancel,#native):disabled{opacity:.5;cursor:default}
+#message-preview:empty{display:none}
+#message-preview{margin:8px 0;padding:6px 8px;max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/20px var(--gp-font);background:var(--vscode-textBlockQuote-background,transparent);border-left:2px solid var(--vscode-textBlockQuote-border,var(--gp-border))}
+main>section:last-child>p:last-child{margin:8px 0 0;font-size:12px;color:var(--gp-muted)}
+
+/* Footer */
+footer{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px 4px}
+main ~ p{margin:4px 20px 16px;font-size:12px;color:var(--gp-muted)}
+
+@media (forced-colors:active){.commit[aria-selected=true]{outline:2px solid Highlight}.commit::before{background:CanvasText}.commit::after{border-color:CanvasText}}

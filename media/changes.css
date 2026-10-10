@@ -1,0 +1,210 @@
+/* Git Pro Changes view: a native Source Control tree. Colours come from the VS Code theme only. */
+/* === Git Pro shared tokens v1: identical in changes.css, commit.css, history.css, rebase.css === */
+:root{
+  color-scheme:dark;
+  --gp-font:var(--vscode-font-family,system-ui,sans-serif);
+  --gp-mono:var(--vscode-editor-font-family,ui-monospace,monospace);
+  --gp-fs:var(--vscode-font-size,13px);
+  --gp-fs-label:12px;
+  --gp-fs-meta:11px;
+  --gp-fw:400;
+  --gp-fw-strong:600;
+  --gp-lh:18px;
+  --gp-s1:2px;--gp-s2:4px;--gp-s3:6px;--gp-s4:8px;--gp-s5:12px;--gp-s6:16px;--gp-s7:20px;
+  --gp-radius-sm:var(--vscode-cornerRadius-small,2px);
+  --gp-radius-md:var(--vscode-cornerRadius-medium,4px);
+  --gp-row:22px;
+  --gp-row-history:24px;
+  --gp-row-rebase:28px;
+  --gp-control:26px;
+  --gp-icon:16px;
+  --gp-icon-button:22px;
+  --gp-toolbar:32px;
+  --gp-indent:8px;
+  --gp-focus-width:2px;
+  --gp-focus:var(--gp-focus-width) solid var(--vscode-focusBorder);
+  --gp-accent:var(--vscode-gitPro-accent,#f2542d);
+  --gp-on-accent:#1a0702;
+  --gp-fg:var(--vscode-foreground);
+  --gp-muted:var(--vscode-descriptionForeground);
+  --gp-disabled:var(--vscode-disabledForeground,var(--vscode-descriptionForeground));
+  --gp-border:var(--vscode-panel-border,var(--vscode-widget-border,transparent));
+  --gp-icon-fg:var(--vscode-icon-foreground,var(--vscode-foreground));
+  --gp-toolbar-hover:var(--vscode-toolbar-hoverBackground,var(--vscode-list-hoverBackground));
+  --gp-toolbar-active:var(--vscode-toolbar-activeBackground,var(--gp-toolbar-hover));
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 70%,#fff);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#b180d7);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground,#81b88b);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d);
+  --gp-st-deleted:color-mix(in srgb,var(--vscode-gitDecoration-deletedResourceForeground,#c74e39) 75%,#fff);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#73c991);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#73c991);
+  --gp-st-conflict:color-mix(in srgb,var(--vscode-gitDecoration-conflictingResourceForeground,#e4676b) 85%,#fff);
+  --gp-progress:var(--vscode-progressBar-background,#0e70c0);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.36));
+  --gp-ease:100ms ease;
+}
+body.vscode-light{
+  color-scheme:light;
+  --gp-accent:var(--vscode-gitPro-accent,#c2410c);
+  --gp-on-accent:#fff;
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-lane-1:color-mix(in srgb,var(--vscode-scmGraph-foreground1,#ffb000) 75%,#000);
+  --gp-lane-2:color-mix(in srgb,var(--vscode-scmGraph-foreground2,#dc267f) 75%,#000);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 75%,#000);
+  --gp-lane-4:color-mix(in srgb,var(--vscode-scmGraph-foreground4,#40b0a6) 75%,#000);
+  --gp-lane-5:color-mix(in srgb,var(--vscode-scmGraph-foreground5,#b66dff) 75%,#000);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#652d90);
+  --gp-st-added:color-mix(in srgb,var(--vscode-gitDecoration-addedResourceForeground,#587c0c) 85%,#000);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#895503);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground,#ad0707);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#007100);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#007100);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground,#ad0707);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.16));
+}
+body.vscode-high-contrast,body.vscode-high-contrast-light{
+  --gp-accent:var(--vscode-gitPro-accent,var(--vscode-contrastActiveBorder,#f38518));
+  --gp-on-accent:var(--vscode-editor-background,#000);
+  --gp-border:var(--vscode-contrastBorder,#6fc3df);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:var(--vscode-scmGraph-foreground3,#994f00);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground);
+  --gp-shadow:none;
+}
+body.vscode-high-contrast{color-scheme:dark}
+body.vscode-high-contrast-light{color-scheme:light}
+/* === shared base rules v1 (also verbatim) === */
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+:focus-visible{outline:var(--gp-focus);outline-offset:2px}
+input:not([type=checkbox]):focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:-2px}
+.codicon[class*='codicon-']{flex:none}
+@keyframes gp-progress{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* === end shared === */
+
+/* Page */
+body{margin:0;padding:0;background:var(--vscode-sideBar-background);color:var(--vscode-sideBar-foreground,var(--vscode-foreground));font:var(--gp-fs)/var(--gp-row) var(--gp-font)}
+#notice:empty{display:none}
+#notice{padding:4px 12px 4px 20px;font-size:12px;line-height:16px;color:var(--gp-muted);overflow-wrap:anywhere}
+#notice.error{color:var(--vscode-errorForeground)}
+#rows{display:block}
+
+/* Rows: 22px, edge to edge, 8px per tree level */
+.entry{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;height:22px;padding:0 4px 0 calc(4px + var(--gp-depth,0) * 8px);overflow:hidden;cursor:default;user-select:none}
+.depth-0{--gp-depth:0}.depth-1{--gp-depth:1}.depth-2{--gp-depth:2}.depth-3{--gp-depth:3}.depth-4{--gp-depth:4}.depth-5{--gp-depth:5}.depth-6{--gp-depth:6}.depth-7{--gp-depth:7}.depth-8{--gp-depth:8}
+.entry-main{grid-column:1;order:0}.row-actions{grid-column:2;order:1}.status,.count{grid-column:3;order:2}
+.entry-main{display:flex;align-items:center;min-width:0;height:22px}
+.entry.file .entry-main{padding-inline-start:16px}
+.disclosure{display:flex;align-items:center;justify-content:center;flex:0 0 16px;width:16px;height:22px;font-size:0;color:var(--gp-icon-fg);cursor:pointer}
+.disclosure::before{font:16px/1 codicon;content:"\eab4"}
+.entry[aria-expanded=false] .disclosure::before{content:"\eab6"}
+.marker{display:flex;align-items:center;justify-content:center;flex:0 0 16px;width:16px;height:16px;margin-inline-end:6px;font-size:0}
+.marker svg{display:block;width:16px;height:16px}
+.entry.group .marker{display:none}
+.name{min-width:0;display:flex;align-items:baseline;overflow:hidden;white-space:nowrap;font-size:13px}
+/* Names without a directory hold plain text, which only a block box can ellipsize. */
+.name:not(:has(.base)){display:block;text-overflow:ellipsis}
+.name>.base{order:0;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.name>.dir{order:1;flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;margin-inline-start:6px;font-size:12px;color:var(--gp-muted)}
+.name>.sep{display:none}
+.entry.group .name{font-weight:600}
+
+/* Status: the DOM keeps the word, CSS draws the letter */
+.status{display:flex;align-items:center;justify-content:center;width:16px;height:22px;margin-inline-start:4px;font-size:0;color:var(--gp-state)}
+.status::before{content:attr(data-letter);font-size:11px;font-weight:600;line-height:16px}
+/* Same specificity as .entry.file, declared after it, so a known state always wins over the default. */
+.entry.file{--gp-state:var(--gp-fg)}
+.entry.state-added{--gp-state:var(--gp-st-added)}
+.entry.state-untracked{--gp-state:var(--gp-st-untracked)}
+.entry.state-modified,.entry.state-type{--gp-state:var(--gp-st-modified)}
+.entry.state-deleted{--gp-state:var(--gp-st-deleted)}
+.entry.state-renamed,.entry.state-copied{--gp-state:var(--gp-st-renamed)}
+.entry.state-conflict{--gp-state:var(--gp-st-conflict)}
+.entry.file .name{color:var(--gp-state)}
+.entry.state-deleted .name>.base,.entry.state-deleted .name:not(:has(.base)){text-decoration:line-through}
+.count{min-width:18px;height:18px;padding:0 5px;margin-inline-start:4px;border-radius:11px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:11px;font-weight:400;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+body.vscode-high-contrast .count,body.vscode-high-contrast-light .count{border:1px solid var(--vscode-contrastBorder);line-height:16px}
+
+/* File-type icons (Seti-like palette) */
+.entry.file .marker,.entry.folder .marker{color:var(--gp-file,var(--gp-icon-fg))}
+.marker[data-type=ts],.marker[data-type=tsx],.marker[data-type=md],.marker[data-type=css],.marker[data-type=go],.marker[data-type=c],.marker[data-type=cpp],.marker[data-type=ps],.marker[data-type=info],.marker[data-type=history]{--gp-file:#519aba}
+.marker[data-type=js],.marker[data-type=jsx],.marker[data-type=json]{--gp-file:#cbcb41}
+.marker[data-type=html],.marker[data-type=xml],.marker[data-type=svg],.marker[data-type=rs],.marker[data-type=kt],.marker[data-type=swift]{--gp-file:#e37933}
+/* Seti #cc3e44 with 10% white: 3.33:1 on the dark hover row (the raw red is 2.87:1). */
+.marker[data-type=java],.marker[data-type=rb]{--gp-file:#d15157}
+.marker[data-type=scss],.marker[data-type=sql]{--gp-file:#f55385}
+.marker[data-type=py],.marker[data-type=dart]{--gp-file:#4b8bbe}
+.marker[data-type=vue],.marker[data-type=svelte],.marker[data-type=cs],.marker[data-type=sh]{--gp-file:#8dc149}
+.marker[data-type=image],.marker[data-type=yaml],.marker[data-type=h],.marker[data-type=php]{--gp-file:#a074c4}
+.marker[data-type=git],.marker[data-type=config],.marker[data-type=lock],.marker[data-type=text],.marker[data-type=file]{--gp-file:#8a9ba2}
+.marker[data-type=folder]{--gp-file:#c09553}
+/* Light themes: the palette is tuned for dark backgrounds; darken it to keep icons above 3:1. */
+body.vscode-light .entry.file .marker,body.vscode-light .entry.folder .marker{color:color-mix(in srgb,var(--gp-file,var(--vscode-icon-foreground)) 68%,#000)}
+body.vscode-high-contrast .entry.file .marker,body.vscode-high-contrast-light .entry.file .marker,body.vscode-high-contrast .entry.folder .marker,body.vscode-high-contrast-light .entry.folder .marker{color:var(--gp-icon-fg)}
+
+/* Inline row actions: before the status letter, on hover, focus and selection */
+.row-actions{display:none;align-items:center;gap:0;margin-inline-start:4px}
+.entry:hover .row-actions,.entry:focus .row-actions,.entry:focus-within .row-actions,.entry[aria-selected=true] .row-actions{display:flex}
+.row-actions button{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:2px;border:0;border-radius:var(--gp-radius-sm);background:transparent;color:var(--gp-icon-fg);cursor:pointer}
+.row-actions button:hover{background:var(--gp-toolbar-hover)}
+.row-actions button:active{background:var(--gp-toolbar-active)}
+body.vscode-high-contrast .row-actions button:hover,body.vscode-high-contrast-light .row-actions button:hover{outline:1px dashed var(--vscode-toolbar-hoverOutline,var(--vscode-contrastActiveBorder));outline-offset:-1px}
+#rows[data-busy=true] .row-actions button{opacity:.4;pointer-events:none}
+
+/* Row states: theme list colours only; the tree is the focus owner */
+.entry:hover{background:var(--vscode-list-hoverBackground);color:var(--vscode-list-hoverForeground,inherit)}
+.entry[aria-selected=true]{background:var(--vscode-list-inactiveSelectionBackground);color:var(--vscode-list-inactiveSelectionForeground,inherit)}
+#rows:focus-within .entry[aria-selected=true]{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground,inherit)}
+.entry[aria-selected=true] .name,.entry[aria-selected=true] .name>.dir,.entry[aria-selected=true] .status,.entry[aria-selected=true] .row-actions button{color:inherit}
+.entry[aria-selected=true] .marker,body.vscode-light .entry[aria-selected=true] .marker,body.vscode-high-contrast .entry[aria-selected=true] .marker,body.vscode-high-contrast-light .entry[aria-selected=true] .marker{color:inherit}
+.entry[aria-selected=true] .name>.dir{opacity:.8}
+body.vscode-high-contrast .entry:hover,body.vscode-high-contrast-light .entry:hover{outline:1px dashed var(--vscode-contrastActiveBorder);outline-offset:-1px}
+body.vscode-high-contrast .entry[aria-selected=true],body.vscode-high-contrast-light .entry[aria-selected=true]{outline:1px solid var(--vscode-contrastActiveBorder);outline-offset:-1px}
+body .entry:focus-visible,body.vscode-high-contrast .entry:focus-visible,body.vscode-high-contrast-light .entry:focus-visible{outline:2px solid var(--vscode-list-focusOutline,var(--vscode-focusBorder));outline-offset:-2px}
+
+/* Context menu */
+.context-menu{position:fixed;z-index:10;min-width:180px;max-width:min(260px,calc(100vw - 8px));padding:4px 0;background:var(--vscode-menu-background,var(--vscode-editorWidget-background));color:var(--vscode-menu-foreground,var(--vscode-foreground));border:1px solid var(--vscode-menu-border,var(--vscode-widget-border,transparent));border-radius:var(--gp-radius-md);box-shadow:var(--gp-shadow)}
+.context-menu button{display:flex;align-items:center;gap:8px;width:calc(100% - 8px);min-height:24px;margin:0 4px;padding:3px 8px;border:0;border-radius:var(--gp-radius-sm);background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;text-align:left;cursor:pointer}
+.context-menu button:hover:not(:disabled),.context-menu button:focus:not(:disabled){background:var(--vscode-menu-selectionBackground,var(--vscode-list-hoverBackground));color:var(--vscode-menu-selectionForeground,inherit)}
+.context-menu button:focus-visible{outline-offset:-2px}
+.context-menu button:disabled{color:var(--gp-disabled);cursor:default}
+.menu-icon{flex:0 0 16px;width:16px;height:16px;color:inherit}
+.menu-label{min-width:0;overflow-wrap:anywhere}
+.menu-separator{height:1px;margin:4px 0;background:var(--vscode-menu-separatorBackground,var(--vscode-widget-border,transparent))}
+
+/* Selection strip: pinned to the bottom so rows never shift */
+#selection-actions{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;align-items:center;gap:2px;height:28px;padding:0 4px 0 12px;background:var(--vscode-sideBar-background);border-top:1px solid var(--vscode-sideBarSectionHeader-border,var(--gp-border))}
+body:has(#selection-actions:not([hidden])){padding-bottom:28px}
+#selection-count{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--gp-muted)}
+#selection-actions button{height:22px;padding:0 6px;border:0;border-radius:var(--gp-radius-sm);background:transparent;color:var(--gp-fg);font:12px/22px var(--gp-font);cursor:pointer}
+#selection-actions button:hover:not(:disabled){background:var(--gp-toolbar-hover)}
+#selection-actions button:disabled{color:var(--gp-disabled);cursor:default}
+/* A 2px offset would cross the strip's top border and the viewport's bottom edge; offset 0 keeps the 2px ring inside the 28px strip. */
+#selection-actions button:focus-visible{outline-offset:0}
+
+/* Busy, empty and paging */
+body:has(#rows[data-busy="true"])::before{content:"";position:fixed;top:0;left:0;z-index:20;width:25%;height:2px;background:var(--gp-progress);animation:gp-progress 1.2s linear infinite;pointer-events:none}
+@media (prefers-reduced-motion:reduce){body:has(#rows[data-busy="true"])::before{width:100%;opacity:.6}}
+.empty{padding:6px 12px 6px 20px;font-size:12px;line-height:18px;color:var(--gp-muted);overflow-wrap:anywhere}
+#more{display:block;width:100%;height:22px;padding:0 12px 0 32px;border:0;background:transparent;color:var(--vscode-textLink-foreground);font:12px/22px var(--gp-font);text-align:left;cursor:pointer}
+#more:hover{text-decoration:underline;color:var(--vscode-textLink-activeForeground,var(--vscode-textLink-foreground))}
+
+@media (forced-colors:active){.entry[aria-selected=true]{outline:1px solid Highlight}.status{color:CanvasText}.count{border:1px solid CanvasText}.marker{color:CanvasText!important}.menu-icon{color:CanvasText}#selection-actions{border-top-color:CanvasText}}

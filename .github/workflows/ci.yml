@@ -1,0 +1,60 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  core:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run package
+      - run: npm run audit:licenses
+  extension:
+    timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        vscode: ['1.100.0', stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run package
+      - run: xvfb-run -a npm run test:extension
+        if: runner.os == 'Linux'
+        env:
+          GIT_PRO_STRESS_HOST: '1'
+          GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
+          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+      - run: npm run test:extension
+        if: runner.os != 'Linux'
+        env:
+          GIT_PRO_STRESS_HOST: '1'
+          GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
+          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+      - run: xvfb-run -a npm run test:extension
+        if: runner.os == 'Linux'
+        env:
+          GIT_PRO_TEST_RESTART: '1'
+          GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
+          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+      - run: npm run test:extension
+        if: runner.os != 'Linux'
+        env:
+          GIT_PRO_TEST_RESTART: '1'
+          GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
+          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix

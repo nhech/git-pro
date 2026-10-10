@@ -1,0 +1,588 @@
+{
+  "name": "git-pro",
+  "displayName": "Git Pro",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "publisher": "nhech",
+  "private": true,
+  "preview": true,
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0A0A0A",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nhech/git-pro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nhech/git-pro/issues"
+  },
+  "homepage": "https://github.com/nhech/git-pro#readme",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "keywords": [
+    "git",
+    "source control",
+    "commit",
+    "stage",
+    "history",
+    "graph",
+    "blame",
+    "rebase",
+    "stash",
+    "worktree"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Git Pro requires trust before reading Git configuration or running Git."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Git Pro requires a filesystem and Git executable."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitPro.refresh",
+        "title": "%command.gitPro.refresh.title%",
+        "category": "%command.category%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitPro.selectRepository",
+        "title": "%command.gitPro.selectRepository.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.openFile",
+        "title": "%command.gitPro.openFile.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.showOutput",
+        "title": "%command.gitPro.showOutput.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.stage",
+        "title": "%command.gitPro.stage.title%",
+        "category": "%command.category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitPro.unstage",
+        "title": "%command.gitPro.unstage.title%",
+        "category": "%command.category%",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitPro.stageFolder",
+        "title": "%command.gitPro.stageFolder.title%",
+        "category": "%command.category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitPro.unstageFolder",
+        "title": "%command.gitPro.unstageFolder.title%",
+        "category": "%command.category%",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitPro.discardFolder",
+        "title": "%command.gitPro.discardFolder.title%",
+        "category": "%command.category%",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitPro.stageAll",
+        "title": "%command.gitPro.stageAll.title%",
+        "category": "%command.category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitPro.unstageAll",
+        "title": "%command.gitPro.unstageAll.title%",
+        "category": "%command.category%",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitPro.diff",
+        "title": "%command.gitPro.diff.title%",
+        "category": "%command.category%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "gitPro.diffHead",
+        "title": "%command.gitPro.diffHead.title%",
+        "category": "%command.category%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "gitPro.discard",
+        "title": "%command.gitPro.discard.title%",
+        "category": "%command.category%",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitPro.commit",
+        "title": "%command.gitPro.commit.title%",
+        "category": "%command.category%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gitPro.fetch",
+        "title": "%command.gitPro.fetch.title%",
+        "category": "%command.category%",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitPro.pull",
+        "title": "%command.gitPro.pull.title%",
+        "category": "%command.category%",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "gitPro.push",
+        "title": "%command.gitPro.push.title%",
+        "category": "%command.category%",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "gitPro.branches",
+        "title": "%command.gitPro.branches.title%",
+        "category": "%command.category%",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitPro.branchActions",
+        "title": "%command.gitPro.branchActions.title%",
+        "category": "%command.category%",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitPro.createBranch",
+        "title": "%command.gitPro.createBranch.title%",
+        "category": "%command.category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitPro.copyPath",
+        "title": "%command.gitPro.copyPath.title%",
+        "category": "%command.category%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "gitPro.init",
+        "title": "%command.gitPro.init.title%",
+        "category": "%command.category%",
+        "icon": "$(repo-create)"
+      },
+      {
+        "command": "gitPro.clone",
+        "title": "%command.gitPro.clone.title%",
+        "category": "%command.category%",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "gitPro.history",
+        "title": "%command.gitPro.history.title%",
+        "category": "%command.category%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitPro.historyRefs",
+        "title": "%command.gitPro.historyRefs.title%",
+        "category": "%command.category%",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitPro.fileHistory",
+        "title": "%command.gitPro.fileHistory.title%",
+        "category": "%command.category%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitPro.toggleBlame",
+        "title": "%command.gitPro.toggleBlame.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.advancedActions",
+        "title": "%command.gitPro.advancedActions.title%",
+        "category": "%command.category%",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "gitPro.resolveConflict",
+        "title": "%command.gitPro.resolveConflict.title%",
+        "category": "%command.category%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "gitPro.forcePushWithLease",
+        "title": "%command.gitPro.forcePushWithLease.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.interactiveRebase",
+        "title": "%command.gitPro.interactiveRebase.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repositoryTools",
+        "title": "%command.gitPro.repositoryTools.title%",
+        "category": "%command.category%",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "gitPro.hunkActions",
+        "title": "%command.gitPro.hunkActions.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.commitFile",
+        "title": "%command.gitPro.commitFile.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.openBlameCommit",
+        "title": "%command.gitPro.openBlameCommit.title%",
+        "category": "%command.category%"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitPro",
+          "title": "%container.gitPro.title%",
+          "icon": "media/git-pro.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitPro": [
+        {
+          "id": "gitPro.repositories",
+          "name": "%view.gitPro.repositories.name%",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "gitPro.commitView",
+          "name": "%view.gitPro.commitView.name%",
+          "type": "webview",
+          "initialSize": 120
+        },
+        {
+          "id": "gitPro.changes",
+          "name": "%view.gitPro.changes.name%",
+          "type": "webview",
+          "initialSize": 700
+        },
+        {
+          "id": "gitPro.branchesView",
+          "name": "%view.gitPro.branchesView.name%",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "gitPro.toolsView",
+          "name": "%view.gitPro.toolsView.name%",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gitPro.repositories",
+        "contents": "Open a trusted folder containing a Git repository. Git Pro uses the built-in Git extension.\n[Refresh](command:gitPro.refresh)\n[Initialize Repository](command:gitPro.init) · [Clone Repository](command:gitPro.clone)",
+        "when": "!gitPro.hasRepositories"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitPro.refresh",
+          "when": "view == gitPro.repositories || view == gitPro.changes",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.stageAll",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.unstageAll",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.commit",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.fetch",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.pull",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.push",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.branches",
+          "when": "view == gitPro.branchesView",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.history",
+          "when": "view == gitPro.repositories && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.historyRefs",
+          "when": "view == gitPro.repositories && gitPro.hasRepositories",
+          "group": "history"
+        },
+        {
+          "command": "gitPro.advancedActions",
+          "when": "view == gitPro.changes && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.repositoryTools",
+          "when": "view == gitPro.repositories && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.repositoryTools",
+          "when": "view == gitPro.toolsView && gitPro.hasRepositories",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitPro.branchActions",
+          "when": "view == gitPro.branchesView && (viewItem == gitPro.branch.local || viewItem == gitPro.branch.remote)",
+          "group": "inline"
+        },
+        {
+          "command": "gitPro.branchActions",
+          "when": "view == gitPro.branchesView && (viewItem == gitPro.branch.local || viewItem == gitPro.branch.remote)",
+          "group": "gitPro"
+        },
+        {
+          "command": "gitPro.repositoryTools",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools",
+          "group": "gitPro"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gitPro.fileHistory",
+          "when": "resourceScheme == file && gitPro.hasRepositories",
+          "group": "gitPro"
+        }
+      ]
+    },
+    "colors": [
+      {
+        "id": "gitPro.accent",
+        "description": "%color.gitPro.accent.description%",
+        "defaults": {
+          "dark": "#f2542d",
+          "light": "#c2410c",
+          "highContrast": "contrastActiveBorder",
+          "highContrastLight": "contrastActiveBorder"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Git Pro",
+      "properties": {
+        "gitPro.logging.level": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "scope": "window",
+          "description": "%setting.gitPro.logging.level.description%"
+        },
+        "gitPro.commit.confirmBeforeCommit": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.commit.confirmBeforeCommit.description%"
+        },
+        "gitPro.confirmBeforePush": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.confirmBeforePush.description%"
+        },
+        "gitPro.pull.strategy": {
+          "type": "string",
+          "enum": [
+            "ff-only",
+            "merge",
+            "rebase"
+          ],
+          "default": "ff-only",
+          "scope": "resource",
+          "description": "%setting.gitPro.pull.strategy.description%"
+        },
+        "gitPro.commit.subjectLimit": {
+          "type": "integer",
+          "default": 72,
+          "minimum": 20,
+          "maximum": 200,
+          "scope": "resource",
+          "description": "%setting.gitPro.commit.subjectLimit.description%"
+        },
+        "gitPro.commit.messageHistoryLimit": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 0,
+          "maximum": 100,
+          "scope": "resource",
+          "description": "%setting.gitPro.commit.messageHistoryLimit.description%"
+        },
+        "gitPro.autoFetch.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.autoFetch.enabled.description%"
+        },
+        "gitPro.autoFetch.intervalMinutes": {
+          "type": "integer",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60,
+          "scope": "resource",
+          "description": "%setting.gitPro.autoFetch.intervalMinutes.description%"
+        },
+        "gitPro.blame.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.blame.enabled.description%"
+        },
+        "gitPro.codeLens.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.codeLens.enabled.description%"
+        },
+        "gitPro.blame.delay": {
+          "type": "integer",
+          "default": 250,
+          "minimum": 100,
+          "maximum": 2000,
+          "scope": "resource",
+          "description": "%setting.gitPro.blame.delay.description%"
+        },
+        "gitPro.graph.pageSize": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 25,
+          "maximum": 100,
+          "scope": "resource",
+          "description": "%setting.gitPro.graph.pageSize.description%"
+        },
+        "gitPro.graph.showRemoteBranches": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "%setting.gitPro.graph.showRemoteBranches.description%"
+        },
+        "gitPro.changes.groupBy": {
+          "type": "string",
+          "enum": [
+            "status",
+            "folder"
+          ],
+          "default": "status",
+          "scope": "resource",
+          "description": "%setting.gitPro.changes.groupBy.description%"
+        },
+        "gitPro.cli.readTimeout": {
+          "type": "integer",
+          "default": 15,
+          "minimum": 5,
+          "maximum": 600,
+          "scope": "machine",
+          "description": "%setting.gitPro.cli.readTimeout.description%"
+        },
+        "gitPro.cli.timeout": {
+          "type": "integer",
+          "default": 120,
+          "minimum": 15,
+          "maximum": 600,
+          "scope": "machine",
+          "description": "%setting.gitPro.cli.timeout.description%"
+        },
+        "gitPro.cli.networkTimeout": {
+          "type": "integer",
+          "default": 180,
+          "minimum": 30,
+          "maximum": 900,
+          "scope": "machine",
+          "description": "%setting.gitPro.cli.networkTimeout.description%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test scripts media esbuild.mjs",
+    "build": "node esbuild.mjs",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "test:unit": "npm run test:compile && node --test .test-build/test/unit/*.test.js",
+    "test:integration": "npm run test:compile && node --test --test-concurrency=2 .test-build/test/integration/*.test.js",
+    "test:extension": "npm run build && npm run test:compile && node scripts/test-extension.cjs",
+    "check": "npm run typecheck && npm run lint && npm run build && npm run test:unit && npm run test:integration",
+    "vscode:prepublish": "npm run typecheck && npm run build",
+    "test:stress": "npm run test:compile && node --test .test-build/test/stress/*.test.js",
+    "package": "node scripts/package-private.cjs && node scripts/verify-package.cjs",
+    "package:public-candidate": "npm run check && node scripts/package-public-candidate.cjs",
+    "audit:licenses": "node scripts/audit-licenses.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/vscode": "1.100.0",
+    "@vscode/codicons": "0.0.45",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0"
+  }
+}
