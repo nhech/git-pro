@@ -1,0 +1,26 @@
+# git-pro.longtd.me origin. The Cloudflare Tunnel public hostname points at http://localhost:4280.
+# Deploy with: npm run site:deploy  (builds the site, the image and verifies the running container)
+name: git-pro-site
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: site/deploy/Dockerfile
+    image: git-pro-site:latest
+    container_name: git-pro-site
+    restart: unless-stopped
+    # Loopback only: the tunnel runs on this machine, so nothing is exposed to the network.
+    ports:
+      - "127.0.0.1:${GIT_PRO_SITE_PORT:-4280}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

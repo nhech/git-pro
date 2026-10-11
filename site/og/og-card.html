@@ -1,0 +1,179 @@
+<!doctype html>
+<!-- Source for site/og.jpg (1200 × 630). Not deployed. Render with: node scripts/render-og.cjs -->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Git Pro social card</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    html,
+    body {
+      width: 1200px;
+      height: 630px;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--bg);
+    }
+
+    .og {
+      position: relative;
+      isolation: isolate;
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+    }
+
+    .og::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 80% 90% at 20% 10%, #000 30%, transparent 85%);
+    }
+
+    .og::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      left: -260px;
+      top: -360px;
+      width: 1100px;
+      height: 820px;
+      background: radial-gradient(closest-side, rgb(242 84 45 / 0.22), transparent);
+    }
+
+    .og-copy {
+      position: absolute;
+      left: 72px;
+      top: 68px;
+      width: 560px;
+    }
+
+    .og-brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .og-brand img {
+      width: 68px;
+      height: 68px;
+    }
+
+    .og-brand-name {
+      color: var(--text);
+      font-size: 40px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+
+    .og-brand .badge {
+      margin-left: 4px;
+      padding: 4px 14px;
+      font-size: 18px;
+    }
+
+    .og-title {
+      margin: 48px 0 0;
+      color: var(--text);
+      font-size: 60px;
+      font-weight: 760;
+      line-height: 1.04;
+      letter-spacing: -0.045em;
+    }
+
+    .og-lead {
+      margin: 26px 0 0;
+      color: var(--text-muted);
+      font-size: 25px;
+      line-height: 1.45;
+    }
+
+    .og-foot {
+      position: absolute;
+      left: 72px;
+      bottom: 58px;
+      display: flex;
+      gap: 22px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 21px;
+      color: var(--text-subtle);
+    }
+
+    .og-foot strong {
+      color: var(--accent);
+      font-weight: 650;
+    }
+
+    .og-shot {
+      position: absolute;
+      left: 676px;
+      top: 92px;
+      width: 640px;
+      height: 600px;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      background: #1e1e1e;
+      box-shadow: 0 40px 100px -30px rgb(0 0 0 / 0.9), 0 30px 120px -50px rgb(242 84 45 / 0.45);
+    }
+
+    .og-shot .window-bar {
+      padding: 14px 18px;
+    }
+
+    .og-shot .window-bar span {
+      width: 12px;
+      height: 12px;
+    }
+
+    .og-shot-view {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .og-shot-view img {
+      position: absolute;
+      left: -378px;
+      top: -8px;
+      width: 1555px;
+      max-width: none;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="og">
+    <div class="og-copy">
+      <div class="og-brand">
+        <img src="../favicon.svg" width="68" height="68" alt="">
+        <span class="og-brand-name">Git Pro</span>
+        <span class="badge">Preview</span>
+      </div>
+      <h1 class="og-title">Git workflows for VS&nbsp;Code, from one&nbsp;sidebar.</h1>
+      <p class="og-lead">Review and stage changes, write commits, explore History and recover rebases, merges and stashes.</p>
+    </div>
+
+    <div class="og-foot">
+      <strong>git-pro.longtd.me</strong>
+      <span>MIT · VS Code 1.100+</span>
+    </div>
+
+    <div class="og-shot">
+      <div class="window-bar"><span></span><span></span><span></span></div>
+      <div class="og-shot-view">
+        <img src="../../docs/images/history.jpg" width="2160" height="1350" alt="Git Pro History panel with a commit graph and selected commit details">
+      </div>
+    </div>
+  </div>
+</body>
+</html>

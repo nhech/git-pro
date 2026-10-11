@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Pro — Git workflows for VS Code, from one sidebar</title>
+  <meta name="description" content="Git Pro is a VS Code extension to review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
+  <link rel="canonical" href="https://git-pro.longtd.me/">
+  <meta name="robots" content="index, follow">
+  <meta name="author" content="longtd">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Git Pro">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://git-pro.longtd.me/">
+  <meta property="og:title" content="Git Pro — Git workflows for VS Code, from one sidebar">
+  <meta property="og:description" content="Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
+  <meta property="og:image" content="https://git-pro.longtd.me/og.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Git Pro — Git workflows for VS Code, from one sidebar">
+  <meta name="twitter:description" content="Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
+  <meta name="twitter:image" content="https://git-pro.longtd.me/og.jpg">
+  <meta name="twitter:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
+
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="256x256">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    (function (d) {
+      d.classList.add('js');
+      // main.js adds "js-ready". If it failed to load or run, return to the no-JS layout (visible menu links, no theme toggle).
+      document.addEventListener('DOMContentLoaded', function () { if (!d.classList.contains('js-ready')) d.classList.remove('js'); });
+      try { var t = localStorage.getItem('git-pro-theme'); if (t === 'light' || t === 'dark') d.dataset.theme = t; } catch (e) { /* storage unavailable */ }
+    })(document.documentElement);
+  </script>
+  <script src="main.js" defer></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["SoftwareApplication", "SoftwareSourceCode"],
+    "name": "Git Pro",
+    "description": "Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "Visual Studio Code extension",
+    "softwareVersion": "{{VERSION}}",
+    "softwareRequirements": "Visual Studio Code 1.100.0 or newer, Git and the VS Code built-in Git extension",
+    "url": "https://git-pro.longtd.me/",
+    "image": "https://git-pro.longtd.me/og.jpg",
+    "screenshot": "https://git-pro.longtd.me/images/changes-and-commit.jpg",
+    "license": "https://github.com/nhech/git-pro/blob/main/LICENSE",
+    "codeRepository": "https://github.com/nhech/git-pro",
+    "programmingLanguage": "TypeScript",
+    "keywords": "git, source control, commit, stage, history, graph, blame, rebase, stash, worktree",
+    "author": { "@type": "Person", "name": "longtd", "url": "https://longtd.me" }
+  }
+  </script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top">
+        <img class="brand-mark" src="favicon.svg" width="28" height="28" alt="">
+        <span class="brand-name">Git Pro</span>
+        <span class="badge">Preview</span>
+      </a>
+
+      <!-- The menu button comes right before the menu so keyboard focus moves from it into the links. -->
+      <button class="icon-btn nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="sr-only">Menu</span>
+        <svg class="icon icon-menu" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg class="icon icon-close" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#screenshots">Screenshots</a></li>
+          <li><a href="#get-started">Get started</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+
+      <div class="header-actions">
+        <a class="header-link" href="https://github.com/nhech/git-pro">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 5l-3 14"/></svg>
+          <span class="header-link-label">GitHub</span>
+        </a>
+        <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme">
+          <svg class="icon icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.75v2M12 19.25v2M2.75 12h2M19.25 12h2M5.46 5.46l1.41 1.41M17.13 17.13l1.41 1.41M5.46 18.54l1.41-1.41M17.13 6.87l1.41-1.41"/></svg>
+          <svg class="icon icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M19.25 14.6A7.75 7.75 0 0 1 9.4 4.75a7.75 7.75 0 1 0 9.85 9.85z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="container">
+        <div class="hero-copy">
+          <h1 id="hero-title" class="hero-title">
+            <span class="hero-name">Git Pro<span class="sr-only">:</span></span>
+            <span class="hero-headline">Git workflows for VS&nbsp;Code, from one&nbsp;sidebar.</span>
+          </h1>
+          <p class="hero-lead">Review and stage changes, write commits, explore History and recover rebases, merges and stashes.</p>
+          <p class="hero-sub">Built on VS&nbsp;Code's built-in Git extension. Destructive actions require a reviewed confirmation.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="{{MARKETPLACE_URL}}">
+              <svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M12 3.75v10.5M7.75 10 12 14.25 16.25 10M4.75 15.5v2.75a2 2 0 0 0 2 2h10.5a2 2 0 0 0 2-2V15.5"/></svg>
+              Install from VS&nbsp;Code Marketplace
+            </a>
+            <a class="btn btn-secondary" href="https://github.com/nhech/git-pro">
+              <svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 5l-3 14"/></svg>
+              View on GitHub
+            </a>
+          </div>
+          <ul class="meta-row" role="list" aria-label="Release details">
+            <li>{{VERSION}} preview</li>
+            <li>MIT</li>
+            <li>VS&nbsp;Code 1.100+</li>
+          </ul>
+        </div>
+
+        <figure class="hero-shot">
+          <div class="window">
+            <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="window-view">
+              <img src="images/changes-and-commit.jpg" width="2160" height="1350" fetchpriority="high"
+                alt="Git Pro Changes sidebar with right-aligned file status labels and the commit composer">
+            </div>
+          </div>
+          <figcaption>The Commit box above Changes, with staged, working tree and untracked groups. Demo repository, dark theme.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="features" class="section" aria-labelledby="features-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">Features</p>
+          <h2 id="features-title">From reviewing a diff to recovering a rebase</h2>
+          <p class="section-lead">Six areas of everyday Git work in one Activity Bar container. Native rows, status letters, codicons and your color theme, with one accent color you can change.</p>
+        </header>
+
+        <div class="feature-grid">
+          <article class="card feature reveal">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><rect x="3.25" y="3.75" width="7.5" height="16.5" rx="1.5"/><rect x="13.25" y="3.75" width="7.5" height="16.5" rx="1.5"/><path d="M5.25 12h3.5M15.25 12h3.5M17 10.25v3.5"/></svg></span>
+            <h3>Changes &amp; commits</h3>
+            <p>File and folder staging, native diffs, reviewed discard, commit, amend and signoff.</p>
+            <ul class="ticks" role="list">
+              <li>Staged, working tree, untracked and conflict groups with right-aligned status letters</li>
+              <li>Inline Open Changes, Open File, Discard and Stage on hover; right-click for every action</li>
+              <li>Commit box with Ctrl+Enter (⌘Enter on macOS), plus Commit &amp; Push, Amend, Sign-off, Skip hooks and message history</li>
+              <li>Commits the current index, including partial staging from native Source Control</li>
+            </ul>
+          </article>
+
+          <article class="card feature reveal" style="--i: 1">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="5.5" cy="5.5" r="2"/><circle cx="5.5" cy="18.5" r="2"/><path d="M5.5 7.5v9M13 18.25V5.75M10.5 8.25 13 5.75l2.5 2.5M19.5 5.75v12.5M17 15.75l2.5 2.5 2.5-2.5"/></svg></span>
+            <h3>Branches &amp; sync</h3>
+            <p>Branch and upstream actions, fetch, explicit pull strategy, push, init and clone.</p>
+            <ul class="ticks" role="list">
+              <li>Pull defaults to fast-forward only; merge or rebase is an explicit choice</li>
+              <li>Force Push with Explicit Lease always shows a fresh exact-lease preview and confirmation</li>
+              <li>Optional auto-fetch with per-repository schedules and backoff after failures</li>
+            </ul>
+          </article>
+
+          <article class="card feature reveal" style="--i: 2">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="5.5" cy="5.5" r="1.75"/><circle cx="5.5" cy="12" r="1.75"/><circle cx="5.5" cy="18.5" r="1.75"/><path d="M5.5 7.25v3M5.5 13.75v3M10.5 5.5h10M10.5 12h7M10.5 18.5h9"/></svg></span>
+            <h3>History &amp; compare</h3>
+            <p>Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History.</p>
+            <ul class="ticks" role="list">
+              <li>Column-based History; the accent marks HEAD and the current branch</li>
+              <li>Details with parent choice, changed files and containing refs</li>
+              <li>Compare revisions without leaving VS&nbsp;Code</li>
+              <li>File History follows renames across parents</li>
+            </ul>
+          </article>
+
+          <article class="card feature reveal">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M2.75 12S6.25 5.75 12 5.75 21.25 12 21.25 12 17.75 18.25 12 18.25 2.75 12 2.75 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <h3>File review</h3>
+            <p>Text hunk actions, saved-file commits and optional active-line blame and CodeLens.</p>
+            <ul class="ticks" role="list">
+              <li>Hunk Actions check a reviewed text patch before applying only that hunk</li>
+              <li>Commit File commits the full saved version of one file and preserves unrelated staged files</li>
+              <li>Active-line blame and a read-only File History CodeLens, both off by default</li>
+            </ul>
+          </article>
+
+          <article class="card feature reveal" style="--i: 1">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7.5v9M6 7.5c0 3 2.5 4.5 6 4.5h4"/></svg></span>
+            <h3>Advanced operations</h3>
+            <p>Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase.</p>
+            <ul class="ticks" role="list">
+              <li>Review fresh previews before a merge, rebase, cherry-pick, revert or reset is applied</li>
+              <li>Continue, Skip and Abort follow the actual Git operation state</li>
+              <li>Interactive Rebase Planner for linear ranges of 1–200 commits</li>
+              <li>Conflicts use VS&nbsp;Code's native Merge Editor, with guidance when it is unavailable</li>
+            </ul>
+          </article>
+
+          <article class="card feature reveal" style="--i: 2">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><rect x="3.25" y="4.25" width="17.5" height="4.5" rx="1"/><path d="M4.75 8.75v9.5a1.5 1.5 0 0 0 1.5 1.5h11.5a1.5 1.5 0 0 0 1.5-1.5v-9.5M9.75 12.75h4.5"/></svg></span>
+            <h3>Repository tools</h3>
+            <p>Stashes, tags, remotes and worktrees, with a repository selector for multi-repository workspaces.</p>
+            <ul class="ticks" role="list">
+              <li>Tag pushes, tag deletions and worktree destinations are explicit</li>
+              <li>Creating or removing an external worktree needs approval of the exact path</li>
+              <li>A stash pop conflict keeps the stash</li>
+            </ul>
+          </article>
+        </div>
+
+        <section class="principles reveal" aria-labelledby="principles-title">
+          <h3 id="principles-title" class="principles-title">Careful by default</h3>
+          <ul class="principles-list" role="list">
+            <li>
+              <h4>Opt-in extras</h4>
+              <p>Auto-fetch, active-line blame and CodeLens stay off until you enable them.</p>
+            </li>
+            <li>
+              <h4>Review before rewrite</h4>
+              <p>Discard, Amend, Skip Hooks, force push and advanced operations are reviewed first. No setting disables destructive confirmations.</p>
+            </li>
+            <li>
+              <h4>Your Git setup</h4>
+              <p>Uses your Git identity, credential helpers, SSH agent and signing. A signing failure keeps your draft.</p>
+            </li>
+            <li>
+              <h4>No telemetry code</h4>
+              <p>The extension contains no telemetry or analytics code, and operation logs always redact credentials.</p>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section section-alt" aria-labelledby="how-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">How it works</p>
+          <h2 id="how-title">Three steps to your first commit</h2>
+          <p class="section-lead">Git Pro works on top of VS&nbsp;Code's built-in Git and the repository you already have open.</p>
+        </header>
+
+        <ol class="steps" role="list">
+          <li class="step reveal">
+            <span class="step-num" aria-hidden="true">1</span>
+            <h3>Install Git Pro</h3>
+            <p>Install it from the Extensions view<!-- unlisted --> once the Marketplace listing is live<!-- /unlisted -->, or run <strong>Extensions: Install from VSIX...</strong> for a downloaded package. Reload VS&nbsp;Code if requested.</p>
+          </li>
+          <li class="step reveal" style="--i: 1">
+            <span class="step-num" aria-hidden="true">2</span>
+            <h3>Open a trusted repository</h3>
+            <p>Open your repository folder, review workspace trust, then select <strong>Git Pro</strong> in the Activity Bar. Choose the repository if more than one is available.</p>
+          </li>
+          <li class="step reveal" style="--i: 2">
+            <span class="step-num" aria-hidden="true">3</span>
+            <h3>Review, stage and commit</h3>
+            <p>Open a diff, stage the files you intend to commit, type a message in the Commit box and press <span class="nowrap"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span> <span class="nowrap">(<kbd>⌘</kbd><kbd>Enter</kbd> on macOS).</span></p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="screenshots" class="section" aria-labelledby="screenshots-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">Screenshots</p>
+          <h2 id="screenshots-title">See it in VS&nbsp;Code</h2>
+          <p class="section-lead">Screenshots use a demo repository in VS&nbsp;Code with dark and light themes. Layout varies with the VS&nbsp;Code version and window width.</p>
+        </header>
+
+        <div class="shots">
+          <figure class="shot shot-wide reveal">
+            <a class="shot-link" href="images/history.jpg" data-lightbox>
+              <img src="images/history.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro History panel with a commit graph and selected commit details">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>Browse History and compare revisions.</strong> Follow the commit graph, select a commit for details and changed files, or compare revisions without leaving VS&nbsp;Code. <span class="shot-theme">Dark theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal">
+            <a class="shot-link" href="images/changes-and-commit.jpg" data-lightbox>
+              <img src="images/changes-and-commit.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro Changes sidebar with right-aligned file status labels and the commit composer">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>Review, stage and commit.</strong> See staged, modified and untracked files at a glance, then commit from the box above Changes. <span class="shot-theme">Dark theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal" style="--i: 1">
+            <a class="shot-link" href="images/file-actions.jpg" data-lightbox>
+              <img src="images/file-actions.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro file context menu showing diff, staging, file history, copy path and discard actions">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>File actions where you need them.</strong> Right-click a file for its diff, history, staging, relative path and a reviewed discard. Available actions follow the file's state. <span class="shot-theme">Light theme</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="get-started" class="section section-alt" aria-labelledby="get-started-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">Get started</p>
+          <h2 id="get-started-title">Install and make your first commit</h2>
+          <p class="section-lead">Git Pro {{VERSION}} is a preview: behavior and limits may change between versions.</p>
+        </header>
+
+        <div class="gs-grid">
+          <div class="gs-install reveal">
+            <h3>Install</h3>
+            <div class="install-list">
+              <article class="install">
+                <h4>VS&nbsp;Code Marketplace</h4>
+                <!-- unlisted --><p class="install-status">The Marketplace listing is not live yet. Until it is, install a <code>.vsix</code> package.</p><!-- /unlisted -->
+                <p>Search for <strong>Git Pro</strong> in the Extensions view, or paste this into Quick Open and press Enter.</p>
+                <div class="code-block">
+                  <pre><code>ext install nhech.git-pro</code></pre>
+                  <button class="copy-btn" type="button" data-copy hidden><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="8.25" y="8.25" width="11.5" height="11.5" rx="2"/><path d="M15.75 8.25v-2.5a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h2.5"/></svg><span class="copy-label">Copy</span><span class="sr-only"> Quick Open command</span></button>
+                </div>
+                <p class="install-link"><a href="{{MARKETPLACE_URL}}">Install from VS&nbsp;Code Marketplace <span aria-hidden="true">→</span></a></p>
+              </article>
+
+              <article class="install">
+                <h4>Install from VSIX</h4>
+                <p>For a downloaded <code>.vsix</code> package, run this from the Command Palette and pick the file. Reload VS&nbsp;Code if requested.</p>
+                <div class="code-block">
+                  <pre><code>Extensions: Install from VSIX...</code></pre>
+                  <button class="copy-btn" type="button" data-copy hidden><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="8.25" y="8.25" width="11.5" height="11.5" rx="2"/><path d="M15.75 8.25v-2.5a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h2.5"/></svg><span class="copy-label">Copy</span><span class="sr-only"> Command Palette command</span></button>
+                </div>
+              </article>
+
+              <article class="install">
+                <h4>Command line</h4>
+                <p>Use the VS&nbsp;Code CLI with the extension ID<!-- unlisted --> once the Marketplace listing is live<!-- /unlisted -->. It also accepts the path of a <code>.vsix</code> file.</p>
+                <div class="code-block">
+                  <pre><code>code --install-extension nhech.git-pro</code></pre>
+                  <button class="copy-btn" type="button" data-copy hidden><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="8.25" y="8.25" width="11.5" height="11.5" rx="2"/><path d="M15.75 8.25v-2.5a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h2.5"/></svg><span class="copy-label">Copy</span><span class="sr-only"> CLI command</span></button>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="gs-side reveal" style="--i: 1">
+            <div class="panel">
+              <h3>Requirements</h3>
+              <ul class="ticks" role="list">
+                <li>VS&nbsp;Code 1.100.0 or newer</li>
+                <li>Git available on the extension host</li>
+                <li>VS&nbsp;Code's built-in Git extension, enabled</li>
+                <li>A trusted filesystem workspace</li>
+              </ul>
+              <p class="note">Browser and virtual workspaces, such as vscode.dev and github.dev, are unsupported.</p>
+            </div>
+
+            <div class="panel">
+              <h3>First steps</h3>
+              <ol class="numbered">
+                <li>Open your repository folder and review workspace trust.</li>
+                <li>Select <strong>Git Pro</strong> in the Activity Bar and choose the repository if more than one is available.</li>
+                <li>Open Changes, review a diff and stage the intended files. Selecting rows does not stage them.</li>
+                <li>Type a message in the Commit box and press <span class="nowrap"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span> <span class="nowrap">(<kbd>⌘</kbd><kbd>Enter</kbd> on macOS)</span> or Commit, or use the menu beside Commit for Commit &amp; Push, Amend, Sign-off, Skip hooks and message history.</li>
+                <li>Run <strong>Git Pro</strong> commands from the Command Palette for History, File History, branches, advanced actions and repository tools.</li>
+              </ol>
+              <p class="note">Git Pro assigns no global shortcuts; add your own in Keyboard Shortcuts. For diagnostics, run <strong>Git Pro: Show Output</strong> and review the log before sharing it.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings reveal">
+          <h3 id="settings-title">Settings worth knowing</h3>
+          <p>Open Settings and search for <code>gitPro</code>. Resource settings apply to the selected repository.</p>
+          <div class="table-wrap" role="region" aria-labelledby="settings-title" tabindex="0">
+            <table role="table">
+              <thead role="rowgroup">
+                <tr role="row"><th scope="col" role="columnheader">Setting</th><th scope="col" role="columnheader">Default</th><th scope="col" role="columnheader">What it does</th></tr>
+              </thead>
+              <tbody role="rowgroup">
+                <tr role="row"><td role="cell"><code>gitPro.pull.strategy</code></td><td role="cell"><code>"ff-only"</code></td><td role="cell">Pull strategy: ff-only, merge or rebase. Divergence requires an explicit merge or rebase choice.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.confirmBeforePush</code></td><td role="cell"><code>false</code></td><td role="cell">Confirm pushes to the configured upstream.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.commit.subjectLimit</code></td><td role="cell"><code>72</code></td><td role="cell">Subject warning length (20–200). It warns; it never truncates.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.commit.messageHistoryLimit</code></td><td role="cell"><code>20</code></td><td role="cell">Messages kept per repository in workspace state (0–100; 0 hides history).</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.autoFetch.enabled</code></td><td role="cell"><code>false</code></td><td role="cell">Periodically fetch remotes, every 5 minutes by default, with backoff after failures.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.blame.enabled</code></td><td role="cell"><code>false</code></td><td role="cell">Show author and commit for the active line.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.codeLens.enabled</code></td><td role="cell"><code>false</code></td><td role="cell">Read-only File History CodeLens on saved files. No automatic Git read.</td></tr>
+                <tr role="row"><td role="cell"><code>gitPro.changes.groupBy</code></td><td role="cell"><code>"status"</code></td><td role="cell">Show paths flat (<code>status</code>) or as folders (<code>folder</code>) within each group.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/SETTINGS.md">Settings guide</a> lists all 17 settings with ranges and scopes. To change the accent color, set the theme color <code>gitPro.accent</code>:</p>
+          <div class="code-block">
+            <pre><code>"workbench.colorCustomizations": {
+  "gitPro.accent": "#3794ff"
+}</code></pre>
+            <button class="copy-btn" type="button" data-copy hidden><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="8.25" y="8.25" width="11.5" height="11.5" rx="2"/><path d="M15.75 8.25v-2.5a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h2.5"/></svg><span class="copy-label">Copy</span><span class="sr-only"> accent color setting</span></button>
+          </div>
+        </div>
+
+        <div class="guides reveal">
+          <h3>User guides</h3>
+          <ul class="guide-list" role="list">
+            <li><a class="guide" href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/GETTING_STARTED.md"><span class="guide-title">Getting started</span><span class="guide-desc">Install, open a repository and commit.</span></a></li>
+            <li><a class="guide" href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md"><span class="guide-title">Workflows and recovery</span><span class="guide-desc">Staging, sync, History and advanced operations.</span></a></li>
+            <li><a class="guide" href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/SETTINGS.md"><span class="guide-title">Settings</span><span class="guide-desc">Defaults, ranges and scopes for every setting.</span></a></li>
+            <li><a class="guide" href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md"><span class="guide-title">Compatibility and limitations</span><span class="guide-desc">Requirements, workflow limits and large repositories.</span></a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="section" aria-labelledby="faq-title">
+      <div class="container container-narrow">
+        <header class="section-head reveal">
+          <p class="eyebrow">FAQ</p>
+          <h2 id="faq-title">Questions, answered from the docs</h2>
+        </header>
+
+        <div class="faq-list reveal">
+          <details>
+            <summary>How is Git Pro licensed?</summary>
+            <div class="faq-body">
+              <p>Under the MIT license, copyright 2026 longtd. The license text and third-party notices are in the <a href="https://github.com/nhech/git-pro">GitHub repository</a>.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>What do I need to run it?</summary>
+            <div class="faq-body">
+              <p>VS&nbsp;Code 1.100.0 or newer with the built-in Git extension enabled, Git available on the extension host, and a trusted filesystem workspace.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Does Git Pro replace VS&nbsp;Code's built-in Git?</summary>
+            <div class="faq-body">
+              <p>No. Git Pro requires the built-in Git extension and builds on it. Line-level partial staging stays in native Source Control, and Git Pro commits that index. Conflicts use VS&nbsp;Code's native Merge Editor; when it is unavailable, use the conflict guidance and native diffs. Authentication and signing use your configured Git identity, credential helpers, SSH agent and signing settings.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>What does "preview" mean?</summary>
+            <div class="faq-body">
+              <p>Git Pro {{VERSION}} is a preview: behavior and limits may change between versions. Known limits, such as the 2,000 loaded commits in History and interactive rebase for linear ranges of 1–200 commits, are listed in <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">Compatibility and limitations</a>.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Which features are off by default?</summary>
+            <div class="faq-body">
+              <p>Auto-fetch, active-line blame and the File History CodeLens are opt-in. Turn them on in Settings with <code>gitPro.autoFetch.enabled</code>, <code>gitPro.blame.enabled</code> and <code>gitPro.codeLens.enabled</code>. The CodeLens does not read history until you open File History. Git Pro also assigns no global keyboard shortcuts.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>How does it handle destructive operations?</summary>
+            <div class="faq-body">
+              <p>Discard requires a reviewed confirmation. Force Push with Explicit Lease always shows a fresh exact-lease preview, and advanced merge, rebase, cherry-pick, revert and reset actions show a fresh preview before applying. No setting disables these confirmations, and Git Pro performs no automatic destructive retry.</p>
+              <p>Canceling a Git operation can still leave the repository changed and does not imply a rollback, so refresh and inspect the repository before retrying.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Does it work in the browser, over Remote or in containers?</summary>
+            <div class="faq-body">
+              <p>Browser and virtual workspaces, such as vscode.dev and github.dev, are unsupported, and so are untrusted workspaces. Git Pro runs where the workspace is, so remote workspaces need Git and credentials on the remote host. Remote WSL and Dev Containers have not completed release validation.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Where do I report a problem?</summary>
+            <div class="faq-body">
+              <p>Open an issue on <a href="https://github.com/nhech/git-pro/issues">GitHub Issues</a>. Run <strong>Git Pro: Show Output</strong> for diagnostics; credentials are redacted from operation logs, but review any log before sharing it.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band" aria-labelledby="cta-title">
+      <div class="container">
+        <div class="cta-card reveal">
+          <img src="favicon.svg" width="56" height="56" alt="" class="cta-mark">
+          <h2 id="cta-title">Bring your Git workflow into one sidebar</h2>
+          <p>Review, stage, commit, explore History and recover operations without leaving VS&nbsp;Code.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="{{MARKETPLACE_URL}}">Install from VS&nbsp;Code Marketplace</a>
+            <a class="btn btn-secondary" href="#get-started">Other install options</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="#top">
+            <img class="brand-mark" src="favicon.svg" width="28" height="28" alt="">
+            <span class="brand-name">Git Pro</span>
+          </a>
+          <p>Git workflows for VS&nbsp;Code, from one sidebar.</p>
+          <p class="footer-meta">{{VERSION}} preview · MIT license</p>
+        </div>
+        <nav class="footer-col" aria-labelledby="footer-docs">
+          <h2 id="footer-docs" class="footer-heading">Docs</h2>
+          <ul>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/GETTING_STARTED.md">Getting started</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md">Workflows</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/SETTINGS.md">Settings</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">Compatibility</a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-labelledby="footer-project">
+          <h2 id="footer-project" class="footer-heading">Project</h2>
+          <ul>
+            <li><a href="https://github.com/nhech/git-pro">GitHub</a></li>
+            <li><a href="https://github.com/nhech/git-pro/issues">Issues</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/CHANGELOG.md">Changelog</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/LICENSE">License</a></li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/THIRD_PARTY_NOTICES.txt">Third-party notices</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 longtd. Released under the MIT license.</p>
+        <p>Made by <a href="https://longtd.me">longtd</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <p id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+</body>
+</html>

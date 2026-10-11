@@ -1,0 +1,5 @@
+# The build context is the repository root; only the built site and the nginx configuration enter the image.
+*
+!site-dist/**
+!site/deploy/nginx.conf
+!site/deploy/.generated/security-headers.conf

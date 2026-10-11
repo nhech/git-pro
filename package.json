@@ -561,7 +561,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test scripts media esbuild.mjs",
+    "lint": "eslint src test scripts media esbuild.mjs site",
     "build": "node esbuild.mjs",
     "test:compile": "tsc -p tsconfig.test.json",
     "test:unit": "npm run test:compile && node --test .test-build/test/unit/*.test.js",
@@ -572,7 +572,11 @@
     "test:stress": "npm run test:compile && node --test .test-build/test/stress/*.test.js",
     "package": "node scripts/package-private.cjs && node scripts/verify-package.cjs",
     "package:public-candidate": "npm run check && node scripts/package-public-candidate.cjs",
-    "audit:licenses": "node scripts/audit-licenses.cjs"
+    "audit:licenses": "node scripts/audit-licenses.cjs",
+    "site:build": "node scripts/build-site.cjs",
+    "site:serve": "node scripts/serve-site.cjs",
+    "site:og": "node scripts/render-og.cjs",
+    "site:deploy": "node scripts/deploy-site.cjs"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

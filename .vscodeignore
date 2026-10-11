@@ -37,3 +37,5 @@ benchmarks/**
 *.key
 .env
 .env.*
+site/**
+site-dist/**

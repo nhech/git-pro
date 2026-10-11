@@ -1,0 +1,14 @@
+{
+  "name": "Git Pro",
+  "short_name": "Git Pro",
+  "description": "Git workflows for VS Code, from one sidebar.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "icons": [
+    { "src": "favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "icon.png", "type": "image/png", "sizes": "256x256" }
+  ]
+}
