@@ -61,9 +61,9 @@ function writeHeaders() {
   return csp;
 }
 
-function request(pathname) {
+function request(pathname, headers = {}) {
   return new Promise(resolve => {
-    const req = http.get({ host: '127.0.0.1', port, path: pathname, timeout: 5000 }, response => {
+    const req = http.get({ host: '127.0.0.1', port, path: pathname, headers, timeout: 5000 }, response => {
       const chunks = [];
       response.on('data', chunk => chunks.push(chunk));
       response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks) }));
@@ -94,6 +94,11 @@ async function verify() {
   check('dot paths hidden', hidden.status === 404, `${hidden.status}`);
   const deployFiles = await request('/deploy/nginx.conf');
   check('deploy files not served', deployFiles.status === 404, `${deployFiles.status}`);
+  // What Cloudflare sends for a plain-HTTP visitor: a permanent redirect to the same path over HTTPS.
+  const plain = await request('/faq?x=1', { host: 'git-pro.longtd.me', 'x-forwarded-proto': 'http' });
+  check('http visitors redirect to https', plain.status === 301 && plain.headers.location === 'https://git-pro.longtd.me/faq?x=1', `${plain.status} ${plain.headers.location || ''}`);
+  const secure = await request('/', { host: 'git-pro.longtd.me', 'x-forwarded-proto': 'https' });
+  check('https visitors served', secure.status === 200, `${secure.status}`);
   return checks;
 }
 
