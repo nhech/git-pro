@@ -40,3 +40,4 @@ benchmarks/**
 .env.*
 site/**
 site-dist/**
+*.log

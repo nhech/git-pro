@@ -15,15 +15,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm run check 2>&1 | tee check.log; exit "${PIPESTATUS[0]}"
+      - id: check
+        run: npm run check 2>&1 | tee "$RUNNER_TEMP/check.log"; exit "${PIPESTATUS[0]}"
         shell: bash
       - name: Annotate failing checks
-        if: failure()
+        if: failure() && steps.check.outcome == 'failure'
         shell: bash
         # Job logs need a signed-in viewer; an annotation keeps the failing tests readable from the run page.
         run: |
-          details=$(grep -A24 '^not ok' check.log | head -120)
-          [ -n "$details" ] || details=$(tail -40 check.log)
+          details=$(grep -A24 '^not ok' "$RUNNER_TEMP/check.log" | head -120)
+          [ -n "$details" ] || details=$(tail -40 "$RUNNER_TEMP/check.log")
           echo "::error title=npm run check (${{ matrix.os }})::$(printf '%s' "$details" | sed 's/%/%25/g; s/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
       - run: npm run package
       - run: npm run audit:licenses
