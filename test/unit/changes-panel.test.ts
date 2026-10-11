@@ -27,11 +27,15 @@ async function conflictHarness(root:string,operation:string,changes:Change[],sur
   const view={webview:{html:'',cspSource:'owned:',asWebviewUri:(uri:unknown)=>String(uri),onDidReceiveMessage:(callback:typeof receive)=>{receive=callback;return disposable;},postMessage:async(value:Record<string,unknown>)=>{sent.push(value);return true;}},onDidDispose:onChange};
   const holder={conflictSources:new Map(),...surfaces};
   const panel=new (exports.ChangesPanel as new(context:unknown,registry:unknown,provider:unknown,surfaces:unknown)=>{resolveWebviewView(view:unknown):void;dispose():void})({extensionUri:'owned'},registry,provider,holder);
-  panel.resolveWebviewView(view);await settle();await settle();
+  panel.resolveWebviewView(view);
+  // The first render reads working files with lstat and may wait for an operation summary, so wait for its state.
+  for(let i=0;i<200&&!sent.some(value=>value.type==='state');i++)await new Promise(resolve=>setTimeout(resolve,10));
+  await settle();
   const session=/data-session="([^"]+)"/.exec(view.webview.html)![1]!;
   const state=()=>sent.filter(value=>value.type==='state').at(-1)!;
   const rows=()=>state().rows as Row[],key=(label:string)=>rows().find(row=>row.label===label)!.key;
-  const request=async(message:Record<string,unknown>)=>{receive({session,...message});await settle();await settle();};
+  // Every request answers with a command or a message; wait for one (bounded) rather than a fixed number of turns.
+  const request=async(message:Record<string,unknown>)=>{const marks=[sent.length,commands.length];receive({session,...message});for(let i=0;i<200&&sent.length===marks[0]&&commands.length===marks[1];i++)await new Promise(resolve=>setTimeout(resolve,10));await settle();await settle();};
   return {panel,sent,commands,state,rows,key,request,view,session,store,repo};
 }
 
