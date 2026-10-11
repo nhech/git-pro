@@ -19,7 +19,7 @@
   "bugs": {
     "url": "https://github.com/nhech/git-pro/issues"
   },
-  "homepage": "https://github.com/nhech/git-pro#readme",
+  "homepage": "https://git-pro.longtd.me/",
   "engines": {
     "vscode": "^1.100.0"
   },

@@ -21,14 +21,13 @@
     else if (typeof query.addListener === 'function') query.addListener(listener);
   }
 
-  // Theme toggle: stores an explicit choice; without one the OS preference applies.
+  // Theme toggle: dark by default; a stored explicit choice switches to light (or back).
   function setupTheme() {
     const button = document.querySelector('[data-theme-toggle]');
     if (!button) return;
-    const prefersLight = window.matchMedia('(prefers-color-scheme: light)');
     const metas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
     const defaults = metas.map(meta => meta.getAttribute('content'));
-    const current = () => root.dataset.theme || (prefersLight.matches ? 'light' : 'dark');
+    const current = () => root.dataset.theme || 'dark';
 
     function sync() {
       const theme = current();
@@ -45,7 +44,6 @@
       try { localStorage.setItem(THEME_KEY, next); } catch { /* storage unavailable: the choice lasts for this page view */ }
       sync();
     });
-    onMediaChange(prefersLight, sync);
     sync();
   }
 

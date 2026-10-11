@@ -7,7 +7,7 @@ Static source for <https://git-pro.longtd.me>. No framework, no npm dependencies
 | `site/index.html` | The single landing page. Uses the `{{MARKETPLACE_URL}}` and `{{VERSION}}` placeholders. |
 | `site/404.html` | Not-found page. Uses root-relative URLs because nginx serves it for missing paths at any depth. |
 | `site/deploy/` | Production origin: `Dockerfile`, `nginx.conf` and `compose.yml` for the nginx container behind the Cloudflare Tunnel. Source-only, never copied into `site-dist/`. |
-| `site/styles.css` | Design tokens (dark default, light via `prefers-color-scheme` or the stored toggle), layout and motion. |
+| `site/styles.css` | Design tokens (dark for every visitor by default; light only after choosing it with the toggle, which is stored), layout and motion. |
 | `site/main.js` | Progressive enhancement only: theme toggle, copy buttons, reveal on scroll, lightbox, current-section highlight, mobile menu. The inline head script adds the `js` class (so the layout is final at first paint); `main.js` adds `js-ready` once the theme toggle and the menu work. If `js-ready` is missing at `DOMContentLoaded` (the file was blocked, missing or failed), the head script removes `js` and the page falls back to the no-JS layout, with the menu links visible. |
 | `site/favicon.svg` | Vector of `media/icon.png`, built from the geometry in `scripts/generate-icon.cjs`. |
 | `site/og.jpg` | 1200 × 630 social card (JPEG, about 75 KB, under the ~300 KB limit some link previews apply), rendered from `site/og/og-card.html`. |

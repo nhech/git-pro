@@ -2,6 +2,8 @@
 
 Git workflows for VS Code: review changes, stage files, write commits, browse History and manage repositories from one sidebar.
 
+Website: [git-pro.longtd.me](https://git-pro.longtd.me/) · Source: [github.com/nhech/git-pro](https://github.com/nhech/git-pro)
+
 **0.1.0 preview.** Behavior and limits may change between versions. See [compatibility and limitations](docs/user-guide/RELEASE_STATUS.md) and report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
 
 ## See Git Pro in action

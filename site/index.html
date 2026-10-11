@@ -8,9 +8,8 @@
   <link rel="canonical" href="https://git-pro.longtd.me/">
   <meta name="robots" content="index, follow">
   <meta name="author" content="longtd">
-  <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0a0b">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Git Pro">
@@ -180,11 +179,12 @@
           <article class="card feature reveal" style="--i: 2">
             <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="5.5" cy="5.5" r="1.75"/><circle cx="5.5" cy="12" r="1.75"/><circle cx="5.5" cy="18.5" r="1.75"/><path d="M5.5 7.25v3M5.5 13.75v3M10.5 5.5h10M10.5 12h7M10.5 18.5h9"/></svg></span>
             <h3>History &amp; compare</h3>
-            <p>Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History.</p>
+            <p>Commit graph, filters, details, merge-parent selection, branch comparison and rename-aware File History.</p>
             <ul class="ticks" role="list">
               <li>Column-based History; the accent marks HEAD and the current branch</li>
               <li>Details with parent choice, changed files and containing refs</li>
-              <li>Compare revisions without leaving VS&nbsp;Code</li>
+              <li>Compare with Current: commits on each side, files since the fork or tip to tip, and Open All Changes</li>
+              <li>Show Diff with Working Tree, with Get from Branch for the files you choose</li>
               <li>File History follows renames across parents</li>
             </ul>
           </article>
@@ -203,12 +203,12 @@
           <article class="card feature reveal" style="--i: 1">
             <span class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7.5v9M6 7.5c0 3 2.5 4.5 6 4.5h4"/></svg></span>
             <h3>Advanced operations</h3>
-            <p>Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase.</p>
+            <p>Merge, rebase, cherry-pick, revert, reset and operation recovery; a Conflicts tab and interactive linear rebase.</p>
             <ul class="ticks" role="list">
               <li>Review fresh previews before a merge, rebase, cherry-pick, revert or reset is applied</li>
-              <li>Continue, Skip and Abort follow the actual Git operation state</li>
+              <li>Conflicts tab: Accept Yours or Accept Theirs for several files at once, or Merge… in VS&nbsp;Code's merge editor with Yours on the left and Theirs on the right</li>
+              <li>The Changes banner and status bar follow the operation, with Resolve, Continue and Abort</li>
               <li>Interactive Rebase Planner for linear ranges of 1–200 commits</li>
-              <li>Conflicts use VS&nbsp;Code's native Merge Editor, with guidance when it is unavailable</li>
             </ul>
           </article>
 
@@ -450,7 +450,7 @@
           <details>
             <summary>Does Git Pro replace VS&nbsp;Code's built-in Git?</summary>
             <div class="faq-body">
-              <p>No. Git Pro requires the built-in Git extension and builds on it. Line-level partial staging stays in native Source Control, and Git Pro commits that index. Conflicts use VS&nbsp;Code's native Merge Editor; when it is unavailable, use the conflict guidance and native diffs. Authentication and signing use your configured Git identity, credential helpers, SSH agent and signing settings.</p>
+              <p>No. Git Pro requires the built-in Git extension and builds on it. Line-level partial staging stays in native Source Control, and Git Pro commits that index. Git Pro lists conflicts in its own Conflicts tab and opens VS&nbsp;Code's native merge editor for three-way edits; when it is unavailable, use the conflict guidance and native diffs. Authentication and signing use your configured Git identity, credential helpers, SSH agent and signing settings.</p>
             </div>
           </details>
 

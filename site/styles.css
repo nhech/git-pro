@@ -64,38 +64,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-/* Light theme: follows the OS unless a manual choice is stored. Keep both blocks identical. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --bg: #ffffff;
-    --bg-soft: #f7f7f8;
-    --surface: #ffffff;
-    --surface-2: #f4f4f5;
-    --border: #e4e4e7;
-    --border-strong: #d4d4d8;
-    --text: #17171a;
-    --text-muted: #52525b;
-    --text-subtle: #5f5f68;
-    --accent: #c2410c;
-    --accent-strong: #9a3412;
-    --on-accent: #ffffff;
-    --accent-soft: rgb(194 65 12 / 0.08);
-    --accent-border: rgb(194 65 12 / 0.32);
-    --accent-glow: rgb(194 65 12 / 0.28);
-    --link: #c2410c;
-    --success: #15803d;
-    --code-bg: #f6f6f7;
-    --glow: rgb(242 84 45 / 0.14);
-    --grid-line: rgb(0 0 0 / 0.045);
-    --dot: #d4d4d8;
-    --window-glow: rgb(194 65 12 / 0.16);
-    --shadow-sm: 0 1px 2px rgb(16 16 20 / 0.06);
-    --shadow-md: 0 12px 30px -16px rgb(16 16 20 / 0.22);
-    --shadow-lg: 0 36px 80px -30px rgb(16 16 20 / 0.32), 0 0 0 1px rgb(16 16 20 / 0.02);
-  }
-}
-
+/* Dark is the default for every visitor; the light theme applies only after choosing it with the toggle. */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
@@ -481,16 +450,6 @@ html:not(.js) .theme-toggle {
 
 :root[data-theme="light"] .theme-toggle .icon-moon {
   display: block;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .theme-toggle .icon-sun {
-    display: none;
-  }
-
-  :root:not([data-theme="dark"]) .theme-toggle .icon-moon {
-    display: block;
-  }
 }
 
 /* Navigation: without JavaScript the links wrap onto a second row on small screens. */
