@@ -1,10 +1,15 @@
+import type { BannerActionId } from '../../conflicts/operation-text';
+
 export type ChangesAction =
   | { type: 'ready'; session: string }
   | { type: 'select'; session: string; keys: string[] }
   | { type: 'toggle'; session: string; key: string }
-  | { type: 'action'; session: string; action: 'stage'|'unstage'|'discard'|'diff'|'open'|'history'|'copyPath'|'resolve'|'stageAll'|'unstageAll'|'refresh'; key?: string; keys?: string[] };
+  | { type: 'action'; session: string; action: 'stage'|'unstage'|'discard'|'diff'|'open'|'history'|'copyPath'|'resolve'|'stageAll'|'unstageAll'|'refresh'|'merge'|'acceptYours'|'acceptTheirs'|'openConflicts'; key?: string; keys?: string[] }
+  /** A banner button: the host acts on its own operation state and only for a button it is currently showing. */
+  | { type: 'operation'; session: string; action: BannerActionId };
 
-const actions = new Set(['stage','unstage','discard','diff','open','history','copyPath','resolve','stageAll','unstageAll','refresh']);
+const actions = new Set(['stage','unstage','discard','diff','open','history','copyPath','resolve','stageAll','unstageAll','refresh','merge','acceptYours','acceptTheirs','openConflicts']);
+const operations = new Set<string>(['resolve','continue','skip','abort','amend','sourceControl']);
 const key = (value: unknown): value is string => typeof value === 'string' && value.length <= 2048 && /^[A-Za-z0-9_=-]+$/.test(value);
 const keys = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 100 && value.every(key) && new Set(value).size === value.length;
 
@@ -15,6 +20,7 @@ export function parseChangesAction(value: unknown): ChangesAction {
   if(item.type==='ready')return {type:'ready',session:item.session};
   if(item.type==='select'&&keys(item.keys))return {type:'select',session:item.session,keys:item.keys};
   if(item.type==='toggle'&&key(item.key))return {type:'toggle',session:item.session,key:item.key};
+  if(item.type==='operation'&&typeof item.action==='string'&&operations.has(item.action))return {type:'operation',session:item.session,action:item.action as BannerActionId};
   if(item.type==='action'&&typeof item.action==='string'&&actions.has(item.action)){
     if(item.key!==undefined&&!key(item.key))throw new Error('Invalid Changes row identity.');
     if(item.keys!==undefined&&!keys(item.keys))throw new Error('Invalid Changes selection.');

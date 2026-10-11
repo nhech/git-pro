@@ -12,10 +12,38 @@ import { InteractiveService } from '../git/rebase/interactive.service';
 import { validateRebasePlan, type RebaseStep, type RebaseAction } from '../git/rebase/rebase-plan';
 import type { RebasePlanner } from '../webviews/rebase/rebase-planner';
 import type { InteractivePreview } from '../git/rebase/interactive.service';
+import { createSurfaces, isConflictFailure, type Surfaces } from '../conflicts/surfaces';
+import { sidesFor } from '../git/conflicts/conflict-kinds';
+import { readMergeMessage } from '../git/conflicts/operation-context';
+import type { ConfirmAndControl } from '../git/conflicts/conflict-contract';
+import { refuseUnsaved } from '../editor/open-files';
+const controlLabels={continue:'Continue',skip:'Skip current commit',abort:'Abort'} as const;
+/**
+ * §3.4: the modal confirmations for Continue, Skip and Abort, shared by Advanced Actions, the banner, the status-bar menu and the operation commands, then
+ * AdvancedService.control (which still refuses Continue while conflicts remain). A merge Continue offers Git's prepared message or Edit Message…. Resolves false on cancel.
+ */
+export const confirmAndControl:ConfirmAndControl=async(advanced,snapshot,action,options={})=>{
+  if(!['merging','rebasing','cherry-picking','reverting'].includes(snapshot.operation))throw new Error('No supported operation is in progress. Use native Git for bisect or git-am.');
+  if(action!=='continue'&&action!=='skip'&&action!=='abort')throw new Error('Unknown operation action.');
+  if(snapshot.operation==='merging'&&action==='skip')throw new Error('Merge cannot skip.');
+  if(snapshot.operation==='merging'&&action==='continue'){
+    let message=options.mergeMessage;
+    if(message!==undefined){if(await vscode.window.showWarningMessage('Continue merging?',{modal:true,detail:'Commit the merge with the reviewed message. All conflicts must be staged. Hooks will still run.'},'Commit Merge')!=='Commit Merge')return false;}
+    else{
+      const choice=await vscode.window.showWarningMessage('Continue merging?',{modal:true,detail:'Commit the merge with the message Git prepared, or edit it first. All conflicts must be staged. Hooks will still run.'},'Commit Merge','Edit Message…');
+      if(choice==='Edit Message…'){message=await editMessage(await readMergeMessage(advanced.git.repository(snapshot.repositoryId).gitDir),'Merge commit message');if(message===undefined)return false;}
+      else if(choice!=='Commit Merge')return false;
+    }
+    await(message!==undefined?advanced.control(snapshot,'continue',{mergeMessage:message}):advanced.control(snapshot,'continue'));return true;
+  }
+  const label=controlLabels[action],detail=action==='abort'?'Return to the original state of this Git operation. Review any resolutions before aborting.':action==='skip'?'Discard the current commit from this sequence. Review its changes first.':'All conflicts must be staged. Hooks will still run.';
+  if(await vscode.window.showWarningMessage(`${label} ${snapshot.operation}?`,{modal:true,detail},label)!==label)return false;
+  await advanced.control(snapshot,action);return true;
+};
 export class AdvancedCommands {
   readonly conflicts:ConflictsService;
   readonly leases:LeaseService;
-  constructor(readonly advanced:AdvancedService,private readonly revisions:RevisionProvider,private readonly interactive:InteractiveService,private readonly planner:RebasePlanner,private readonly extensionUri:vscode.Uri){this.conflicts=new ConflictsService(advanced);this.leases=new LeaseService(advanced);}
+  constructor(readonly advanced:AdvancedService,private readonly revisions:RevisionProvider,private readonly interactive:InteractiveService,private readonly planner:RebasePlanner,private readonly extensionUri:vscode.Uri,private readonly surfaces:Surfaces=createSurfaces()){this.conflicts=new ConflictsService(advanced,surfaces.conflictSources);this.leases=new LeaseService(advanced);}
   private active():string {const id=this.advanced.git.registry.active?.id;if(!id)throw new Error('Select a repository first.');return id;}
   private editMessage(initial:string,title:string):Promise<string|undefined>{return editMessage(initial,title);}
   async forcePush():Promise<void>{
@@ -48,9 +76,7 @@ export class AdvancedCommands {
       const item=await vscode.window.showQuickPick(items,{title:`Git Pro: ${operation} paused`,placeHolder:guidance});if(!item)return;
       if(item.action==='stageEdit'){const selected=await vscode.window.showQuickPick(snapshot.status.changes.filter(change=>change.group==='working'||change.group==='untracked').map(change=>({label:redact(change.path),path:change.path})),{title:'Stage selected edited files',canPickMany:true});if(selected?.length)await this.advanced.stageEdit(snapshot,selected.map(item=>item.path));return;}
       if(item.action==='amendEdit'){const mode=await vscode.window.showQuickPick(['Keep existing message','Edit message'],{title:'Amend stopped commit'});if(!mode)return;let message:string|undefined;if(mode==='Edit message'){const original=(await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'commitMessage',oid:snapshot.head!})).stdout.toString('utf8');message=await this.editMessage(original,'Amend stopped commit');if(message===undefined)return;}if(await vscode.window.showWarningMessage('Amend the stopped commit with the reviewed index?',{modal:true,detail:'Only staged changes will be committed. Hooks and signing remain enabled.'},'Amend')==='Amend')await this.advanced.amendEdit(snapshot,message);return;}
-      const detail=item.action==='abort'?'Return to the original state of this Git operation. Review any resolutions before aborting.':item.action==='skip'?'Discard the current commit from this sequence. Review its changes first.':'All conflicts must be staged. Hooks will still run.';
-      if(await vscode.window.showWarningMessage(`${item.label} ${snapshot.operation}?`,{modal:true,detail},item.label)!==item.label)return;
-      await this.advanced.control(snapshot,item.action as 'continue'|'abort'|'skip');return;
+      await confirmAndControl(this.advanced,snapshot,item.action as 'continue'|'abort'|'skip');return;
     }
     const action=await vscode.window.showQuickPick(['Merge','Rebase','Interactive Rebase','Cherry-pick','Revert','Reset'],{title:'Git Pro: Advanced Actions',placeHolder:'Review pinned targets and affected files before applying'});if(!action)return;
     if(action==='Interactive Rebase'){await this.rebasePlan();return;}
@@ -77,7 +103,12 @@ export class AdvancedCommands {
     const merge=preview.mergeContext?`\nTopology: ${preview.mergeContext.headOnly} HEAD-only / ${preview.mergeContext.targetOnly} target-only commits\nResulting history depends on the selected merge strategy.`:'';
     const detail=redact(`${this.advanced.git.repository(id).root}\nHEAD: ${preview.snapshot.head}\nTarget(s): ${target}\n${preview.files.length} changed files between HEAD and target\n${preview.files.slice(0,20).map(file=>file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0,20).join('\n')}${warning}${rebase}${merge}`);
     if(await vscode.window.showWarningMessage(`${label}?`,{modal:true,detail},'Apply')!=='Apply')return;
-    await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:`Git Pro: ${label}`},()=>this.advanced.execute(preview));
+    try{await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:`Git Pro: ${label}`},()=>this.advanced.execute(preview));}
+    catch(error){
+      // A squash merge writes no MERGE_HEAD, so only this record tells the Conflicts tab where its idle conflicts came from.
+      if(command.kind==='merge'&&command.strategy==='squash'&&isConflictFailure(error))this.surfaces.conflictSources.set(id,{kind:'squash',oid:command.oid});
+      throw error;
+    }
     if(command.kind==='merge'&&command.strategy==='squash'){await vscode.window.showInformationMessage('Squash changes are staged. Review and commit them in the composer.');await vscode.commands.executeCommand('gitPro.commitView.focus');}
   }
   async rebasePlan():Promise<void>{
@@ -114,34 +145,45 @@ export class AdvancedCommands {
     const preview=await this.conflicts.preview(id,file),repo=this.advanced.git.repository(id),uri=vscode.Uri.file(await this.advanced.git.authorizePath(id,file));
     const operation=preview.snapshot.operation;
     const canContinue=['merging','rebasing','cherry-picking','reverting'].includes(operation);
-    const current=operation==='rebasing'?'upstream plus commits already replayed':'checked-out file version';
-    const incoming=operation==='rebasing'?'commit being replayed':operation==='cherry-picking'?'commit being cherry-picked':operation==='reverting'?'inverse patch: content before the reverted commit':operation==='merging'?'branch or commit being merged':'other side; for stash conflicts, the stashed version';
-    const currentExists=preview.entries.some(entry=>entry.stage===2),incomingExists=preview.entries.some(entry=>entry.stage===3);
+    // D3/N3: Yours is the user's work, so during a rebase it is the replayed commit (Git --theirs). Accept, the Base compares and delete detection all map through sidesFor.
+    const sides=sidesFor(operation);
+    const meaning={yours:operation==='rebasing'?'commit being replayed':'checked-out file version',
+      theirs:operation==='rebasing'?'upstream plus commits already replayed':operation==='cherry-picking'?'commit being cherry-picked':operation==='reverting'?'inverse patch: content before the reverted commit':operation==='merging'?'branch or commit being merged':'other side; for stash conflicts, the stashed version'};
+    const exists=(side:'yours'|'theirs')=>preview.entries.some(entry=>entry.stage===sides[side].stage),mapping=(side:'yours'|'theirs')=>`${side==='yours'?'Yours':'Theirs'} = ${meaning[side]} → git --${sides[side].flag}`;
+    const accept=(side:'yours'|'theirs')=>{const name=side==='yours'?'Yours':'Theirs',present=exists(side);
+      // Arrows follow the merge editor's pane order (owner decision Q1): Yours on the left, Theirs on the right.
+      return {label:`Accept ${name}${present?'':' (delete file)'}`,icon:present?side==='yours'?'arrow-left':'arrow-right':'trash',description:present?`Use ${meaning[side]}; review before staging`:`${name} has no file: resolve as deletion`,action:side};};
     const items=[
       {label:'Open native Merge Editor / file',icon:'split-horizontal',description:'Review the conflict and edit the result',action:'editor'},
-      {label:'Compare Base ↔ Current',icon:'diff',description:`Current = ${current}`,action:'baseCurrent'},
-      {label:'Compare Base ↔ Incoming',icon:'diff',description:`Incoming = ${incoming}`,action:'baseIncoming'},
-      {label:`Accept Current${currentExists?'':' (delete file)'}`,icon:currentExists?'arrow-left':'trash',description:currentExists?`Use ${current}; review before staging`:'Current has no file: resolve as deletion',action:'current'},
-      {label:`Accept Incoming${incomingExists?'':' (delete file)'}`,icon:incomingExists?'arrow-right':'trash',description:incomingExists?`Use ${incoming}; review before staging`:'Incoming has no file: resolve as deletion',action:'incoming'},
-      ...(preview.text!==undefined?[{label:'Accept Both text hunks',icon:'git-merge',description:'Combine Current then Incoming hunks; review before staging',action:'both'}]:[]),
+      {label:'Compare Base ↔ Yours',icon:'diff',description:mapping('yours'),action:'baseYours'},
+      {label:'Compare Base ↔ Theirs',icon:'diff',description:mapping('theirs'),action:'baseTheirs'},
+      accept('yours'),accept('theirs'),
+      // acceptBothText keeps Git's ours lines first, which during a rebase are Theirs.
+      ...(preview.text!==undefined?[{label:'Accept Both text hunks',icon:'git-merge',description:`Combine ${sides.yours.flag==='ours'?'Yours then Theirs':'Theirs then Yours'} hunks; review before staging`,action:'both'}]:[]),
       {label:'Mark Resolved',icon:'check',description:canContinue?'Stage the reviewed working file; then Continue the operation':'Stage the reviewed working file; then review staged changes',action:'mark'}
     ].map(item=>({...item,plainLabel:item.label,label:`$(${item.icon}) ${item.label}`}));
     const selected=await vscode.window.showQuickPick(items,{title:`Git Pro: Resolve ${redact(file)}${operation==='idle'?'':` (${operation})`}`,placeHolder:canContinue?'Choose a side → review the file → Mark Resolved → Continue':'Choose a side → review the file → Mark Resolved → review staged changes',matchOnDescription:true});if(!selected)return;
     await this.advanced.git.authorizePath(id,file);
     if(selected.action==='editor'){
+      // Git Pro's bridge labels the panes Yours | Result | Theirs and owns its own fallbacks: a second opener here could put two merge editors on one Result.
+      if(this.surfaces.mergeBridge){await this.surfaces.mergeBridge.open(id,file);return;}
       if((await vscode.commands.getCommands(true)).includes('git.openMergeEditor')){try{await vscode.commands.executeCommand('git.openMergeEditor',uri);return;}catch{/* public-command bridge unavailable */}}
       await vscode.commands.executeCommand('vscode.open',uri);return;
     }
-    if(selected.action==='baseCurrent'||selected.action==='baseIncoming'){
-      const [base,side]=await Promise.all([this.conflicts.side(preview,1),this.conflicts.side(preview,selected.action==='baseCurrent'?2:3)]);
-      await vscode.commands.executeCommand('vscode.diff',this.revisions.add(base,file),this.revisions.add(side,file),`${file}: Base ↔ ${selected.action==='baseCurrent'?'Current':'Incoming'}`);return;
+    if(selected.action==='baseYours'||selected.action==='baseTheirs'){
+      const side=selected.action==='baseYours'?'yours':'theirs',[base,content]=await Promise.all([this.conflicts.side(preview,1),this.conflicts.side(preview,sides[side].stage)]);
+      await vscode.commands.executeCommand('vscode.diff',this.revisions.add(base,file),this.revisions.add(content,file),redact(`${file}: Base ↔ ${side==='yours'?'Yours':'Theirs'}`));return;
     }
-    const choice=selected.action as 'current'|'incoming'|'both'|'mark';let allowMarkers=false;
+    const side=selected.action==='yours'||selected.action==='theirs'?selected.action:undefined;
+    // N12: Accept, Accept Both and Mark Resolved read or write the file on disk, and the marker check reads it too: never under an unsaved or merge editor of it.
+    const target=[{absolute:uri.fsPath,path:file}];await refuseUnsaved(target);
+    const choice=side?sides[side].flag==='ours'?'current':'incoming':selected.action as 'both'|'mark';let allowMarkers=false;
     if(choice==='mark'&&preview.markers){allowMarkers=await vscode.window.showWarningMessage('Conflict markers remain. Stage this file anyway?',{modal:true,detail:'Markers can become part of the commit. Review the result carefully.'},'Stage with markers')==='Stage with markers';if(!allowMarkers)return;}
-    else if(await vscode.window.showWarningMessage(`${selected.plainLabel}?`,{modal:true,detail:redact(`${repo.root}\n${file}\n${selected.description}\nSide acceptance changes the working file; Mark Resolved stages the result.`)},'Apply')!=='Apply')return;
+    else if(await vscode.window.showWarningMessage(`${selected.plainLabel}?`,{modal:true,detail:redact(`${repo.root}\n${file}\n${selected.description}${side?`\n${mapping(side)}`:''}\nSide acceptance changes the working file; Mark Resolved stages the result.`)},'Apply')!=='Apply')return;
+    // The modal can stay open while an editor changes; check again right before Git writes.
+    await refuseUnsaved(target);
     await this.conflicts.resolve(preview,choice,allowMarkers);
-    const deleted=(choice==='current'||choice==='incoming')&&!preview.entries.some(entry=>entry.stage===(choice==='current'?2:3));
-    if(deleted)await vscode.window.showInformationMessage('Conflict resolved as deletion. Review staged changes before continuing.');
+    if(side&&!exists(side))await vscode.window.showInformationMessage('Conflict resolved as deletion. Review staged changes before continuing.');
     else if(choice!=='mark')await vscode.commands.executeCommand('vscode.open',uri);
   }
 }

@@ -1,0 +1,219 @@
+/* Git Pro Conflicts tab: a native-looking table with a banner and a right-hand button bar. Colours come from the VS Code theme only. */
+/* === Git Pro shared tokens v1: identical in changes.css, commit.css, history.css, rebase.css === */
+:root{
+  color-scheme:dark;
+  --gp-font:var(--vscode-font-family,system-ui,sans-serif);
+  --gp-mono:var(--vscode-editor-font-family,ui-monospace,monospace);
+  --gp-fs:var(--vscode-font-size,13px);
+  --gp-fs-label:12px;
+  --gp-fs-meta:11px;
+  --gp-fw:400;
+  --gp-fw-strong:600;
+  --gp-lh:18px;
+  --gp-s1:2px;--gp-s2:4px;--gp-s3:6px;--gp-s4:8px;--gp-s5:12px;--gp-s6:16px;--gp-s7:20px;
+  --gp-radius-sm:var(--vscode-cornerRadius-small,2px);
+  --gp-radius-md:var(--vscode-cornerRadius-medium,4px);
+  --gp-row:22px;
+  --gp-row-history:24px;
+  --gp-row-rebase:28px;
+  --gp-control:26px;
+  --gp-icon:16px;
+  --gp-icon-button:22px;
+  --gp-toolbar:32px;
+  --gp-indent:8px;
+  --gp-focus-width:2px;
+  --gp-focus:var(--gp-focus-width) solid var(--vscode-focusBorder);
+  --gp-accent:var(--vscode-gitPro-accent,#f2542d);
+  --gp-on-accent:#1a0702;
+  --gp-fg:var(--vscode-foreground);
+  --gp-muted:var(--vscode-descriptionForeground);
+  --gp-disabled:var(--vscode-disabledForeground,var(--vscode-descriptionForeground));
+  --gp-border:var(--vscode-panel-border,var(--vscode-widget-border,transparent));
+  --gp-icon-fg:var(--vscode-icon-foreground,var(--vscode-foreground));
+  --gp-toolbar-hover:var(--vscode-toolbar-hoverBackground,var(--vscode-list-hoverBackground));
+  --gp-toolbar-active:var(--vscode-toolbar-activeBackground,var(--gp-toolbar-hover));
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 70%,#fff);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#3794ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#b180d7);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground,#81b88b);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d);
+  --gp-st-deleted:color-mix(in srgb,var(--vscode-gitDecoration-deletedResourceForeground,#c74e39) 75%,#fff);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#73c991);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#73c991);
+  --gp-st-conflict:color-mix(in srgb,var(--vscode-gitDecoration-conflictingResourceForeground,#e4676b) 85%,#fff);
+  --gp-progress:var(--vscode-progressBar-background,#0e70c0);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.36));
+  --gp-ease:100ms ease;
+}
+body.vscode-light{
+  color-scheme:light;
+  --gp-accent:var(--vscode-gitPro-accent,#c2410c);
+  --gp-on-accent:#fff;
+  --gp-lane-0:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-lane-1:color-mix(in srgb,var(--vscode-scmGraph-foreground1,#ffb000) 75%,#000);
+  --gp-lane-2:color-mix(in srgb,var(--vscode-scmGraph-foreground2,#dc267f) 75%,#000);
+  --gp-lane-3:color-mix(in srgb,var(--vscode-scmGraph-foreground3,#994f00) 75%,#000);
+  --gp-lane-4:color-mix(in srgb,var(--vscode-scmGraph-foreground4,#40b0a6) 75%,#000);
+  --gp-lane-5:color-mix(in srgb,var(--vscode-scmGraph-foreground5,#b66dff) 75%,#000);
+  --gp-ref:var(--vscode-scmGraph-historyItemRefColor,#1a85ff);
+  --gp-ref-remote:var(--vscode-scmGraph-historyItemRemoteRefColor,#652d90);
+  --gp-st-added:color-mix(in srgb,var(--vscode-gitDecoration-addedResourceForeground,#587c0c) 85%,#000);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground,#895503);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground,#ad0707);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground,#007100);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground,#007100);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground,#ad0707);
+  --gp-shadow:0 2px 8px var(--vscode-widget-shadow,rgba(0,0,0,.16));
+}
+body.vscode-high-contrast,body.vscode-high-contrast-light{
+  --gp-accent:var(--vscode-gitPro-accent,var(--vscode-contrastActiveBorder,#f38518));
+  --gp-on-accent:var(--vscode-editor-background,#000);
+  --gp-border:var(--vscode-contrastBorder,#6fc3df);
+  --gp-lane-1:var(--vscode-scmGraph-foreground1,#ffb000);
+  --gp-lane-2:var(--vscode-scmGraph-foreground2,#dc267f);
+  --gp-lane-3:var(--vscode-scmGraph-foreground3,#994f00);
+  --gp-lane-4:var(--vscode-scmGraph-foreground4,#40b0a6);
+  --gp-lane-5:var(--vscode-scmGraph-foreground5,#b66dff);
+  --gp-st-added:var(--vscode-gitDecoration-addedResourceForeground);
+  --gp-st-modified:var(--vscode-gitDecoration-modifiedResourceForeground);
+  --gp-st-deleted:var(--vscode-gitDecoration-deletedResourceForeground);
+  --gp-st-untracked:var(--vscode-gitDecoration-untrackedResourceForeground);
+  --gp-st-renamed:var(--vscode-gitDecoration-renamedResourceForeground);
+  --gp-st-conflict:var(--vscode-gitDecoration-conflictingResourceForeground);
+  --gp-shadow:none;
+}
+body.vscode-high-contrast{color-scheme:dark}
+body.vscode-high-contrast-light{color-scheme:light}
+/* === shared base rules v1 (also verbatim) === */
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+:focus-visible{outline:var(--gp-focus);outline-offset:2px}
+input:not([type=checkbox]):focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:-2px}
+.codicon[class*='codicon-']{flex:none}
+@keyframes gp-progress{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* === end shared === */
+
+/* Page: an editor tab, so editor colours */
+html,body{height:100%}
+body{margin:0;padding:0;display:flex;flex-direction:column;background:var(--vscode-editor-background);color:var(--gp-fg);font:var(--gp-fs)/var(--gp-row) var(--gp-font);overflow:hidden}
+body[data-busy=true]::before{content:"";position:fixed;top:0;left:0;z-index:20;width:25%;height:2px;background:var(--gp-progress);animation:gp-progress 1.2s linear infinite;pointer-events:none}
+@media (prefers-reduced-motion:reduce){body[data-busy=true]::before{width:100%;opacity:.6}}
+
+/* Banner: operation title, the two sides and Continue / Skip / Abort */
+#banner{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"main actions" "sides actions";align-items:center;column-gap:var(--gp-s5);padding:var(--gp-s4) var(--gp-s6);background:var(--vscode-banner-background,var(--vscode-editorWidget-background));color:var(--vscode-banner-foreground,var(--gp-fg));border-bottom:1px solid var(--gp-border)}
+.banner-main{grid-area:main;display:flex;align-items:center;gap:var(--gp-s3);min-width:0}
+.banner-icon{color:var(--vscode-banner-iconForeground,var(--gp-icon-fg))}
+#title{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:var(--gp-fw-strong);line-height:20px}
+#counter{flex:none;margin-inline-start:auto;font-size:var(--gp-fs-label);opacity:.85}
+.banner-sides{grid-area:sides;display:flex;flex-wrap:wrap;gap:2px var(--gp-s6);min-width:0;font-size:var(--gp-fs-label);opacity:.9}
+.banner-sides>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#operation-actions{grid-area:actions;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--gp-s2)}
+#operation-actions:empty{display:none}
+
+/* Buttons: native button tokens; Continue is primary only once nothing is left */
+button{font:inherit}
+#operation-actions button,#actions button{display:inline-flex;align-items:center;gap:var(--gp-s3);height:var(--gp-control);padding:0 10px;border:1px solid var(--vscode-button-border,transparent);border-radius:var(--gp-radius-sm);font-size:var(--gp-fs-label);line-height:18px;cursor:pointer;white-space:nowrap}
+#operation-actions .primary{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}
+#operation-actions .primary:hover{background:var(--vscode-button-hoverBackground,var(--vscode-button-background))}
+#operation-actions .secondary,#actions button{background:var(--vscode-button-secondaryBackground,var(--gp-toolbar-hover));color:var(--vscode-button-secondaryForeground,var(--gp-fg))}
+#operation-actions .secondary:hover,#actions button:hover{background:var(--vscode-button-secondaryHoverBackground,var(--gp-toolbar-active))}
+#operation-actions button[aria-disabled=true],#actions button[aria-disabled=true]{opacity:.5;cursor:default}
+#operation-actions button[aria-disabled=true]:hover,#actions button[aria-disabled=true]:hover{background:var(--vscode-button-secondaryBackground,var(--gp-toolbar-hover))}
+
+#status:empty{display:none}
+#status{flex:none;padding:var(--gp-s2) var(--gp-s6);font-size:var(--gp-fs-label);line-height:16px;color:var(--gp-muted);overflow-wrap:anywhere}
+#status.error{color:var(--vscode-errorForeground)}
+
+/* Table and button bar side by side; in narrow tabs the bar wraps below the table, so the visual order stays the DOM (Tab) order */
+#layout{flex:1;min-height:0;display:flex}
+#table-pane{flex:1;min-width:0;overflow:auto}
+#actions{flex:0 0 176px;display:flex;flex-direction:column;align-items:stretch;gap:var(--gp-s2);padding:var(--gp-s4);border-inline-start:1px solid var(--gp-border)}
+#actions button{justify-content:flex-start}
+#actions .label{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#actions .separator{height:1px;margin:var(--gp-s2) 0;background:var(--gp-border)}
+.toggle{display:flex;align-items:center;gap:var(--gp-s3);min-height:var(--gp-control);font-size:var(--gp-fs-label);cursor:pointer}
+.toggle input{margin:0;accent-color:var(--vscode-checkbox-background,auto)}
+
+/* Rows: 22px, Name · Kind · Yours · Theirs · State */
+#table{--gp-columns:minmax(160px,1fr) 128px minmax(112px,176px) minmax(112px,176px) minmax(120px,160px);min-width:0}
+.columns,.row.file{display:grid;grid-template-columns:var(--gp-columns);align-items:center}
+.columns{position:sticky;top:0;z-index:2;height:var(--gp-row);background:var(--vscode-editor-background);border-bottom:1px solid var(--gp-border);font-size:var(--gp-fs-meta);font-weight:var(--gp-fw-strong);color:var(--gp-muted);user-select:none}
+.cell{min-width:0;padding:0 var(--gp-s4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.columns .cell:first-child{padding-inline-start:calc(var(--gp-s4) + 32px)}
+/* Header chips follow the Git side (--ours current, --theirs incoming), as the editor's conflict decorations do. */
+.chip{display:inline-block;max-width:100%;padding:0 var(--gp-s3);border-radius:var(--gp-radius-sm);color:var(--gp-fg);overflow:hidden;text-overflow:ellipsis;vertical-align:middle;line-height:18px}
+.chip.ours{background:color-mix(in srgb,var(--vscode-merge-currentHeaderBackground,#40c8ae80) 40%,transparent)}
+.chip.theirs{background:color-mix(in srgb,var(--vscode-merge-incomingHeaderBackground,#40a6ff80) 40%,transparent)}
+body.vscode-high-contrast .chip,body.vscode-high-contrast-light .chip{background:transparent;outline:1px solid var(--vscode-contrastBorder);outline-offset:-1px}
+.row{height:var(--gp-row);cursor:default;user-select:none}
+.row.group,.row.dir{display:flex;align-items:center}
+.row .col-name{display:flex;align-items:center;gap:var(--gp-s3);padding-inline-start:calc(var(--gp-s4) + var(--gp-depth,0) * 16px)}
+.depth-0{--gp-depth:0}.depth-1{--gp-depth:1}.depth-2{--gp-depth:2}.depth-3{--gp-depth:3}.depth-4{--gp-depth:4}
+.row.file .col-name{padding-inline-start:calc(var(--gp-s4) + var(--gp-depth,0) * 16px)}
+.disclosure{display:flex;align-items:center;justify-content:center;flex:0 0 16px;width:16px;height:22px;color:var(--gp-icon-fg)}
+.disclosure::before{font:16px/1 codicon;content:"\eab4"}
+.row[aria-expanded=false] .disclosure::before{content:"\eab6"}
+.row.group .base{font-weight:var(--gp-fw-strong);font-size:var(--gp-fs-label);text-transform:none}
+.row .base{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.row .dir{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:var(--gp-fs-label);color:var(--gp-muted)}
+.row .count{min-width:18px;height:18px;padding:0 5px;border-radius:11px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:11px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+body.vscode-high-contrast .row .count,body.vscode-high-contrast-light .row .count{border:1px solid var(--vscode-contrastBorder);line-height:16px}
+.kind-inline{display:none}
+.row.file .codicon-warning{color:var(--gp-st-conflict)}
+.row.file .codicon-pass{color:var(--gp-st-added)}
+.row.file .codicon-circle-slash{color:var(--gp-muted)}
+.row.resolved .base{color:var(--gp-muted)}
+.col-kind,.col-side,.col-state{font-size:var(--gp-fs-label)}
+.col-state{color:var(--gp-muted)}
+/* Text always says the status; colour only repeats it. */
+.side-modified{color:var(--gp-st-modified)}
+.side-added{color:var(--gp-st-added)}
+.side-deleted{color:var(--gp-st-deleted)}
+.side-absent{color:var(--gp-muted)}
+
+/* Row states: theme list colours only; the table is the focus owner */
+.row:hover{background:var(--vscode-list-hoverBackground);color:var(--vscode-list-hoverForeground,inherit)}
+.row[aria-selected=true]{background:var(--vscode-list-inactiveSelectionBackground);color:var(--vscode-list-inactiveSelectionForeground,inherit)}
+#table:focus-within .row[aria-selected=true]{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground,inherit)}
+.row[aria-selected=true] .cell,.row[aria-selected=true] .dir,.row[aria-selected=true] .codicon{color:inherit}
+.row:focus{outline:none}
+.row:focus-visible,body.vscode-high-contrast .row:focus-visible,body.vscode-high-contrast-light .row:focus-visible{outline:2px solid var(--vscode-list-focusOutline,var(--vscode-focusBorder));outline-offset:-2px}
+body.vscode-high-contrast .row:hover,body.vscode-high-contrast-light .row:hover{outline:1px dashed var(--vscode-contrastActiveBorder);outline-offset:-1px}
+body.vscode-high-contrast .row[aria-selected=true],body.vscode-high-contrast-light .row[aria-selected=true]{outline:1px solid var(--vscode-contrastActiveBorder);outline-offset:-1px}
+
+.empty{margin:0;padding:var(--gp-s5) var(--gp-s6);font-size:var(--gp-fs-label);color:var(--gp-muted);overflow-wrap:anywhere}
+#more{display:block;width:100%;height:var(--gp-row);padding:0 var(--gp-s6);border:0;background:transparent;color:var(--vscode-textLink-foreground);font-size:var(--gp-fs-label);text-align:left;cursor:pointer}
+#more:hover{text-decoration:underline;color:var(--vscode-textLink-activeForeground,var(--vscode-textLink-foreground))}
+#hint{flex:none;min-height:var(--gp-row);padding:var(--gp-s1) var(--gp-s6);border-top:1px solid var(--gp-border);font-size:var(--gp-fs-meta);color:var(--gp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hint:empty{display:none}
+
+/* Context menu */
+.context-menu{position:fixed;z-index:10;min-width:200px;max-width:min(300px,calc(100vw - 8px));padding:4px 0;background:var(--vscode-menu-background,var(--vscode-editorWidget-background));color:var(--vscode-menu-foreground,var(--vscode-foreground));border:1px solid var(--vscode-menu-border,var(--vscode-widget-border,transparent));border-radius:var(--gp-radius-md);box-shadow:var(--gp-shadow)}
+.context-menu .menu-item{display:flex;align-items:center;gap:8px;width:calc(100% - 8px);min-height:24px;margin:0 4px;padding:3px 8px;border:0;border-radius:var(--gp-radius-sm);background:transparent;color:inherit;font-size:13px;line-height:18px;text-align:left;cursor:pointer}
+.context-menu .menu-item:hover:not([aria-disabled=true]),.context-menu .menu-item:focus:not([aria-disabled=true]){background:var(--vscode-menu-selectionBackground,var(--vscode-list-hoverBackground));color:var(--vscode-menu-selectionForeground,inherit)}
+.context-menu .menu-item:focus-visible{outline-offset:-2px}
+.context-menu .menu-item[aria-disabled=true]{color:var(--gp-disabled);cursor:default}
+.menu-label{min-width:0;overflow-wrap:anywhere}
+.menu-separator{height:1px;margin:4px 0;background:var(--vscode-menu-separatorBackground,var(--vscode-widget-border,transparent))}
+
+/* Narrow tabs and 200% zoom: the button bar wraps below the table (it follows the table in the Tab order, WCAG 2.4.3); below 600px Kind moves into the name cell */
+@media (max-width:640px){
+  #layout{flex-direction:column}
+  #actions{flex:none;flex-direction:row;flex-wrap:wrap;align-items:center;border-inline-start:0;border-top:1px solid var(--gp-border)}
+  #actions .separator{width:1px;height:var(--gp-control);margin:0 var(--gp-s2)}
+  #banner{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "sides" "actions"}
+  #operation-actions{justify-content:flex-start;margin-top:var(--gp-s2)}
+}
+@media (max-width:600px){
+  #table{--gp-columns:minmax(140px,1fr) 80px 80px minmax(96px,120px)}
+  .col-kind{display:none}
+  .kind-inline{display:inline;flex:none;font-size:var(--gp-fs-meta);color:var(--gp-muted)}
+}
+@media (forced-colors:active){.row[aria-selected=true]{outline:1px solid Highlight}.chip{outline:1px solid CanvasText}.row .count{border:1px solid CanvasText}#actions button,#operation-actions button{border-color:ButtonText}}

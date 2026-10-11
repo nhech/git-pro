@@ -1,0 +1,265 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { loadWithVscode } from './compare-loader';
+
+const oid = (value: number) => value.toString(16).padStart(40, '0');
+const LEFT = oid(1), RIGHT = oid(2), BASE = oid(3), MOVED = oid(4);
+const commit = (value: number, subject = `Commit ${value}`) => ({ oid: oid(value), parents: [oid(value + 1000)], author: 'Fixture', email: 'fixture@example.invalid', timestamp: 1700000000, subject });
+type Message = Record<string, unknown>;
+interface Uri { scheme: string; fsPath?: string; path: string; label?: string; content?: string; toString(): string }
+const uri = (scheme: string, value: string): Uri => ({ scheme, path: value, ...(scheme === 'file' ? { fsPath: value } : {}), toString: () => `${scheme}:${value}` });
+
+class FakePanel {
+  readonly sent: Message[] = []; visible = true; revealed = 0; disposed = false; iconPath: unknown; title: string;
+  receive: (value: unknown) => Promise<void> = async () => undefined; private onDispose: () => void = () => undefined;
+  readonly webview = { html: '', cspSource: 'owned:', asWebviewUri: (value: Uri) => value, postMessage: async (value: Message) => { this.sent.push(value); return true; },
+    onDidReceiveMessage: (listener: (value: unknown) => Promise<void>) => { this.receive = listener; return { dispose: () => undefined }; } };
+  constructor(title: string) { this.title = title; }
+  get html(): string { return this.webview.html; }
+  onDidDispose(listener: () => void) { this.onDispose = listener; return { dispose: () => undefined }; }
+  reveal() { this.revealed++; }
+  dispose() { if (this.disposed) return; this.disposed = true; this.onDispose(); }
+  get session() { return /data-session="([^"]+)"/.exec(this.html)![1]!; }
+  send(value: Message) { return this.receive({ session: this.session, ...value }); }
+  /** Messages are built in the VM realm; a JSON copy gives plain objects that strict deep equality can compare. */
+  last(type: string): Message | undefined { const value = this.sent.slice().reverse().find(item => item.type === type); return value === undefined ? undefined : JSON.parse(JSON.stringify(value)) as Message; }
+  get state() { return this.last('state') as Message & { revision: number; files: Message & { items: Message[] }; sides: { leftOnly: Message & { commits: Message[] }; rightOnly: Message & { commits: Message[] } } }; }
+}
+
+async function harness(options: { files?: unknown; worktree?: unknown; head?: string } = {}) {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'git-pro-compare-panel-')));
+  await mkdir(path.join(root, 'src')); await writeFile(path.join(root, 'src', 'app.ts'), 'working\n'); await writeFile(path.join(root, 'README.md'), 'readme\n');
+  const panels: FakePanel[] = [], executed: unknown[][] = [], clipboard: string[] = [], histories: unknown[][] = [], calls: string[] = [];
+  const tabs: { label: string; input: unknown }[] = [];
+  const settings = { mode: 'fork' as string };
+  const vscode = {
+    window: { createWebviewPanel: (_type: string, title: string) => { const panel = new FakePanel(title); panels.push(panel); return panel; },
+      tabGroups: { get all() { return [{ tabs }]; }, close: async (closing: { label: string }[]) => { for (const tab of closing) tabs.splice(tabs.indexOf(tab as never), 1); return true; } } },
+    commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); if (args[0] === 'vscode.changes') tabs.push({ label: String(args[1]), input: { textDiffs: args[2] } }); } },
+    workspace: { getConfiguration: () => ({ get: () => settings.mode }), registerTextDocumentContentProvider: () => ({ dispose: () => undefined }) },
+    Uri: { file: (value: string) => uri('file', value), joinPath: (base: Uri, ...parts: string[]) => uri(base.scheme ?? 'file', [base.path, ...parts].join('/')), from: ({ scheme, path: value }: { scheme: string; path: string }) => uri(scheme, value) },
+    ViewColumn: { Active: -1 }, env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }
+  };
+  const files = (scope: string, from: string | undefined, to: string | undefined, entries: { status: string; path: string; originalPath?: string }[], binary: string[] = []) =>
+    ({ scope, from, to, files: entries, stats: entries.map(entry => ({ path: entry.path, ...(entry.originalPath ? { originalPath: entry.originalPath } : {}), added: binary.includes(entry.path) ? null : 1, removed: binary.includes(entry.path) ? null : 0 })), omitted: false });
+  const branchFiles = options.files ?? files('fork', BASE, LEFT, [{ status: 'M', path: 'src/app.ts' }, { status: 'A', path: 'logo.png' }, { status: 'R100', originalPath: 'old.md', path: 'README.md' }], ['logo.png']);
+  const refs = new Map([['feature', LEFT], ['main', RIGHT], ['HEAD', RIGHT], ['refs/heads/main', RIGHT]]);
+  let invalidate: () => void = () => undefined;
+  const repo = { id: 'repo', root, gitDir: path.join(root, '.git'), commonDir: path.join(root, '.git') };
+  const history = {
+    resolveRef: async (_id: string, ref: string) => { calls.push(`resolve:${ref}`); const value = refs.get(ref) ?? (/^[0-9a-f]{40}$/.test(ref) ? ref : undefined); if (!value) throw new Error('Invalid revision.'); return value; },
+    compareRefs: async (_id: string, left: string, right: string, mode: string) => { calls.push(`compare:${left}:${right}:${mode}`);
+      return { repositoryId: 'repo', left: { name: left, oid: left }, right: { name: right, oid: right }, fork: { oid: BASE, multiple: false },
+        leftOnly: { count: 60, offset: 0, commits: Array.from({ length: 25 }, (_, index) => commit(index + 10, index ? `Commit ${index}` : '<img src=x onerror=alert(1)>')) }, rightOnly: { count: 0, offset: 0, commits: [] }, files: branchFiles }; },
+    comparisonFiles: async (_id: string, left: string, right: string, mode: string) => { calls.push(`files:${left}:${right}:${mode}`); return files(mode === 'tips' ? 'tips' : 'fork', mode === 'tips' ? left : BASE, mode === 'tips' ? right : left, [{ status: 'M', path: 'src/app.ts' }]); },
+    comparisonPage: async (_id: string, tip: string, exclude: string, offset: number) => { calls.push(`page:${tip}:${exclude}:${offset}`); return [commit(offset + 100)]; },
+    details: async (_id: string, value: string) => { calls.push(`details:${value}`); return { commit: commit(Number.parseInt(value, 16)), parent: oid(999), files: [{ status: 'D', path: 'gone.txt' }], stats: [{ path: 'gone.txt', added: 0, removed: 3 }], message: 'Details' }; },
+    worktreeFiles: async (_id: string, value: string) => { calls.push(`worktree:${value}`); return options.worktree ?? files('worktree', value, undefined, [{ status: 'M', path: 'src/app.ts' }, { status: 'D', path: 'only-branch.txt' }, { status: 'R090', originalPath: 'before.txt', path: 'README.md' }]); },
+    revision: async (_id: string, value: string | undefined, file: string) => { calls.push(`revision:${value ?? 'none'}:${file}`); return Buffer.from(`${value ?? 'none'}:${file}`); }
+  };
+  const deps = {
+    registry: { list: () => [repo], store: { get: () => ({ head: options.head ?? 'main' }) }, onDidInvalidate: (listener: () => void) => { invalidate = listener; return { dispose: () => undefined }; }, resolveFile: async () => repo },
+    history, policy: { authorizeFile: async (base: string, relative: string) => path.join(base, ...relative.split('/')) },
+    revisions: { add: (content: Buffer, label: string) => ({ ...uri('git-pro-revision', `/${label}`), label, content: content.toString() }) },
+    historyPanels: { open: (...args: unknown[]) => { histories.push(args); } },
+    git: { branchSearchSnapshot: async () => [{ name: 'feature', oid: oid(10), ref: 'refs/heads/feature', remote: false, upstream: '', worktree: '' }] }, tools: { tags: async () => [{ name: 'v1', oid: oid(11), target: oid(11), annotated: false }] }
+  };
+  const exports = loadWithVscode(path.resolve(__dirname, '../../src/webviews/compare/compare-panel.js'), vscode);
+  const blobs = loadWithVscode(path.resolve(__dirname, '../../src/documents/blob-provider.js'), vscode);
+  const Panels = exports.ComparePanels as new (context: unknown, deps: unknown, blobs: unknown) => { openRefs(id: string, left: string, right: string): Promise<void>; openWorktree(id: string, ref: string): Promise<void>; getFromBranch: unknown; activePanelCount: number; dispose(): void };
+  const Blobs = blobs.BlobProvider as new (history: unknown) => unknown;
+  const surface = new Panels({ extensionUri: uri('file', '/extension') }, deps, new Blobs(history));
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+  return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files, cleanup: async () => { surface.dispose(); await rm(root, { recursive: true, force: true }); } };
+}
+
+test('Compare pins refs before the tab opens, reuses the tab for the same pair and replays state on readiness without reading Git', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main');
+    assert.equal(h.panels.length, 1); const panel = h.panels[0]!;
+    assert.equal(panel.title, 'Compare: feature ↔ main'); assert.match(panel.html, /script-src 'nonce-[0-9a-f]{32}'/); assert.match(panel.html, /default-src 'none'/);
+    assert.deepEqual(h.calls.slice(0, 3), ['resolve:feature', 'resolve:main', `compare:${LEFT}:${RIGHT}:fork`], 'Refs are pinned to OIDs, then compared by pin');
+    await h.surface.openRefs('repo', 'feature', 'refs/heads/main'); assert.equal(h.panels.length, 1, 'The same (repository, left OID, right OID) reveals the open tab'); assert.equal(panel.revealed, 1);
+    await h.surface.openRefs('repo', 'main', 'feature'); assert.equal(h.panels.length, 2, 'The reversed pair is a different comparison');
+    const reads = h.calls.length; await panel.send({ type: 'ready' }); await h.settle();
+    assert.equal(h.calls.length, reads, 'Readiness replays the captured state');
+    const state = panel.state;
+    assert.deepEqual(state.left, { name: 'feature', oid: LEFT, current: false }); assert.deepEqual(state.right, { name: 'main', oid: RIGHT, current: true });
+    assert.equal(state.sides.leftOnly.count, 60); assert.equal(state.sides.leftOnly.commits.length, 25); assert.equal(state.sides.rightOnly.count, 0);
+    assert.equal(state.sides.leftOnly.commits[0]!.subject, '<img src=x onerror=alert(1)>', 'Hostile text stays text for the textContent renderer');
+    assert.deepEqual(state.sides.leftOnly.commits[0]!.refs, ['feature'], 'Branch tips are badged once the refs load');
+    assert.equal(state.files.scope, 'fork'); assert.equal(state.files.total, 3); assert.equal(state.files.binary, 1);
+    assert.deepEqual(state.files.items.map(item => [item.index, item.status, item.path, item.originalPath ?? null]), [[0, 'M', 'src/app.ts', null], [1, 'A', 'logo.png', null], [2, 'R', 'README.md', 'old.md']]);
+    assert.equal(state.files.items.some(item => 'presence' in item), false);
+    await panel.send({ type: 'ready', session: 'forged' }); assert.match(String(panel.last('error')?.message), /expired/);
+    await panel.receive({ type: 'diff', session: panel.session, revision: state.revision, index: -1 }); assert.match(String(panel.last('error')?.message), /Unknown Compare action/);
+  } finally { await h.cleanup(); }
+});
+
+test('Selecting a loaded commit shows its files and keeps the comparison; All changes returns without a Git read', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    await panel.send({ type: 'selectCommit', revision: panel.state.revision, oid: oid(999) }); assert.match(String(panel.last('error')?.message), /loaded lists/, 'Only commits in a loaded page can be selected');
+    const before = panel.state.revision; await panel.send({ type: 'selectCommit', revision: before, oid: oid(12) });
+    const state = panel.state; assert.equal(state.revision, before + 1);
+    assert.equal(state.files.scope, 'commit'); assert.deepEqual(state.files.commit, { oid: oid(12), subject: 'Commit 12' }); assert.equal(state.files.from, oid(999)); assert.equal(state.files.items[0]!.path, 'gone.txt');
+    assert.equal(state.sides.leftOnly.commits.length, 25, 'The comparison pages stay');
+    await panel.send({ type: 'diff', revision: state.revision, index: 0 });
+    const diff = h.executed.at(-1)!; assert.equal(diff[0], 'vscode.diff'); assert.equal((diff[1] as Uri).content, `${oid(999)}:gone.txt`); assert.equal((diff[2] as Uri).content, 'none:gone.txt', 'A deleted file diffs against an empty right side');
+    assert.equal(diff[3], `gone.txt (${oid(999).slice(0, 8)} ↔ ${oid(12).slice(0, 8)})`);
+    const reads = h.calls.length; await panel.send({ type: 'allChanges', revision: panel.state.revision });
+    assert.equal(h.calls.length, reads); assert.equal(panel.state.files.scope, 'fork'); assert.equal(panel.state.files.total, 3);
+    await panel.send({ type: 'copyRevision', revision: panel.state.revision, oid: oid(12) }); assert.deepEqual(h.clipboard, [oid(12)]);
+    await panel.send({ type: 'showInHistory', revision: panel.state.revision, oid: oid(13) }); assert.deepEqual(h.histories, [['repo', undefined, oid(13), true]]);
+    await panel.send({ type: 'copyRevision', revision: panel.state.revision, oid: oid(500) }); assert.deepEqual(h.clipboard, [oid(12)], 'Copy is limited to loaded commits');
+  } finally { await h.cleanup(); }
+});
+
+test('Commit pages move by exactly 25 from the current page and keep the pinned tips', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    for (const offset of [50, 75]) { await panel.send({ type: 'page', revision: panel.state.revision, side: 'left', offset }); assert.match(String(panel.last('error')?.message), /adjacent/); }
+    await panel.send({ type: 'page', revision: panel.state.revision, side: 'right', offset: 25 }); assert.match(String(panel.last('error')?.message), /adjacent/, 'An empty side has no next page');
+    await panel.send({ type: 'page', revision: panel.state.revision, side: 'left', offset: 25 });
+    assert.equal(h.calls.at(-1), `page:${LEFT}:${RIGHT}:25`); assert.equal(panel.state.sides.leftOnly.offset, 25); assert.equal(panel.state.sides.leftOnly.commits[0]!.oid, oid(125));
+    const stale = panel.state.revision - 1; await panel.send({ type: 'page', revision: stale, side: 'left', offset: 0 }); assert.match(String(panel.last('error')?.message), /changed/, 'A stale revision is refused');
+  } finally { await h.cleanup(); }
+});
+
+test('Index-based file actions resolve against the captured list and open native diffs with redacted titles', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    await panel.send({ type: 'diff', revision, index: 3 }); assert.match(String(panel.last('error')?.message), /current comparison/);
+    await panel.send({ type: 'diff', revision, index: 2 });
+    let diff = h.executed.at(-1)!; assert.equal((diff[1] as Uri).content, `${BASE}:old.md`); assert.equal((diff[2] as Uri).content, `${LEFT}:README.md`, 'A rename diffs the old path at the fork point against the new path');
+    assert.equal(diff[3], `README.md (fork ${BASE.slice(0, 8)} ↔ feature ${LEFT.slice(0, 8)})`);
+    await panel.send({ type: 'localDiff', revision, index: 0 });
+    diff = h.executed.at(-1)!; assert.equal((diff[1] as Uri).content, `${LEFT}:src/app.ts`); assert.equal((diff[2] as Uri).scheme, 'file', 'Compare with Local opens the real, editable working file'); assert.equal((diff[2] as Uri).fsPath, path.join(h.root, 'src', 'app.ts'));
+    const reads = h.calls.length; await panel.send({ type: 'diff', revision, index: 1 }); assert.match(String(panel.last('error')?.message), /logo\.png: binary file — no text diff/); assert.equal(h.calls.length, reads, 'A binary row is refused before any read');
+    await panel.send({ type: 'openFile', revision, index: 0 }); assert.equal(h.executed.at(-1)![0], 'vscode.open');
+    assert.equal(panel.state.revision, revision, 'Opening diffs changes nothing the tab shows');
+  } finally { await h.cleanup(); }
+});
+
+test('Swap exchanges the sides, recomputes files from the same pins and re-keys the tab', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    await panel.send({ type: 'swap', revision: panel.state.revision });
+    const state = panel.state; assert.equal((state.left as Message).name, 'main'); assert.equal((state.right as Message).name, 'feature'); assert.equal(state.sides.rightOnly.count, 60);
+    assert.equal(h.calls.at(-1), `files:${RIGHT}:${LEFT}:fork`); assert.equal(panel.title, 'Compare: main ↔ feature');
+    const compares = h.calls.filter(call => call.startsWith('compare:')).length;
+    await h.surface.openRefs('repo', 'main', 'feature'); assert.equal(h.panels.length, 1, 'The swapped tab now owns the reversed pair'); assert.equal(h.calls.filter(call => call.startsWith('compare:')).length, compares);
+    await panel.send({ type: 'filesMode', revision: panel.state.revision, mode: 'tips' });
+    assert.equal(h.calls.at(-1), `files:${RIGHT}:${LEFT}:tips`); assert.equal(panel.state.filesMode, 'tips'); assert.equal(panel.state.files.scope, 'tips');
+  } finally { await h.cleanup(); }
+});
+
+test('Open All Changes opens one multi-diff tab of lazy blob sides, excludes binaries and replaces only its own earlier tab', async () => {
+  const many = Array.from({ length: 305 }, (_, index) => ({ status: 'M', path: `dir/file-${index}.txt` }));
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, title = 'Compare: feature ↔ main · All Changes';
+    h.tabs.push({ label: title, input: { viewType: 'gitPro.compare' } });
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    const opened = h.executed.at(-1)!; assert.equal(opened[0], 'vscode.changes'); assert.equal(opened[1], title);
+    const resources = opened[2] as [Uri, Uri | undefined, Uri | undefined][];
+    assert.equal(resources.length, 2, 'The binary file is left out');
+    assert.equal(resources[0]![0].fsPath, path.join(h.root, 'src', 'app.ts')); assert.equal(resources[0]![1]!.scheme, 'git-pro-blob'); assert.equal(resources[0]![2]!.scheme, 'git-pro-blob');
+    assert.match(resources[0]![1]!.path, /^\/[0-9a-f-]{36}\/app\.ts$/, 'Sides carry only a token and a basename');
+    assert.equal(h.calls.some(call => call.startsWith('revision:')), false, 'Blob sides are read lazily, when VS Code shows them');
+    // VS Code 1.141 labels a multi-diff tab with a file count; such a tab with this title is ours too, a webview tab with that label is not.
+    h.tabs.push({ label: `${title} (2 files)`, input: { textDiffs: [] } }, { label: `${title} (notes)`, input: { viewType: 'other' } });
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal(h.tabs.filter(tab => tab.label === title).length, 2, 'One multi-diff tab plus the unrelated webview tab with the same label');
+    assert.equal(h.tabs.filter(tab => tab.label.startsWith(title) && Array.isArray((tab.input as { textDiffs?: unknown }).textDiffs)).length, 1, 'Reopening replaced the earlier multi-diff tabs, with or without a file count');
+    assert.ok(h.tabs.some(tab => tab.label === `${title} (notes)`), 'A webview tab whose label merely starts with the title stays open');
+  } finally { await h.cleanup(); }
+  const capped = await harness({ files: { scope: 'tips', from: LEFT, to: RIGHT, files: many, stats: [], omitted: false } });
+  try {
+    await capped.surface.openRefs('repo', 'feature', 'main'); const panel = capped.panels[0]!;
+    assert.equal(panel.state.files.items.length, 200, 'Files are posted 200 at a time');
+    await panel.send({ type: 'filesPage', revision: panel.state.revision, offset: 200 }); assert.equal(panel.state.files.items.length, 105); assert.equal(panel.state.files.items[0]!.index, 200);
+    await panel.send({ type: 'filesPage', revision: panel.state.revision, offset: 400 }); assert.match(String(panel.last('error')?.message), /available file page/);
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal((capped.executed.at(-1)![2] as unknown[]).length, 300); assert.match(String(panel.last('notice')?.message), /first 300 of 305/);
+  } finally { await capped.cleanup(); }
+});
+
+test('Working-tree mode diffs the branch snapshot against the real file, swaps sides and delegates Get from Branch with both rename paths', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openWorktree('repo', 'feature'); const panel = h.panels[0]!;
+    assert.equal(panel.title, 'Compare: feature ↔ Working Tree'); assert.equal(h.calls.at(-1), `worktree:${LEFT}`);
+    let state = panel.state; assert.equal(state.mode, 'worktree'); assert.equal(state.sides, undefined); assert.equal(state.head, 'main');
+    assert.deepEqual(state.files.items.map(item => item.presence), ['both', 'branch', 'both']);
+    await panel.send({ type: 'diff', revision: state.revision, index: 0 });
+    let diff = h.executed.at(-1)!; assert.equal((diff[1] as Uri).content, `${LEFT}:src/app.ts`); assert.equal((diff[2] as Uri).scheme, 'file'); assert.equal(diff[3], `app.ts (feature ${LEFT.slice(0, 8)} ↔ Working Tree)`);
+    await panel.send({ type: 'diff', revision: state.revision, index: 1 }); diff = h.executed.at(-1)!; assert.equal((diff[2] as Uri).content, '', 'A file only in the branch diffs against an empty working side');
+    await panel.send({ type: 'openFile', revision: state.revision, index: 1 }); assert.match(String(panel.last('error')?.message), /only-branch\.txt does not exist in the working tree/);
+    await panel.send({ type: 'swap', revision: state.revision }); state = panel.state; assert.equal(state.swapped, true); assert.equal(panel.title, 'Compare: Working Tree ↔ feature');
+    await panel.send({ type: 'diff', revision: state.revision, index: 0 }); diff = h.executed.at(-1)!; assert.equal((diff[1] as Uri).scheme, 'file'); assert.equal(diff[3], `app.ts (Working Tree ↔ feature ${LEFT.slice(0, 8)})`);
+    await panel.send({ type: 'getFromBranch', revision: state.revision, indexes: [2] }); assert.match(String(panel.last('error')?.message), /not available/);
+    const requests: unknown[] = []; (h.surface as { getFromBranch: unknown }).getFromBranch = async (request: unknown) => { requests.push(request); return true; };
+    const reads = h.calls.filter(call => call.startsWith('worktree:')).length;
+    await panel.send({ type: 'getFromBranch', revision: state.revision, indexes: [2, 0] });
+    assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ repositoryId: 'repo', root: h.root, ref: { name: 'feature', oid: LEFT }, files: [{ status: 'R090', path: 'README.md', originalPath: 'before.txt' }, { status: 'M', path: 'src/app.ts' }] }]);
+    assert.equal(h.calls.filter(call => call.startsWith('worktree:')).length, reads + 1, 'The working-tree list is read again after Get from Branch');
+    await panel.send({ type: 'getFromBranch', revision: state.revision, indexes: [0] }); assert.match(String(panel.last('error')?.message), /changed/, 'Indexes from an older list are refused');
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    const resources = h.executed.at(-1)![2] as [Uri, Uri | undefined, Uri | undefined][];
+    assert.equal(resources[0]![1]!.scheme, 'file', 'Swapped: the editable working file is on the left'); assert.equal(resources[1]![1], undefined, 'A file only in the branch has no working side'); assert.equal(resources[1]![2]!.scheme, 'git-pro-blob');
+  } finally { await h.cleanup(); }
+});
+
+test('Working files must be regular files of this repository, never symlinks or Git metadata', async () => {
+  const h = await harness({ files: { scope: 'tips', from: LEFT, to: RIGHT, files: [{ status: 'M', path: 'link.txt' }, { status: 'M', path: '.git/config' }], stats: [], omitted: false } });
+  try {
+    let linked = true; try { await symlink(path.join(h.root, 'README.md'), path.join(h.root, 'link.txt')); } catch { linked = false; }
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    if (linked) { await panel.send({ type: 'openFile', revision, index: 0 }); assert.match(String(panel.last('error')?.message), /regular files/); }
+    await panel.send({ type: 'localDiff', revision, index: 1 }); assert.match(String(panel.last('error')?.message), /Git metadata/);
+  } finally { await h.cleanup(); }
+});
+
+test('A moved ref is reported without changing the pins, and Refresh re-pins it', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    h.refs.set('main', MOVED); h.invalidate(); await new Promise(resolve => setTimeout(resolve, 900));
+    assert.deepEqual(panel.state.moved, ['main']); assert.equal((panel.state.right as Message).oid, RIGHT); assert.equal(panel.state.revision, revision, 'A moved notice keeps the captured file indexes valid');
+    await panel.send({ type: 'refresh' });
+    assert.equal((panel.state.right as Message).oid, MOVED); assert.deepEqual(panel.state.moved, []); assert.equal(h.calls.filter(call => call.startsWith('compare:')).at(-1), `compare:${LEFT}:${MOVED}:fork`);
+    await h.surface.openRefs('repo', 'feature', 'main'); assert.equal(h.panels.length, 1, 'The refreshed tab owns the new pair');
+    h.refs.delete('feature'); await panel.send({ type: 'refresh' }); assert.match(String(panel.last('error')?.message), /no longer resolves/); assert.equal((panel.state.left as Message).oid, LEFT);
+  } finally { await h.cleanup(); }
+});
+
+test('Load failures show in the tab, busy requests are refused and disposal releases the tab', async () => {
+  const h = await harness({ files: { scope: 'fork', from: BASE, to: LEFT, files: [], stats: [], omitted: true, note: 'multipleMergeBases' } });
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    assert.equal(panel.state.files.omitted, true); assert.equal(panel.state.files.note, 'multipleMergeBases');
+    await panel.send({ type: 'openAll', revision: panel.state.revision }); assert.match(String(panel.last('error')?.message), /Too many changed files/);
+    await assert.rejects(h.surface.openRefs('repo', 'missing', 'main'), /Invalid revision/, 'An unresolvable ref fails before any tab opens'); assert.equal(h.panels.length, 1);
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }), page = h.history.comparisonPage as (...args: unknown[]) => Promise<unknown>;
+    h.history.comparisonPage = async (...args: unknown[]) => { await gate; return page(...args); };
+    const pending = panel.send({ type: 'page', revision: panel.state.revision, side: 'left', offset: 25 });
+    await panel.send({ type: 'allChanges', revision: panel.state.revision }); assert.match(String(panel.last('error')?.message), /Wait for the current Compare action/, 'One request at a time per tab');
+    release(); await pending; assert.equal(panel.state.sides.leftOnly.offset, 25); assert.equal(panel.last('busy')?.busy, false);
+    const original = h.history.compareRefs; h.history.compareRefs = async () => { throw new Error('fatal: bad object <secret> token=abc'); };
+    await h.surface.openRefs('repo', 'main', 'feature'); const failed = h.panels.at(-1)!;
+    assert.equal(failed.state.loading, false); assert.match(String(failed.state.error), /bad object/, 'A load failure shows in the tab instead of the command toast'); assert.doesNotMatch(String(failed.state.error), /abc/, 'Errors are redacted');
+    assert.equal(failed.state.files, undefined); failed.dispose();
+    assert.equal(h.surface.activePanelCount, 1); panel.dispose(); assert.equal(h.surface.activePanelCount, 0);
+    const count = panel.sent.length; await panel.send({ type: 'ready' }); assert.equal(panel.sent.length, count);
+    h.history.compareRefs = original; await h.surface.openRefs('repo', 'feature', 'main'); assert.equal(h.panels.length, 3, 'A closed tab is never revealed again');
+  } finally { await h.cleanup(); }
+});

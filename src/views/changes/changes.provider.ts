@@ -79,9 +79,12 @@ export class ChangesProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     }
     const label = redact(node.change.path), item = new vscode.TreeItem(label);
     item.id = `${node.repositoryId}:${node.change.group}:${node.change.path}`;
-    item.description = changeStatusLabel(node.change); item.contextValue = `gitPro.change.${node.change.group}`;
+    // Conflict kinds follow Yours/Theirs, which a rebase swaps (D3).
+    const operation = node.change.group === 'conflicts' ? this.registry.store.get(node.repositoryId)?.operation : undefined;
+    item.description = changeStatusLabel(node.change, operation); item.contextValue = `gitPro.change.${node.change.group}`;
     item.tooltip = label; item.iconPath = this.asThemeIcon(changeFileVisual(node.change));
-    item.command = { command: 'gitPro.diff', title: 'Open Diff', arguments: [node] };
+    // A conflicted file has no diff to show (Git refuses one during an operation).
+    item.command = node.change.group === 'conflicts' ? { command: 'gitPro.resolveConflict', title: 'Resolve Conflict', arguments: [node] } : { command: 'gitPro.diff', title: 'Open Diff', arguments: [node] };
     return item;
   }
   private asThemeIcon(visual: { readonly icon: string; readonly color: string }): vscode.ThemeIcon {

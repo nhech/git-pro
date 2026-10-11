@@ -166,3 +166,37 @@ export async function run(): Promise<void> {
   await fs.writeFile(output, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
   console.log(JSON.stringify(result));
 }
+
+/**
+ * Branches view entry points in the owned host fixture, through the installed commands with the nodes the Branches view passes: Compare with Current opens
+ * the Compare tab, Compare Branches on the same two branches (current one clicked first) reveals that tab instead of a second one and needs no picker, and
+ * Show Diff with Working Tree opens the working-tree tab. The fixture branch and the tabs are removed afterwards. Ctrl-click selection and context-menu
+ * visibility have no public API; the manifest unit test evaluates those when-clauses.
+ */
+export async function verifyBranchCompareHost(extension: vscode.Extension<ExtensionDiagnostics>, api: ExtensionDiagnostics, root: string): Promise<void> {
+  assert.ok(extension.isActive && api.activeRepository() && root.includes('git-pro-host-'), 'Branch compare host checks run in the owned fixture');
+  const runGit = (args: string[]) => { const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true, shell: false }); assert.equal(result.status, 0, result.stderr); return result.stdout; };
+  const head = api.activeSnapshot()?.head; assert.ok(head && head !== '(detached)', 'The fixture has a checked-out branch');
+  const base = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'HEAD~1'], { cwd: root, windowsHide: true, shell: false }).status === 0 ? 'HEAD~1' : 'HEAD';
+  const tabs = (label: string) => vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => tab.input instanceof vscode.TabInputWebview && tab.label === label);
+  const commits = `Compare: host-compare-side ↔ ${head}`, working = 'Compare: host-compare-side ↔ Working Tree';
+  runGit(['branch', 'host-compare-side', base]);
+  try {
+    await vscode.commands.executeCommand('gitPro.refresh');
+    const node = (name: string) => {
+      const [ref = '', oid = ''] = runGit(['for-each-ref', '--format=%(refname)%00%(objectname)', `refs/heads/${name}`]).trim().split('\0');
+      return { kind: 'branch', repositoryId: api.activeRepository(), branch: { name, ref, oid, remote: false, upstream: '', worktree: '' } };
+    };
+    const side = node('host-compare-side'), current = node(head);
+    await vscode.commands.executeCommand('gitPro.compareWithCurrent', side);
+    await until(() => tabs(commits).length === 1, `Compare with Current opens "${commits}"`);
+    await vscode.commands.executeCommand('gitPro.compareBranches', current, [current, side]);
+    assert.equal(tabs(commits).length, 1, 'Compare Branches on the same pinned pair reveals the existing tab with the current branch on the right');
+    await vscode.commands.executeCommand('gitPro.diffWithWorkingTree', side);
+    await until(() => tabs(working).length === 1, `Show Diff with Working Tree opens "${working}"`);
+    console.log('Git Pro branch compare host passed: Compare with Current, Compare Branches (same tab revealed) and Show Diff with Working Tree from Branches view nodes.');
+  } finally {
+    const open = [...tabs(commits), ...tabs(working)]; if (open.length) await vscode.window.tabGroups.close(open);
+    runGit(['branch', '-D', 'host-compare-side']); await vscode.commands.executeCommand('gitPro.refresh');
+  }
+}

@@ -84,7 +84,7 @@
     element('repository').title = repository;
     element('repository').setAttribute('aria-label', repository);
     const status = busy ? 'Committing…' : !repositoryId ? 'Choose repository' : operation !== 'idle' ? `${operation} in progress` : staged ? `${staged} staged` : 'No staged changes';
-    const description = busy ? status : !repositoryId ? 'Open a repository to compose a commit.' : operation !== 'idle' ? `${status} · resolve in Source Control` : staged ? `${staged} staged ${staged === 1 ? 'file' : 'files'} · commits the index` : 'No staged changes · stage files in Changes';
+    const description = busy ? status : !repositoryId ? 'Open a repository to compose a commit.' : operation !== 'idle' ? `${status} · resolve in Git Pro Conflicts` : staged ? `${staged} staged ${staged === 1 ? 'file' : 'files'} · commits the index` : 'No staged changes · stage files in Changes';
     element('staged').textContent = description;
     element('staged').title = description;
     element('staged').setAttribute('aria-label', description);

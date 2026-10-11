@@ -6,7 +6,10 @@ import { parseBlame } from '../../src/git/history/blame-parser';
 import { layoutGraph } from '../../src/webviews/graph/graph-layout';
 import { ReadScheduler } from '../../src/utils/read-scheduler';
 import { parseHistoryAction } from '../../src/webviews/graph/history-protocol';
-import { buildReadCommand } from '../../src/git/command-builders';
+import { buildReadCommand, type ReadCommand } from '../../src/git/command-builders';
+import { parseMergeBase } from '../../src/git/history/history-parser';
+import { HistoryService } from '../../src/git/history/history.service';
+import { GitFailure } from '../../src/git/git-error-parser';
 
 const a = 'a'.repeat(40), b = 'b'.repeat(40), c = 'c'.repeat(40), d = 'd'.repeat(40);
 test('linear prefix recipe is bounded, OID-only and cannot change history ordering options',()=>{
@@ -98,4 +101,44 @@ test('read scheduler bounds concurrency and cancels queued tasks before executio
   const second = scheduler.run(async () => { ran = true; }, controller.signal); controller.abort();
   await assert.rejects(second, /cancelled/); release(); await first; assert.equal(ran, false); scheduler.dispose();
   await assert.rejects(scheduler.run(async () => undefined), /cancelled/);
+});
+test('compare recipes: merge-base --all and working-tree diffs take validated OIDs, never run textconv and keep paths literal', () => {
+  const prefix = ['--literal-pathspecs', '--no-pager', '-c', 'color.ui=false', '-c', 'core.fsmonitor=false'];
+  assert.deepEqual(buildReadCommand({ kind: 'mergeBase', left: a, right: b }), [...prefix, 'merge-base', '--all', a, b]);
+  assert.deepEqual(buildReadCommand({ kind: 'worktreeDiff', oid: a }), [...prefix, 'diff', a, '--no-ext-diff', '--no-textconv', '-M', '-l1000', '--name-status', '-z', '--']);
+  assert.deepEqual(buildReadCommand({ kind: 'worktreeNumstat', oid: a, paths: ['-n [1].txt'] }), [...prefix, 'diff', a, '--no-ext-diff', '--no-textconv', '-M', '-l1000', '--numstat', '-z', '--', '-n [1].txt']);
+  for (const command of [{ kind: 'mergeBase', left: 'HEAD', right: b }, { kind: 'mergeBase', left: a, right: '--all' }, { kind: 'worktreeDiff', oid: 'main' }, { kind: 'worktreeDiff', oid: a, paths: ['../outside'] }, { kind: 'worktreeNumstat', oid: a, paths: ['/abs'] }] as ReadCommand[])
+    assert.throws(() => buildReadCommand(command), Error, JSON.stringify(command));
+  assert.deepEqual(parseMergeBase(Buffer.from(`${a}\n`)), { oid: a, multiple: false });
+  assert.deepEqual(parseMergeBase(Buffer.from(`${a}\n${b}\n`)), { oid: a, multiple: true }, 'Criss-cross merges have several bases; the first one is used');
+  assert.deepEqual(parseMergeBase(Buffer.alloc(0)), { oid: null, multiple: false }, 'Unrelated histories print nothing');
+  for (const output of ['HEAD\n', `${a} extra\n`, `${a}\n--all\n`]) assert.throws(() => parseMergeBase(Buffer.from(output)));
+});
+test('compare listings past the output limit keep the comparison and report omitted files instead of failing', async () => {
+  const repo = { id: 'repo', root: process.cwd(), gitDir: '', commonDir: '' }, reads: string[] = [];
+  let overflow = new Set<string>(['changedFiles']);
+  const executor = { read: async (_root: string, command: ReadCommand) => {
+    reads.push(command.kind);
+    if (overflow.has(command.kind)) throw new GitFailure('output-limit', 'Git output exceeded the safe limit.');
+    const outputs: Partial<Record<ReadCommand['kind'], string>> = { ref: `${command.kind === 'ref' && command.ref === 'feature' ? a : b}\n`, mergeBase: `${c}\n${d}\n`, comparisonCommits: '', comparisonCount: '0\t2\n',
+      changedFiles: 'M\0app.ts\0', numstat: '1\t2\tapp.ts\0', worktreeDiff: 'D\0gone.txt\0', worktreeNumstat: '-\t-\tgone.txt\0' };
+    return { stdout: Buffer.from(outputs[command.kind] ?? ''), stderr: Buffer.alloc(0), exitCode: 0, durationMs: 0 };
+  } };
+  const service = new HistoryService({ list: () => [repo] } as never, executor as never, { checkTrust: () => undefined } as never);
+  try {
+    const result = await service.compareRefs('repo', 'feature', 'main', 'fork');
+    assert.deepEqual(result.left, { name: 'feature', oid: a }); assert.deepEqual(result.right, { name: 'main', oid: b }); assert.deepEqual(result.fork, { oid: c, multiple: true });
+    assert.equal(result.rightOnly.count, 2); assert.equal(result.files.omitted, true); assert.deepEqual(result.files.files, []); assert.equal(result.files.scope, 'fork'); assert.equal(result.files.from, c); assert.equal(result.files.to, a); assert.equal(result.files.note, 'multipleMergeBases');
+    overflow = new Set(['numstat']);
+    const stats = await service.comparisonFiles('repo', a, b, 'tips');
+    assert.equal(stats.omitted, false); assert.deepEqual(stats.files, [{ status: 'M', path: 'app.ts' }]); assert.deepEqual(stats.stats, [], 'Files stay listed when only the line counts overflow');
+    assert.equal(stats.scope, 'tips'); assert.equal(stats.from, a); assert.equal(stats.to, b); assert.equal(stats.note, undefined);
+    overflow = new Set();
+    const worktree = await service.worktreeFiles('repo', a);
+    assert.deepEqual({ scope: worktree.scope, from: worktree.from, to: worktree.to, files: worktree.files, binary: worktree.stats[0]?.added }, { scope: 'worktree', from: a, to: undefined, files: [{ status: 'D', path: 'gone.txt' }], binary: null });
+    overflow = new Set(['comparisonCount']);
+    await assert.rejects(service.compareRefs('repo', 'feature', 'main', 'tips'), /safe limit/, 'Only the file listings fall back; other reads still fail');
+    await assert.rejects(service.comparisonFiles('repo', a, b, 'both' as never), /Since fork or Tip to tip/);
+    await assert.rejects(service.worktreeFiles('repo', 'HEAD'), /object ID/);
+  } finally { service.dispose(); }
 });

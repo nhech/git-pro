@@ -17,7 +17,7 @@ export class DiffService {
     const repo = this.git.repository(id); const head = known ? known.head : (await this.git.state(id)).oid;
     const workingPath = await this.git.authorizePath(id, change.path);
     if ((await lstat(workingPath).catch(() => undefined))?.isSymbolicLink()) throw new Error('Symlink diff: open it in native Source Control.');
-    if (change.group === 'conflicts') throw new Error('Open this conflicted file in native Source Control.');
+    if (change.group === 'conflicts') throw new Error('This file has merge conflicts. Use Git Pro: Resolve Conflicts… to compare its sides or merge it.');
     const tree = async (file: string): Promise<string | undefined> => {
       await this.git.authorizePath(id, file);
       if (!head) return;

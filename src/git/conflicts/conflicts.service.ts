@@ -2,13 +2,26 @@ import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { AdvancedService, type OperationSnapshot } from '../advanced/advanced.service';
 import { parseIndex, type IndexEntry } from './index-parser';
-import { acceptBothText, hasConflictMarkers } from './text-conflicts';
+import { acceptBothText, countConflictBlocks, hasConflictMarkers } from './text-conflicts';
 import { decode } from '../history/history-parser';
 import { boundedFile } from '../../utils/bounded-file';
+import { chunkPaths } from '../argv-chunks';
+import { GitFailure, partiallyApplied } from '../git-error-parser';
+import { LinkOutsideError, containsPath } from '../../security/paths';
+import { conflictKind, isConflictCode, sidePresent, sideStatus, sidesFor, stagePresence } from './conflict-kinds';
+import { OperationContext, stashLabel } from './operation-context';
+import type { MutationCommand } from '../command-builders';
+import type { RepositoryDescriptor } from '../../repositories/repository-registry';
+import type { ConflictBatch, ConflictList, ConflictRow, ConflictSide, ConflictSource, ConflictsApi, StageBlobs } from './conflict-contract';
 export interface ConflictPreview { snapshot: OperationSnapshot; path: string; entries: readonly IndexEntry[]; text?: string; markers: boolean }
-export class ConflictsService {
+/** Marker counting reads at most this much of the conflicted files per list, the same budget as the operation fingerprint. */
+const markerBudget = 16 * 1024 * 1024;
+export class ConflictsService implements ConflictsApi {
   private readonly previews = new WeakSet<ConflictPreview>();
-  constructor(private readonly advanced:AdvancedService){}
+  private readonly batches = new WeakSet<ConflictBatch>();
+  /** Titles and labels for the list, the banner and the merge editor; `sources` is the in-memory record of Git Pro actions that stopped on conflicts. */
+  readonly context: OperationContext;
+  constructor(private readonly advanced:AdvancedService,sources:ReadonlyMap<string,ConflictSource>=new Map()){this.context=new OperationContext(advanced,sources);}
   async preview(id:string,file:string):Promise<ConflictPreview>{
     const snapshot=await this.advanced.snapshot(id);
     if(!snapshot.status.changes.some(change=>change.group==='conflicts'&&change.path===file))throw new Error('Select a current conflicted file.');
@@ -29,6 +42,7 @@ export class ConflictsService {
     if(!Number.isSafeInteger(size)||size<0||size>5*1024*1024)throw new Error('Conflict side exceeds text preview limit.');
     return(await this.advanced.git.executor.read(repo.root,{kind:'blob',oid:entry.oid},{maxOutputBytes:5*1024*1024})).stdout;
   }
+  /** The per-file quick pick's Git-side contract: `current` is `--ours`, `incoming` is `--theirs`; callers map Yours/Theirs through sidesFor. Side acceptance leaves staging to Mark Resolved. */
   resolve(preview:ConflictPreview,choice:'current'|'incoming'|'both'|'mark',allowMarkers=false):Promise<void>{
     if(!this.previews.has(preview))return Promise.reject(new Error('Conflict preview expired.'));
     return this.advanced.guarded(preview.snapshot,async repo=>{
@@ -51,5 +65,111 @@ export class ConflictsService {
       if(preview.markers&&!allowMarkers)throw new Error('Conflict markers remain. Review the file before marking resolved.');
       await git.executor.mutate(repo.root,{kind:'stage',paths:[preview.path]});
     });
+  }
+  /** Every current conflict (at most 5000, Git's path order) from one snapshot, with its kind, side status and markers. */
+  async list(id:string,signal?:AbortSignal):Promise<ConflictList>{
+    const snapshot=await this.advanced.snapshot(id),repo=this.advanced.git.repository(id);
+    const all=snapshot.status.changes.filter(change=>change.group==='conflicts').map(change=>change.path),paths=all.slice(0,5000);
+    const {rows,stashMarkers}=await this.rows(repo,snapshot,paths,markerBudget,signal);
+    const summary=await this.context.describe(repo,snapshot.operation,snapshot.status,{stashMarkers},signal);
+    if(this.advanced.git.repository(id)!==repo)throw new Error('Repository changed while reading conflicts.');
+    return Object.freeze({snapshot,summary,rows:Object.freeze(rows),truncated:all.length>paths.length});
+  }
+  /** Single-use plan for 1–100 current conflicts from one fresh snapshot. Rows Git Pro leaves to native Git are refused. */
+  async previewBatch(id:string,paths:readonly string[]):Promise<ConflictBatch>{
+    if(!Array.isArray(paths)||!paths.length||paths.length>100||paths.some(file=>typeof file!=='string')||new Set(paths).size!==paths.length)throw new Error('Select 1–100 distinct conflicted files.');
+    const snapshot=await this.advanced.snapshot(id),repo=this.advanced.git.repository(id),current=new Set(snapshot.status.changes.filter(change=>change.group==='conflicts').map(change=>change.path));
+    if(paths.some(file=>!current.has(file)))throw new Error('Select current conflicted files. Conflicts changed; review again.');
+    const {rows}=await this.rows(repo,snapshot,paths,markerBudget);
+    const blocked=rows.find(row=>row.unsupported);if(blocked)throw new Error(`${blocked.path}: ${blocked.unsupported}.`);
+    const batch:ConflictBatch=Object.freeze({snapshot,sides:sidesFor(snapshot.operation),rows:Object.freeze(rows)});this.batches.add(batch);return batch;
+  }
+  /** Owner decision Q2: `restore --ours|--theirs --worktree` then `add` for paths whose chosen side has a file, `rm -f` for the rest, in one guarded run. */
+  acceptSide(batch:ConflictBatch,side:ConflictSide):Promise<void>{
+    if(side!=='yours'&&side!=='theirs')return Promise.reject(new Error('Choose Yours or Theirs.'));
+    if(!this.batches.has(batch))return Promise.reject(new Error('Conflict review expired. Review again.'));
+    this.batches.delete(batch);
+    const target=batch.sides[side],restore=batch.rows.filter(row=>sidePresent(row.stages,target)).map(row=>row.path),remove=batch.rows.filter(row=>!sidePresent(row.stages,target)).map(row=>row.path);
+    const steps:MutationCommand[]=[...(restore.length?[{kind:'acceptConflict' as const,side:target.flag,paths:restore},{kind:'stage' as const,paths:restore}]:[]),...(remove.length?[{kind:'deleteConflict' as const,paths:remove}]:[])];
+    return this.advanced.guarded(batch.snapshot,async repo=>{
+      for(let index=0;index<steps.length;index++){try{await this.advanced.git.executor.mutate(repo.root,steps[index]!);}catch(error){throw index?partiallyApplied(error,index,steps.length):error;}}
+    });
+  }
+  /**
+   * `git add` for the whole batch. Every file is read again inside the guarded run, never trusted from a row, and the batch is refused as a whole when one has marker lines (N14),
+   * is binary (N13: staging it would silently keep Git's stage-2 copy, the upstream during a rebase), has no working file, or is not a both-sides conflict:
+   * for DU/UD/AU/UA the working file is only the side Git kept, so staging it would drop the other side's deletion or addition just as silently.
+   */
+  markResolved(batch:ConflictBatch):Promise<void>{
+    if(!this.batches.has(batch))return Promise.reject(new Error('Conflict review expired. Review again.'));
+    this.batches.delete(batch);
+    const refuse=(row:{path:string},reason:'missing'|'binary'|'markers'|'oneSided')=>new Error(reason==='markers'?`Conflict markers remain in ${row.path}. Review the file before marking resolved.`:reason==='oneSided'?`${row.path}: Mark Resolved would keep only the version Git left in the working tree. Choose Accept Yours or Accept Theirs.`:`${row.path} ${reason==='binary'?'is binary':'has no working file'}. Choose Accept Yours or Accept Theirs.`);
+    const early=batch.rows.find(row=>!row.workingFile||row.binary||row.code!=='UU'&&row.code!=='AA'||row.markers?.present);
+    if(early)return Promise.reject(refuse(early,!early.workingFile?'missing':early.binary?'binary':early.code!=='UU'&&early.code!=='AA'?'oneSided':'markers'));
+    return this.advanced.guarded(batch.snapshot,async repo=>{
+      for(const row of batch.rows){
+        const absolute=await this.advanced.git.authorizePath(repo.id,row.path),info=await lstat(absolute).catch(()=>undefined);
+        if(!info?.isFile()||info.isSymbolicLink())throw refuse(row,'missing');
+        const data=await boundedFile(absolute);let text:string|undefined;
+        if(!data.includes(0)){try{text=decode(data);}catch{/* binary */}}
+        if(text===undefined)throw refuse(row,'binary');if(hasConflictMarkers(text))throw refuse(row,'markers');
+      }
+      await this.advanced.git.executor.mutate(repo.root,{kind:'stage',paths:batch.rows.map(row=>row.path)});
+    });
+  }
+  /** Bounded stage blobs (5 MiB each, no textconv) for compares and the merge editor; the file passes the same checks as a preview. */
+  async stageBlobs(id:string,file:string):Promise<StageBlobs>{
+    const preview=await this.preview(id,file);
+    try{const [base,ours,theirs]=await Promise.all([this.side(preview,1),this.side(preview,2),this.side(preview,3)]);return Object.freeze({path:file,operation:preview.snapshot.operation,sides:sidesFor(preview.snapshot.operation),base,ours,theirs});}
+    finally{this.previews.delete(preview);}
+  }
+  /**
+   * Rows in request order from the snapshot's conflicts and one batched stage listing. Working files are read for markers until `budget` bytes;
+   * a row past it has `markers:null`, and its `mergeable` is not proven text: the merge bridge's own preview decides.
+   */
+  private async rows(repo:RepositoryDescriptor,snapshot:OperationSnapshot,paths:readonly string[],budget:number,signal?:AbortSignal):Promise<{rows:ConflictRow[];stashMarkers:boolean}>{
+    const cancelled=()=>{if(signal?.aborted)throw new GitFailure('cancelled','Conflict list cancelled.');};
+    const codes=new Map(snapshot.status.changes.filter(change=>change.group==='conflicts').map(change=>[change.path,change.status])),wanted=new Set(paths),staged=new Map<string,IndexEntry[]>();
+    for(const batch of chunkPaths(paths)){
+      cancelled();
+      for(const entry of parseIndex((await this.advanced.git.executor.read(repo.root,{kind:'index',paths:batch},signal?{signal}:{})).stdout))if(entry.stage>0&&wanted.has(entry.path))staged.set(entry.path,[...(staged.get(entry.path)??[]),entry]);
+    }
+    const git=this.advanced.git,sides=sidesFor(snapshot.operation),nested=git.registry.list().some(other=>other.id!==repo.id&&containsPath(repo.root,other.root));
+    let used=0,stashMarkers=false;const rows:ConflictRow[]=[];
+    const prepare=async(file:string)=>{
+      const status=codes.get(file),entries=staged.get(file)??[];
+      if(!status||!isConflictCode(status))throw new Error('Unsupported conflict record.');
+      if(!entries.length)throw new Error('Conflicts changed while reading. Refresh and review again.');
+      const stages=stagePresence(entries),base={path:file,code:status,kind:conflictKind(status,snapshot.operation),yours:sideStatus(stages,sides.yours),theirs:sideStatus(stages,sides.theirs),stages};
+      const unsupported=(reason:string,workingFile=false)=>({base,reason,workingFile});
+      const mode=entries.find(entry=>!/^100(?:644|755)$/.test(entry.mode))?.mode;
+      if(mode)return unsupported(mode==='120000'?'symlink':mode==='160000'?'submodule':'unsupported file type');
+      let absolute:string;
+      try{absolute=await git.authorizePath(repo.id,file);}catch(error){if(error instanceof LinkOutsideError)return unsupported('path through a link outside the repository');throw error;}
+      if(nested&&(await git.registry.resolveFile(absolute))?.id!==repo.id)return unsupported('nested repository');
+      const info=await lstat(absolute).catch(error=>{if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;});
+      if(info&&(info.isSymbolicLink()||!info.isFile()))return unsupported(info.isSymbolicLink()?'symlink':'not a regular file');
+      if(info&&info.size>5*1024*1024)return unsupported('larger than 5 MiB',true);
+      return {base,absolute,size:info?.size};
+    };
+    // Groups bound the files open at once; the budget is spent in path order, so which rows are counted does not depend on timing.
+    for(let start=0;start<paths.length;start+=8){
+      cancelled();
+      const prepared=await Promise.all(paths.slice(start,start+8).map(prepare)),reads=prepared.map(item=>{
+        if('reason' in item||item.size===undefined||used+item.size>budget)return false;used+=item.size;return true;
+      });
+      rows.push(...await Promise.all(prepared.map(async(item,index):Promise<ConflictRow>=>{
+        if('reason' in item)return Object.freeze({...item.base,markers:null,binary:false,mergeable:false,unsupported:`Use native Git: ${item.reason}`,workingFile:item.workingFile});
+        let markers:ConflictRow['markers']=null,binary=false;
+        if(reads[index]){
+          const data=await boundedFile(item.absolute);
+          if(data.includes(0))binary=true;
+          else try{const text=decode(data);markers=Object.freeze({present:hasConflictMarkers(text),blocks:countConflictBlocks(text)});if(stashLabel.test(text))stashMarkers=true;}catch{binary=true;}
+        }
+        const workingFile=item.size!==undefined;
+        return Object.freeze({...item.base,markers,binary,mergeable:(item.base.code==='UU'||item.base.code==='AA')&&workingFile&&!binary,workingFile});
+      })));
+    }
+    return {rows,stashMarkers};
   }
 }

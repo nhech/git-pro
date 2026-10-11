@@ -5,6 +5,7 @@ scripts/**
 .test-build-*/**
 .claude/**
 .vscode-test/**
+.vscode-test
 .github/**
 node_modules/**
 docs/**

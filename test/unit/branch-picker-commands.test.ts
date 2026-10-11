@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import type { BranchInfo } from '../../src/git/git.service';
+import { GitFailure } from '../../src/git/git-error-parser';
 
 function event<T>() {
   const listeners = new Set<(value: T) => void>();
@@ -20,7 +21,7 @@ const tick = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); 
 const branch = (name: string, remote = false): BranchInfo => ({ name, remote, ref: `refs/${remote ? 'remotes' : 'heads'}/${name}`, oid: 'a'.repeat(40), upstream: '', worktree: '' });
 type Item = { label: string; description?: string; kind?: number; alwaysShow?: boolean; iconPath?: { id: string; color?: { id: string } }; node?: { repositoryId: string; branch: BranchInfo }; create?: boolean; action?: string };
 
-function harness(failure?: 'read' | 'show') {
+function harness(failure?: 'read' | 'show', surfaces?: unknown) {
   const changed = event<string>(), accepted = event<void>(), hidden = event<void>(), registryChanged = event<void>();
   let disposed = false, writes = 0, shown = 0, disposedCount = 0, items: readonly Item[] = [], busy = false, placeholder = '';
   const picker = {
@@ -32,22 +33,25 @@ function harness(failure?: 'read' | 'show') {
     show: () => { shown++; if (failure === 'show') throw new Error('owned show failure'); }, hide: () => { picker.selectedItems = []; hidden.fire(); }, dispose: () => { disposed = true; disposedCount++; },
   };
   const original = { id: 'owned', root: '/owned' }, other = { id: 'other', root: '/other' };
-  const registry = { active: original as typeof original | undefined, list: () => repositories, onDidChange: registryChanged.listen, store: { get: () => ({ head: 'main' }) } };
+  const snapshot = { head: 'main', operation: 'idle', changes: [] as { group: string; path: string }[] };
+  const registry = { active: original as typeof original | undefined, list: () => repositories, onDidChange: registryChanged.listen, store: { get: () => snapshot } };
   let repositories = [original], readCount = 0, inputCount = 0;
   const read = deferred<readonly BranchInfo[]>(), commands = new Map<string, (...args: unknown[]) => Promise<void>>(), errors: string[] = [], copied: string[] = [], actionTitles: string[] = [];
-  const actionItems: readonly Item[][] = [], operations: unknown[][] = [], warnings: { text: string; choices: string[] }[] = [];
+  const actionItems: readonly Item[][] = [], operations: unknown[][] = [], warnings: { text: string; choices: string[] }[] = [], executed: unknown[][] = [], errorButtons: string[][] = [];
+  const settings = { autoOpen: 'gitPro' as unknown, errorChoice: undefined as string | undefined, checkoutError: undefined as unknown };
   let actionChoice: string | undefined = 'Copy Name', confirmation: string | undefined;
   let refs = [branch('feature/ux')];
   const git = { registry, repository: (id: string) => { assert.equal(id, original.id); return original; },
     preview: async (id: string) => { assert.equal(id, original.id); return { repositoryId: id }; }, branches: async () => refs,
-    checkout: async (...args: unknown[]) => { operations.push(['checkout', ...args]); },
+    checkout: async (...args: unknown[]) => { if (settings.checkoutError) throw settings.checkoutError; operations.push(['checkout', ...args]); },
     branchAction: async (...args: unknown[]) => { operations.push(['branchAction', ...args]); },
     branchSearchSnapshot: () => { assert.equal(shown, 1, 'picker must open before the metadata read starts'); readCount++; if (failure === 'read') throw new Error('owned synchronous read failure'); return read.promise; } };
-  const vscode = { ProgressLocation: { Window: 10 }, QuickPickItemKind: { Separator: -1 },
+  const vscode = { ProgressLocation: { Window: 10 }, QuickPickItemKind: { Separator: -1 }, Uri: { file: (fsPath: string) => ({ scheme: 'file', fsPath }) },
+    workspace: { getConfiguration: (section: string, scope: { fsPath: string }) => { assert.equal(section, 'gitPro'); assert.equal(scope.fsPath, original.root); return { get: (key: string) => { assert.equal(key, 'conflicts.autoOpen'); return settings.autoOpen; } }; } },
     ThemeIcon: class { constructor(readonly id: string, readonly color?: { id: string }) {} }, ThemeColor: class { constructor(readonly id: string) {} }, commands: {
-    registerCommand: (id: string, fn: (...args: unknown[]) => Promise<void>) => { commands.set(id, fn); return { dispose: () => commands.delete(id) }; }, executeCommand: async () => undefined,
+    registerCommand: (id: string, fn: (...args: unknown[]) => Promise<void>) => { commands.set(id, fn); return { dispose: () => commands.delete(id) }; }, executeCommand: async (...args: unknown[]) => { executed.push(args); },
   }, window: { createQuickPick: () => picker, withProgress: (_options: unknown, run: () => Promise<void>) => run(),
-    showErrorMessage: async (text: string) => { errors.push(text); return undefined; },
+    showErrorMessage: async (text: string, ...buttons: string[]) => { errors.push(text); errorButtons.push(buttons); return settings.errorChoice; },
     showQuickPick: async (offered: readonly Item[], options: { title: string }) => { actionTitles.push(options.title); (actionItems as Item[][]).push([...offered]); return offered.find(item => (typeof item === 'string' ? item : item.label) === actionChoice); },
     showWarningMessage: async (text: string, _options: unknown, ...choices: string[]) => { warnings.push({ text, choices }); return confirmation; },
     showInputBox: async () => { inputCount++; return undefined; },
@@ -55,12 +59,14 @@ function harness(failure?: 'read' | 'show') {
   const source = path.resolve(__dirname, '../../src/commands/daily.commands.js'), load = createRequire(source), exports: Record<string, unknown> = {};
   runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : name === '../git/git.service' ? { DailyError: class extends Error {} } : name === '../git/diff/diff.service' ? { DiffService: class {} } : load(name) });
   const Constructor = exports.DailyCommands as new (...args: unknown[]) => { dispose(): void };
-  const instance = new Constructor(git, {}, {}, { selection: [] }, { error: () => undefined });
+  const instance = new Constructor(git, {}, {}, { selection: [] }, { error: () => undefined }, ...(surfaces ? [surfaces] : []));
   const start = () => commands.get('gitPro.branches')!();
   const type = (value: string) => { picker.value = value; changed.fire(value); };
   const choose = (item: Item) => { picker.selectedItems = [item]; accepted.fire(); };
   const assertClosed = () => { assert.equal(disposedCount, 1); for (const stream of [changed, accepted, hidden, registryChanged]) assert.equal(stream.listeners.size, 0); };
   return { picker, read, registry, registryChanged, original, other, instance, errors, copied, actionTitles, actionItems, operations, warnings, start, type, choose, assertClosed,
+    snapshot, settings, executed, errorButtons, run: (id: string, ...args: unknown[]) => commands.get(id)!(...args),
+    choice: (choice?: string) => { actionChoice = choice; },
     action: (selected: BranchInfo, choice?: string, confirm?: string, fresh = true) => { actionChoice = choice; confirmation = confirm; refs = fresh ? [selected] : []; return commands.get('gitPro.branchActions')!({ kind: 'branch', repositoryId: original.id, branch: selected }); },
     stats: () => ({ readCount, inputCount, shown, writes }), replace: () => { repositories = [{ ...original }]; registry.active = repositories[0]; },
     remove: () => { repositories = []; }, accept: () => accepted.fire() };
@@ -84,7 +90,7 @@ test('local branch actions describe scope, keep deletion last, and cancel or sep
   const h = harness(), selected = branch('feature/ux');
   await h.action(selected); const items = h.actionItems[0]!;
   assert.equal(items[0]!.label, 'Checkout'); assert.ok(items[0]!.iconPath);
-  const divider = items.findIndex(item => item.kind === -1);
+  const divider = items.findIndex(item => item.kind === -1 && item.label === 'Delete branch');
   assert.ok(divider > items.findIndex(item => item.label === 'Copy Name'));
   assert.deepEqual(Array.from(items.slice(divider + 1), item => item.action), ['Delete', 'Force Delete']);
   assert.ok(items.filter(item => item.kind !== -1).every(item => item.description && item.iconPath && item.action));
@@ -92,11 +98,11 @@ test('local branch actions describe scope, keep deletion last, and cancel or sep
   await h.action(selected, 'Checkout'); assert.deepEqual(h.operations, [['checkout', 'owned', 'feature/ux']]); h.instance.dispose();
 });
 
-test('remote branch actions offer only tracking checkout and copy; copy preserves the full raw name', async () => {
+test('remote branch actions offer tracking checkout, compare and integrate, and copy; copy preserves the full raw name', async () => {
   const h = harness(), selected = branch('origin/feature/ux', true);
   await h.action(selected, 'Copy Name');
-  assert.deepEqual(Array.from(h.actionItems[0]!, item => item.action), ['Checkout Tracking Branch', 'Copy Name']);
-  assert.ok(h.actionItems[0]!.every(item => item.description && item.iconPath));
+  assert.deepEqual(Array.from(h.actionItems[0]!, item => item.action ?? item.label), ['Checkout Tracking Branch', 'Compare and integrate', 'Compare with Current', 'Show Diff with Working Tree', 'Merge into Current…', 'Rebase Current onto This…', 'Branch', 'Copy Name']);
+  assert.ok(h.actionItems[0]!.filter(item => item.kind !== -1).every(item => item.description && item.iconPath));
   assert.deepEqual(h.copied, ['origin/feature/ux']); assert.deepEqual(h.operations, []); assert.deepEqual(h.warnings, []);
   await h.action(selected); assert.equal(h.copied.length, 1); assert.equal(h.stats().inputCount, 0); h.instance.dispose();
 });
@@ -176,4 +182,70 @@ test('branch data precedes create, current is explicit, separator is inert, and 
   assert.equal(h.picker.items.at(-1)!.create, true); h.type('missing-branch'); assert.equal(h.picker.items.length, 1);
   assert.equal(h.picker.items[0]!.create, true); assert.equal(h.picker.items[0]!.alwaysShow, true); h.choose(h.picker.items[0]!); await pending;
   assert.equal(h.stats().inputCount, 1); assert.deepEqual(h.actionTitles, []); assert.deepEqual(h.errors, []); h.assertClosed(); h.instance.dispose();
+});
+
+const integrate = ['Compare with Current', 'Show Diff with Working Tree', 'Merge into Current…', 'Rebase Current onto This…'];
+test('Branch Actions offers compare and integrate actions for other branches only and routes each through its trusted command', async () => {
+  const h = harness(), feature = branch('feature/ux');
+  await h.action(feature, 'Merge into Current…');
+  const labels = Array.from(h.actionItems[0]!, item => item.action ?? item.label);
+  assert.deepEqual(labels.slice(0, 7), ['Checkout', 'Compare and integrate', ...integrate, 'Branch']); assert.equal(labels[7], 'Rename');
+  assert.match(h.actionItems[0]!.find(item => item.action === 'Merge into Current…')!.description!, /into main$/);
+  assert.match(h.actionItems[0]!.find(item => item.action === 'Rebase Current onto This…')!.description!, /^Replay main commits/);
+  assert.deepEqual(h.executed, [['gitPro.mergeIntoCurrent', { kind: 'branch', repositoryId: 'owned', branch: feature }]]);
+  for (const [choice, id] of [['Compare with Current', 'gitPro.compareWithCurrent'], ['Show Diff with Working Tree', 'gitPro.diffWithWorkingTree'], ['Rebase Current onto This…', 'gitPro.rebaseCurrentOnto']] as const) {
+    await h.action(feature, choice); assert.equal(h.executed.at(-1)![0], id);
+  }
+  assert.deepEqual(h.operations, []); assert.deepEqual(h.warnings, []);
+  await h.action(branch('main'));
+  const current = Array.from(h.actionItems.at(-1)!, item => item.action ?? item.label);
+  assert.ok(integrate.every(action => !current.includes(action)), 'The checked-out branch hides Compare with Current, Show Diff, Merge and Rebase');
+  assert.deepEqual(h.actionItems.at(-1)!.filter(item => item.kind === -1).map(item => item.label), ['Delete branch']);
+  h.snapshot.head = '(detached)'; await h.action(branch('main'));
+  assert.match(h.actionItems.at(-1)!.find(item => item.action === 'Merge into Current…')!.description!, /into HEAD$/);
+  h.instance.dispose();
+});
+
+test('Branch Actions from a multi-selection acts on the clicked branch alone', async () => {
+  const h = harness(), first = { kind: 'branch', repositoryId: 'owned', branch: branch('feature/one') }, second = { kind: 'branch', repositoryId: 'owned', branch: branch('feature/two') };
+  h.choice('Copy Name'); await h.run('gitPro.branchActions', first, [first, second]);
+  assert.deepEqual(h.actionTitles, ['feature/one']); assert.deepEqual(h.copied, ['feature/one']);
+  await h.run('gitPro.branchActions', undefined, [second]); assert.deepEqual(h.actionTitles, ['feature/one', 'feature/two']);
+  h.instance.dispose();
+});
+
+test('a daily action that stops on conflicts opens Conflicts on the active repository and offers Abort while an operation runs', async () => {
+  const opened: unknown[][] = [], surfaces = { conflictSources: new Map(), conflicts: { open: async (...args: unknown[]) => { opened.push(args); } } };
+  const h = harness(undefined, surfaces);
+  h.settings.checkoutError = new GitFailure('conflict', 'CONFLICT (content): Merge conflict in a.txt');
+  h.snapshot.operation = 'merging'; h.snapshot.changes = [{ group: 'conflicts', path: 'a.txt' }]; h.settings.errorChoice = 'Abort…';
+  await h.action(branch('feature/ux'), 'Checkout');
+  // The first button is the conflict recovery (its label and command belong to recovery.ts).
+  assert.deepEqual(opened, [['owned']]); assert.equal(h.errorButtons.at(-1)!.length, 3); assert.deepEqual(h.errorButtons.at(-1)!.slice(1), ['Abort…', 'Open Source Control']);
+  assert.deepEqual(h.executed, [['gitPro.operation.abort']]);
+  h.settings.autoOpen = 'never'; h.snapshot.operation = 'idle'; h.settings.errorChoice = undefined;
+  await h.action(branch('feature/ux'), 'Checkout');
+  assert.equal(opened.length, 1, 'never keeps Conflicts closed'); assert.ok(!h.errorButtons.at(-1)!.includes('Abort…'), 'No operation, no Abort');
+  h.settings.autoOpen = 'gitPro'; h.settings.checkoutError = new Error('Resolve and stage all conflicts before continuing.'); h.snapshot.operation = 'merging';
+  await h.action(branch('feature/ux'), 'Checkout');
+  assert.equal(opened.length, 1, 'A plain error that mentions conflicts is not a conflict failure'); assert.ok(!h.errorButtons.at(-1)!.includes('Abort…'));
+  h.settings.checkoutError = new GitFailure('conflict', 'conflict'); h.snapshot.changes = [];
+  await h.action(branch('feature/ux'), 'Checkout'); assert.equal(opened.length, 1, 'No conflicts left after the refresh, nothing to open');
+  h.instance.dispose();
+});
+
+test('Branches view marks the checked-out local branch gitPro.branch.current and keeps local and remote values', () => {
+  class TreeItem { id?: string; contextValue?: string; description?: string; command?: unknown; constructor(readonly label: string, readonly state?: number) {} }
+  const vscode = { EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} }, TreeItem, TreeItemCollapsibleState: { Collapsed: 1 },
+    ThemeIcon: class { constructor(readonly id: string, readonly color?: unknown) {} }, ThemeColor: class { constructor(readonly id: string) {} } };
+  const source = path.resolve(__dirname, '../../src/views/branches/branches.provider.js'), load = createRequire(source), exports: Record<string, unknown> = {};
+  runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  const store = { head: 'main' }, git = { registry: { onDidInvalidate: () => ({ dispose() {} }), store: { get: () => store } } };
+  const provider = new (exports.BranchesProvider as new (git: unknown) => { getTreeItem(node: unknown): TreeItem; dispose(): void })(git);
+  const item = (info: BranchInfo) => provider.getTreeItem({ kind: 'branch', repositoryId: 'owned', branch: info });
+  assert.equal(item(branch('main')).contextValue, 'gitPro.branch.current'); assert.equal(item(branch('main')).description, 'Current');
+  assert.equal(item(branch('feature')).contextValue, 'gitPro.branch.local'); assert.equal(item(branch('main', true)).contextValue, 'gitPro.branch.remote');
+  store.head = 'feature'; assert.equal(item(branch('main')).contextValue, 'gitPro.branch.local');
+  assert.deepEqual(Array.from((item(branch('feature')).command as { arguments: unknown[] }).arguments), [{ kind: 'branch', repositoryId: 'owned', branch: branch('feature') }]);
+  provider.dispose();
 });

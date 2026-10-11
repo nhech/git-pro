@@ -7,8 +7,9 @@ import { HistoryService } from '../git/history/history.service';
 import { RevisionProvider } from '../documents/revision-provider';
 import { editMessage } from './message-editor';
 import { readRepositoryToolsContext } from '../views/tools/repository-tools-context';
+import { createSurfaces, isConflictFailure, type Surfaces } from '../conflicts/surfaces';
 export class ToolsCommands {
-  constructor(private readonly tools:ToolsService,private readonly worktrees:WorktreeService,private readonly history:HistoryService,private readonly revisions:RevisionProvider){}
+  constructor(private readonly tools:ToolsService,private readonly worktrees:WorktreeService,private readonly history:HistoryService,private readonly revisions:RevisionProvider,private readonly surfaces:Surfaces=createSurfaces()){}
   private async pick(title:string,items:readonly string[]){return vscode.window.showQuickPick(items.map(value=>({label: value})),{title}).then(choice=>choice?.label);}
   private async input(prompt:string,value?:string){return vscode.window.showInputBox({prompt,...(value?{value}:{}),ignoreFocusOut:true});}
   private async confirm(preview:ToolPreview|WorktreePreview,details:string,execute:()=>Promise<void>){
@@ -41,7 +42,14 @@ export class ToolsCommands {
     if(action==='Create Branch'){const name=await this.input('New branch from stash');if(name)await this.apply(id,{kind:'stashBranch',selector:stash.selector,expected:stash.oid,name},`Create branch ${name} and apply this stash?`);return;}
     const index=await this.pick('Restore original staged state?',['Working tree only','Restore index too']);if(!index)return;
     const preview=await this.tools.preview(id,{kind:'stashApply',oid:stash.oid,index:index==='Restore index too'});
-    await this.confirm(preview,`${action} stash ${stash.oid}? Conflicts retain the stash.`,()=>action==='Pop'?this.tools.pop(preview,stash):this.tools.execute(preview));
+    await this.confirm(preview,`${action} stash ${stash.oid}? Conflicts retain the stash.`,async()=>{
+      try{await (action==='Pop'?this.tools.pop(preview,stash):this.tools.execute(preview));}
+      catch(error){
+        // A stash leaves no operation metadata: the Conflicts tab names its source from this record, and only a Pop that kept its stash offers Drop Stash.
+        if(isConflictFailure(error)&&this.tools.advanced.git.registry.store.get(id)?.changes.some(change=>change.group==='conflicts'))this.surfaces.conflictSources.set(id,{kind:action==='Pop'?'stashPop':'stashApply',oid:stash.oid,selector:stash.selector});
+        throw error;
+      }
+    });
   }
   private async tags(id:string,key?:string){
     const prefix=key?'':await this.input('Tag prefix filter (empty lists first 500)','');if(prefix===undefined)return;
@@ -49,11 +57,9 @@ export class ToolsCommands {
     if(!selected.tag){const name=await this.input('New tag name');if(!name)return;validateBranchName(name);const snapshot=await this.tools.advanced.snapshot(id);if(!snapshot.head)throw new Error('Create a commit first.');const type=await this.pick('Tag type',['Lightweight','Annotated']);if(!type)return;const message=type==='Annotated'?await editMessage('','Tag annotation'):undefined;if(type==='Annotated'&&!message)return;await this.apply(id,{kind:'tagCreate',name,oid:snapshot.head,...(message?{message}:{})},`Create ${type.toLowerCase()} tag ${name} at ${snapshot.head}? Configured signing applies.`);return;}
     const tag=selected.tag,action=await this.pick('Tag Actions',['View Message','Compare With HEAD','Checkout Detached','Create Branch','Push',...(key?[]:['Push All Listed Tags']),'Delete Local','Delete Remote']);if(!action)return;
     if(action==='Compare With HEAD'){
-      const comparison=await this.history.compare(id,await this.tools.tagCommit(id,tag),'HEAD');
-      if(!comparison.files.length){await vscode.window.showInformationMessage('No file changes between this tag and pinned HEAD.');return;}
-      const choice=await vscode.window.showQuickPick(comparison.files.map(file=>({label:redact(file.path),description:file.status,file})),{title:redact(`${tag.name} → HEAD — choose a file`)});if(!choice)return;
-      const file=choice.file,[left,right]=await Promise.all([this.history.revision(id,comparison.from,file.originalPath??file.path),this.history.revision(id,comparison.to,file.path)]);
-      await vscode.commands.executeCommand('vscode.diff',this.revisions.add(left,file.originalPath??file.path),this.revisions.add(right,file.path),redact(`${tag.name} (${comparison.from.slice(0,8)}) → HEAD (${comparison.to.slice(0,8)}): ${file.path}`));return;
+      // The Compare tab pins both sides itself and keeps the commits, the files and Open All Changes together.
+      const compare=this.surfaces.compare;if(!compare)throw new Error('The Compare tab is still starting. Try again.');
+      await compare.openRefs(id,`refs/tags/${tag.name}`,'HEAD');return;
     }
     if(action==='Checkout Detached'){await this.apply(id,{kind:'tagCheckout',oid:await this.tools.tagCommit(id,tag)},`Checkout ${tag.name} at its pinned commit in detached HEAD?`);return;}
     if(action==='Create Branch'){const name=await this.input('New branch from tag');if(name)await this.apply(id,{kind:'tagBranch',name,oid:await this.tools.tagCommit(id,tag)},`Create and checkout ${name} from ${tag.name}?`);return;}

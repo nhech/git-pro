@@ -1,4 +1,7 @@
 import type { ChangeGroup, FileChange } from '../git/git-parser';
+import type { GitOperation } from '../state/operation-state';
+import type { ConflictKind } from '../git/conflicts/conflict-contract';
+import { conflictKind, isConflictCode } from '../git/conflicts/conflict-kinds';
 
 export interface TreeVisual {
   readonly icon: string;
@@ -23,8 +26,20 @@ export function changeFileVisual(change: Pick<FileChange, 'group' | 'status'>): 
   return changeGroupVisual.working;
 }
 
-export function changeStatusLabel(change: Pick<FileChange, 'group' | 'status'>): string {
-  if (change.group === 'conflicts') return 'Conflict';
+/** WebStorm's kind wording (D3): "us" is Yours and "them" is Theirs. */
+export const conflictKindLabels: Readonly<Record<ConflictKind, string>> = {
+  bothModified: 'Both modified', bothAdded: 'Both added', deletedByUs: 'Deleted by us', deletedByThem: 'Deleted by them', addedByUs: 'Added by us', addedByThem: 'Added by them', bothDeleted: 'Both deleted',
+};
+
+/**
+ * `operation` decides which Git side is Yours (sidesFor, D3), so a conflict row reads "Deleted by them" for Git's DU during a rebase.
+ * Without it the one-sided kinds stay "Conflict" rather than guess a side.
+ */
+export function changeStatusLabel(change: Pick<FileChange, 'group' | 'status'>, operation?: GitOperation): string {
+  if (change.group === 'conflicts') {
+    if (!isConflictCode(change.status) || !operation && !['UU', 'AA', 'DD'].includes(change.status)) return 'Conflict';
+    return conflictKindLabels[conflictKind(change.status, operation ?? 'idle')];
+  }
   if (change.group === 'untracked' || change.status === '?') return 'Untracked';
   const labels: Readonly<Record<string, string>> = {
     A: 'Added', C: 'Copied', D: 'Deleted', M: 'Modified', R: 'Renamed', T: 'Type changed', U: 'Conflict',

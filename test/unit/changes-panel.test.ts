@@ -1,9 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import * as path from 'node:path';
+
+type Change={group:string;path:string;status:string};
+type Row={key:string;kind:string;group?:string;label:string;status?:string;conflict?:{mergeable:boolean;workingFile:boolean}};
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+/** Values built inside the vm context have that realm's prototypes; compare their JSON. */
+const same=(actual:unknown,expected:unknown,message?:string)=>assert.equal(JSON.stringify(actual),JSON.stringify(expected),message);
+/** The real panel against a recorded command bus and late-bound surfaces; the provider labels conflicts with their kind as the real one does. */
+async function conflictHarness(root:string,operation:string,changes:Change[],surfaces:Record<string,unknown>={}){
+  const file=path.resolve(__dirname,'../../src/views/changes/changes-panel.js'),load=createRequire(file),exports:Record<string,unknown>={};
+  const sent:Record<string,unknown>[]=[],commands:{id:string;args:unknown[]}[]=[];let receive:(value:unknown)=>void=()=>undefined;
+  const disposable={dispose:()=>undefined},onChange=()=>disposable;
+  const vscode={workspace:{onDidChangeConfiguration:onChange,getConfiguration:()=>({get:()=> 'status'})},Uri:{file:(value:string)=>`file:${value}`,joinPath:(_root:unknown,...parts:string[])=>parts.join('/')},commands:{executeCommand:async(id:string,...args:unknown[])=>{commands.push({id,args});}}};
+  runInNewContext(readFileSync(file,'utf8'),{exports,Buffer,setTimeout,clearTimeout,require:(name:string)=>name==='vscode'?vscode:load(name)});
+  const repo={id:'repo-A',root},nodes=changes.map(change=>({kind:'file',repositoryId:repo.id,change})),groups=[...new Set(changes.map(change=>change.group))].map(group=>({kind:'group',group}));
+  const store=new Map([[repo.id,{changes,operation}]]),registry={active:repo,list:()=>[repo],store,errors:new Map(),onDidChange:onChange};
+  const kinds:Record<string,string>={UU:'Both modified',DU:'Deleted by us',DD:'Both deleted'};
+  const provider={onDidChangeTreeData:onChange,getChildren:(node?:{group:string})=>node?nodes.filter(item=>item.change.group===node.group):groups,
+    getTreeItem:(node:{kind:string;group?:string;change?:Change})=>({label:node.kind==='file'?node.change!.path:node.group,description:node.kind==='file'?node.change!.group==='conflicts'?kinds[node.change!.status]:'Modified':'1'})};
+  const view={webview:{html:'',cspSource:'owned:',asWebviewUri:(uri:unknown)=>String(uri),onDidReceiveMessage:(callback:typeof receive)=>{receive=callback;return disposable;},postMessage:async(value:Record<string,unknown>)=>{sent.push(value);return true;}},onDidDispose:onChange};
+  const holder={conflictSources:new Map(),...surfaces};
+  const panel=new (exports.ChangesPanel as new(context:unknown,registry:unknown,provider:unknown,surfaces:unknown)=>{resolveWebviewView(view:unknown):void;dispose():void})({extensionUri:'owned'},registry,provider,holder);
+  panel.resolveWebviewView(view);await settle();await settle();
+  const session=/data-session="([^"]+)"/.exec(view.webview.html)![1]!;
+  const state=()=>sent.filter(value=>value.type==='state').at(-1)!;
+  const rows=()=>state().rows as Row[],key=(label:string)=>rows().find(row=>row.label===label)!.key;
+  const request=async(message:Record<string,unknown>)=>{receive({session,...message});await settle();await settle();};
+  return {panel,sent,commands,state,rows,key,request,view,session,store,repo};
+}
 
 test('Changes host group actions resolve only the current group while header actions remain repository-wide',async()=>{
   const file=path.resolve(__dirname,'../../src/views/changes/changes-panel.js'),load=createRequire(file),exports:Record<string,unknown>={};
@@ -57,4 +87,58 @@ test('Changes rows for very long or wide-character paths keep short identities t
   receive({type:'action',session,action:'open',key:rows[0]!.key,keys:[rows[0]!.key]});await new Promise(resolve=>setImmediate(resolve));
   assert.equal(commands.at(-1)?.id,'gitPro.openFile');assert.equal(JSON.stringify(commands.at(-1)!.args),JSON.stringify([repo.id,rows[0]!.label]));
   panel.dispose();
+});
+
+test('Changes conflict rows carry their kind, Merge… eligibility and working-file presence, and route Merge…, Accept and Open in Conflicts by row identity',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'git-pro-changes-conflicts-'));
+  try{
+    await writeFile(path.join(root,'app.ts'),'<<<<<<< HEAD\n');await writeFile(path.join(root,'old.ts'),'kept\n');
+    const h=await conflictHarness(root,'merging',[{group:'conflicts',path:'app.ts',status:'UU'},{group:'conflicts',path:'old.ts',status:'DU'},{group:'conflicts',path:'gone.ts',status:'DD'},{group:'working',path:'readme.md',status:'M'}]);
+    const conflict=(label:string)=>h.rows().find(row=>row.label===label)!;
+    assert.deepEqual([conflict('app.ts').status,conflict('old.ts').status,conflict('gone.ts').status],['Both modified','Deleted by us','Both deleted']);
+    assert.equal(JSON.stringify([conflict('app.ts').conflict,conflict('old.ts').conflict,conflict('gone.ts').conflict]),JSON.stringify([{mergeable:true,workingFile:true},{mergeable:false,workingFile:true},{mergeable:false,workingFile:false}]),'lstat decides Open File; only UU and AA merge');
+    assert.equal(conflict('readme.md').conflict,undefined,'other rows carry no conflict data');
+    await h.request({type:'action',action:'merge',key:h.key('app.ts')});same(h.commands.at(-1),{id:'gitPro.conflicts.merge',args:[h.repo.id,['app.ts']]},'Merge… names the repository and the path, never a webview value');
+    const before=h.commands.length;await h.request({type:'action',action:'merge',key:h.key('old.ts')});assert.equal(h.commands.length,before);assert.match(String(h.sent.at(-1)?.message),/Accept Yours or Accept Theirs/);
+    await h.request({type:'action',action:'diff',key:h.key('app.ts')});assert.equal(h.commands.at(-1)?.id,'gitPro.conflicts.merge','a conflicted file never reaches Diff');
+    await h.request({type:'action',action:'diff',key:h.key('old.ts')});same(h.commands.at(-1),{id:'gitPro.conflicts.open',args:[h.repo.id,{select:['old.ts']}]});
+    await h.request({type:'action',action:'acceptYours',key:h.key('app.ts'),keys:[h.key('app.ts'),h.key('old.ts')]});
+    same(h.commands.at(-1),{id:'gitPro.conflicts.acceptYours',args:[h.repo.id,['app.ts','old.ts']]},'the Conflicts command confirms; the sidebar never overwrites in one click');
+    await h.request({type:'action',action:'acceptTheirs',keys:[h.key('gone.ts')]});same(h.commands.at(-1),{id:'gitPro.conflicts.acceptTheirs',args:[h.repo.id,['gone.ts']]});
+    const count=h.commands.length;await h.request({type:'action',action:'acceptYours',keys:[h.key('app.ts'),h.key('readme.md')]});
+    assert.equal(h.commands.length,count,'Accept is refused for a selection with a non-conflict row');assert.match(String(h.sent.at(-1)?.message),/current conflicts only/);
+    await h.request({type:'action',action:'openConflicts',keys:[h.key('app.ts'),h.key('gone.ts')]});same(h.commands.at(-1),{id:'gitPro.conflicts.open',args:[h.repo.id,{select:['app.ts','gone.ts']}]});
+    await h.request({type:'action',action:'openConflicts',key:h.key('conflicts'),keys:[h.key('conflicts')]});same(h.commands.at(-1),{id:'gitPro.conflicts.open',args:[h.repo.id]},'the group opens the whole tab');
+    await h.request({type:'action',action:'openConflicts',keys:[h.key('readme.md')]});assert.match(String(h.sent.at(-1)?.message),/current conflicts only/);
+    h.panel.dispose();
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('Changes banner comes from the operation summary and its buttons act only while offered',async()=>{
+  const summary={repositoryId:'repo-A',operation:'merging',title:'Merging feature into main',yours:{label:'Yours',detail:'main'},theirs:{label:'Theirs',detail:'feature'},sides:{yours:{stage:2,flag:'ours'},theirs:{stage:3,flag:'theirs'}},conflicts:1,editStop:false,canContinue:false,canSkip:false,canAbort:true,nativeOnly:false};
+  const h=await conflictHarness('fixture-missing','merging',[{group:'conflicts',path:'app.ts',status:'UU'}],{operation:{summary:async()=>summary}});
+  const banner=h.state().operation as {text:string;name:string;actions:{id:string;disabled?:string}[]};
+  assert.equal(banner.text,'Merging feature into main · 1 conflict');assert.equal(banner.name,'Merge in progress');
+  same(banner.actions.map(item=>[item.id,Boolean(item.disabled)]),[['resolve',false],['continue',true],['abort',false]]);
+  await h.request({type:'operation',action:'resolve'});same(h.commands.at(-1),{id:'gitPro.conflicts.open',args:['repo-A']});
+  await h.request({type:'operation',action:'abort'});same(h.commands.at(-1),{id:'gitPro.operation.abort',args:['repo-A']},'Abort goes to the command that confirms first');
+  const before=h.commands.length;
+  await h.request({type:'operation',action:'continue'});assert.equal(h.commands.length,before);assert.equal(h.sent.at(-1)?.message,'Resolve and stage all conflicts first.');
+  await h.request({type:'operation',action:'skip'});assert.equal(h.commands.length,before,'a merge offers no Skip');assert.match(String(h.sent.at(-1)?.message),/Review the banner again/);
+  await h.request({type:'operation',action:'exec'});assert.equal(h.commands.length,before);assert.match(String(h.sent.at(-1)?.message),/Invalid Changes view request/);
+  h.panel.dispose();
+});
+
+test('Changes rows never wait long for a slow operation summary and pick up its wording once it arrives',async()=>{
+  let release:(value:unknown)=>void=()=>undefined;const pending=new Promise(resolve=>{release=resolve;});
+  const summary={repositoryId:'repo-A',operation:'rebasing',title:'Rebasing feature onto main',progress:{current:3,total:7},yours:{label:'Yours',oid:'9f8e7d6c5b4a39281706f5e4d3c2b1a098765432',subject:'Add login',detail:'Rebasing 9f8e7d6 from feature'},theirs:{label:'Theirs',detail:'main'},sides:{yours:{stage:3,flag:'theirs'},theirs:{stage:2,flag:'ours'}},conflicts:2,editStop:false,canContinue:false,canSkip:true,canAbort:true,nativeOnly:false};
+  const calls:string[]=[];
+  const h=await conflictHarness('fixture-missing','rebasing',[{group:'conflicts',path:'a.ts',status:'UU'},{group:'conflicts',path:'b.ts',status:'UU'}],{operation:{summary:(id:string)=>{calls.push(id);return pending;}}});
+  await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal((h.state().operation as {text:string}).text,'Rebase in progress · 2 conflicts','plain wording first');assert.equal(h.rows().length,3,'the rows did not wait');
+  release(summary);await settle();await settle();await settle();
+  assert.equal((h.state().operation as {text:string}).text,'Rebasing feature onto main · 3/7 · 9f8e7d6 Add login · 2 conflicts');
+  same((h.state().operation as {actions:{id:string}[]}).actions.map(item=>item.id),['resolve','continue','skip','abort']);
+  assert.ok(calls.length>=2&&calls.length<=3,'one re-render once the summary arrives');
+  h.panel.dispose();
 });

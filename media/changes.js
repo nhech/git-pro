@@ -1,32 +1,40 @@
 (() => {
   const vscode=acquireVsCodeApi(),rows=document.getElementById('rows'),notice=document.getElementById('notice'),selectionBar=document.getElementById('selection-actions'),selectionCount=document.getElementById('selection-count'),more=document.getElementById('more');
-  const selected=new Set(),collapsed=new Set();let session=document.body.dataset.session||'',items=[],rowByKey=new Map(),busy=false,menu,focusedKey='',anchorKey='',visibleCount=200,stateIdentity='';
+  const banner=document.getElementById('operation'),bannerIcon=document.getElementById('operation-icon'),bannerText=document.getElementById('operation-text'),bannerActions=document.getElementById('operation-actions');
+  const selected=new Set(),collapsed=new Set();let session=document.body.dataset.session||'',items=[],rowByKey=new Map(),busy=false,menu,focusedKey='',anchorKey='',visibleCount=200,stateIdentity='',operationIdentity='';
   const send=(message)=>session&&vscode.postMessage({...message,session});
   const publishSelection=()=>send({type:'select',keys:[...selected]});
   const branch=row=>row.kind==='group'||row.kind==='folder';
-  const stateClass=status=>({'Added':'added','Untracked':'untracked','Modified':'modified','Deleted':'deleted','Renamed':'renamed','Copied':'copied','Type changed':'type','Conflict':'conflict'}[status]||'other');
+  // Conflict rows carry their kind ("Both modified") as the status word; the group decides their colour.
+  const stateClass=row=>row.group==='conflicts'?'conflict':({'Added':'added','Untracked':'untracked','Modified':'modified','Deleted':'deleted','Renamed':'renamed','Copied':'copied','Type changed':'type','Conflict':'conflict'}[row.status]||'other');
+  const bulkActions=new Set(['stage','unstage','discard','acceptYours','acceptTheirs','openConflicts']),conflictActions=new Set(['acceptYours','acceptTheirs','openConflicts']),operationActions=new Set(['resolve','continue','skip','abort','amend','sourceControl']);
+  // Git has no diff for a conflicted file: Merge… opens both-modified and both-added files, the Conflicts tab every other kind.
+  const openRow=row=>row.group!=='conflicts'?action('diff',row.key):row.conflict?.mergeable?action('merge',row.key):action('openConflicts',row.key,[row.key]);
   const iconFor=row=>row.kind==='group'?(row.group==='staged'?'✓':row.group==='conflicts'?'!':row.group==='untracked'?'+':'◉'):row.kind==='folder'?'▰':row.status==='Deleted'?'−':row.status==='Renamed'?'↗':row.status==='Copied'?'⧉':row.status==='Type changed'?'◇':row.status==='Conflict'||row.group==='conflicts'?'!':row.status==='Added'||row.status==='Untracked'?'+':'•';
   const visible=row=>{let parent=row.parent;while(parent){if(collapsed.has(parent))return false;parent=rowByKey.get(parent)?.parent;}return true;};
   const shownRows=()=>items.filter(visible).slice(0,visibleCount);
   const action=(name,key,keys)=>{if(!busy)send({type:'action',action:name,...(key?{key}:{}),...(keys?{keys}:{})});};
   const selectionNodes=()=>[...selected].map(key=>rowByKey.get(key)).filter(Boolean);
   const canMutate=(name,nodes)=>{
+    if(conflictActions.has(name))return nodes.length>0&&nodes.length<=100&&nodes.every(row=>row.kind==='file'&&row.group==='conflicts');
     const compatible=nodes.length>0&&(nodes.every(row=>row.kind==='file')||nodes.length===1&&nodes[0].kind==='folder');
     return compatible&&nodes.every(row=>name==='stage'?['working','untracked'].includes(row.group):name==='unstage'?row.group==='staged':row.group==='working');
   };
   const contextActions=row=>{
-    if(row.kind==='group')return row.group==='staged'?[['unstageAll','Unstage Staged Changes']]:['working','untracked'].includes(row.group)?[['stageAll',`Stage ${row.label}`]]:[];
+    if(row.kind==='group')return row.group==='staged'?[['unstageAll','Unstage Staged Changes']]:['working','untracked'].includes(row.group)?[['stageAll',`Stage ${row.label}`]]:row.group==='conflicts'?[['openConflicts','Resolve Conflicts…']]:[];
     if(row.kind==='folder')return row.group==='staged'?[['unstage','Unstage Folder']]:row.group==='working'?[['stage','Stage Folder'],['discard','Discard Folder']]:row.group==='untracked'?[['stage','Stage Folder']]:[];
     if(row.kind!=='file')return[];
-    const result=row.group==='conflicts'?[['resolve','Resolve Conflict']]:[['diff','Diff']];if(row.group==='staged')result.push(['unstage','Unstage']);if(['working','untracked'].includes(row.group))result.push(['stage','Stage']);result.push(['history','File History'],['copyPath','Copy Relative Path']);if(row.group==='working')result.push(['discard','Discard']);return result;
+    if(row.group==='conflicts')return[...(row.conflict?.mergeable?[['merge','Merge…']]:[]),['acceptYours','Accept Yours'],['acceptTheirs','Accept Theirs'],['openConflicts','Open in Conflicts'],['resolve','Resolve Conflict'],['history','File History'],['copyPath','Copy Relative Path']];
+    const result=[['diff','Diff']];if(row.group==='staged')result.push(['unstage','Unstage']);if(['working','untracked'].includes(row.group))result.push(['stage','Stage']);result.push(['history','File History'],['copyPath','Copy Relative Path']);if(row.group==='working')result.push(['discard','Discard']);return result;
   };
   // Inline row actions, as in native Source Control: shown on hover, focus and selection. Each one is also in the context menu.
   const inlineActions=row=>{
-    if(row.kind==='group')return row.group==='staged'?[['unstageAll','Unstage All Changes']]:['working','untracked'].includes(row.group)?[['stageAll',`Stage All ${row.label}`]]:[];
+    if(row.kind==='group')return row.group==='staged'?[['unstageAll','Unstage All Changes']]:['working','untracked'].includes(row.group)?[['stageAll',`Stage All ${row.label}`]]:row.group==='conflicts'?[['openConflicts','Resolve Conflicts…']]:[];
     if(row.kind==='folder')return row.group==='staged'?[['unstage','Unstage Folder']]:row.group==='working'?[['discard','Discard Folder'],['stage','Stage Folder']]:row.group==='untracked'?[['stage','Stage Folder']]:[];
     if(row.kind!=='file')return[];
-    const deleted=stateClass(row.status)==='deleted',result=[];
-    if(row.group==='conflicts')return[...(deleted?[]:[['open','Open File']]),['resolve','Resolve Conflict']];
+    const deleted=stateClass(row)==='deleted',result=[];
+    // The host checks the working file with lstat: a conflict without one (normally both deleted) has nothing to open.
+    if(row.group==='conflicts')return[...(row.conflict?.workingFile===false?[]:[['open','Open File']]),row.conflict?.mergeable?['merge','Merge…']:['openConflicts','Open in Conflicts']];
     if(row.group!=='untracked')result.push(['diff','Open Changes']);
     if(!deleted)result.push(['open','Open File']);
     if(row.group==='working')result.push(['discard','Discard Changes']);
@@ -68,13 +76,16 @@
       history:['M7.99909 3C10.7605 3 12.9991 5.23858 12.9991 8C12.9991 10.7614 10.7605 13 7.99909 13C5.39117 13 3.2491 11.003 3.0195 8.45512C2.99471 8.1801 2.75167 7.97723 2.47664 8.00202C2.20161 8.0268 1.99875 8.26985 2.02353 8.54488C2.29916 11.6035 4.86898 14 7.99909 14C11.3128 14 13.9991 11.3137 13.9991 8C13.9991 4.68629 11.3128 2 7.99909 2C6.20656 2 4.59815 2.78613 3.49909 4.03138V2.5C3.49909 2.22386 3.27524 2 2.99909 2C2.72295 2 2.49909 2.22386 2.49909 2.5V5.5C2.49909 5.77614 2.72295 6 2.99909 6H3.08812C3.09498 6.00014 3.10184 6.00014 3.10868 6H5.99909C6.27524 6 6.49909 5.77614 6.49909 5.5C6.49909 5.22386 6.27524 5 5.99909 5H3.99863C4.91128 3.78495 6.36382 3 7.99909 3ZM7.99909 5.5C7.99909 5.22386 7.77524 5 7.49909 5C7.22295 5 6.99909 5.22386 6.99909 5.5V8.5C6.99909 8.77614 7.22295 9 7.49909 9H9.49909C9.77524 9 9.99909 8.77614 9.99909 8.5C9.99909 8.22386 9.77524 8 9.49909 8H7.99909V5.5Z'],
       copyPath:['M3 5V12.73C2.4 12.38 2 11.74 2 11V5C2 2.79 3.79 1 6 1H9C9.74 1 10.38 1.4 10.73 2H6C4.35 2 3 3.35 3 5ZM11 15H6C4.897 15 4 14.103 4 13V5C4 3.897 4.897 3 6 3H11C12.103 3 13 3.897 13 5V13C13 14.103 12.103 15 11 15ZM12 5C12 4.448 11.552 4 11 4H6C5.448 4 5 4.448 5 5V13C5 13.552 5.448 14 6 14H11C11.552 14 12 13.552 12 13V5Z'],
       discard:['M3.00098 2.5C3.00098 2.22386 3.22483 2 3.50098 2C3.77712 2 4.00098 2.22386 4.00098 2.5V6.34262L7.17202 3.17157C8.73412 1.60948 11.2668 1.60948 12.8289 3.17157C14.391 4.73367 14.391 7.26633 12.8289 8.82843L7.80375 13.8536C7.60849 14.0488 7.2919 14.0488 7.09664 13.8536C6.90138 13.6583 6.90138 13.3417 7.09664 13.1464L12.1218 8.12132C13.2933 6.94975 13.2933 5.05025 12.1218 3.87868C10.9502 2.70711 9.0507 2.70711 7.87913 3.87868L4.75781 7H8.50098C8.77712 7 9.00098 7.22386 9.00098 7.5C9.00098 7.77614 8.77712 8 8.50098 8H3.60098C3.26961 8 3.00098 7.73137 3.00098 7.4V2.5Z'],
-      resolve:['M11.5 5.99998C10.9265 6.00006 10.3704 6.19736 9.92505 6.55877C9.47971 6.92018 9.17217 7.42373 9.05402 7.98498C7.17202 7.85998 5.46602 6.96298 5.08102 5.93098C5.67998 5.78724 6.20478 5.42744 6.55479 4.92058C6.9048 4.41373 7.05538 3.7955 6.97763 3.18446C6.89989 2.57343 6.5993 2.0126 6.13352 1.60954C5.66774 1.20648 5.06956 0.989562 4.45369 1.00039C3.83782 1.01121 3.24763 1.24902 2.7963 1.6682C2.34497 2.08738 2.06428 2.65842 2.00806 3.27181C1.95184 3.8852 2.12404 4.49776 2.49165 4.992C2.85925 5.48624 3.39638 5.82737 4.00002 5.94998V10.05C3.393 10.1739 2.85361 10.5188 2.48642 11.0178C2.11923 11.5168 1.95041 12.1343 2.01268 12.7507C2.07495 13.3671 2.36387 13.9385 2.82344 14.3539C3.28301 14.7694 3.88048 14.9995 4.50002 14.9995C5.11956 14.9995 5.71703 14.7694 6.1766 14.3539C6.63616 13.9385 6.92509 13.3671 6.98736 12.7507C7.04963 12.1343 6.88081 11.5168 6.51362 11.0178C6.14643 10.5188 5.60704 10.1739 5.00002 10.05V7.46598C6.15462 8.38805 7.57188 8.92022 9.04802 8.98598C9.1401 9.4506 9.36227 9.8795 9.68867 10.2227C10.0151 10.566 10.4323 10.8094 10.8917 10.9248C11.3511 11.0401 11.8338 11.0225 12.2836 10.8741C12.7334 10.7257 13.1318 10.4526 13.4324 10.0865C13.733 9.72047 13.9234 9.27655 13.9815 8.80647C14.0395 8.33639 13.9629 7.85948 13.7604 7.43128C13.5579 7.00308 13.238 6.64122 12.8378 6.38782C12.4376 6.13442 11.9737 5.99992 11.5 5.99998ZM3.00002 3.49998C3.00002 3.20331 3.08799 2.9133 3.25282 2.66662C3.41764 2.41995 3.65191 2.22769 3.92599 2.11416C4.20008 2.00063 4.50168 1.97092 4.79265 2.0288C5.08363 2.08668 5.3509 2.22954 5.56068 2.43932C5.77046 2.6491 5.91332 2.91637 5.9712 3.20734C6.02908 3.49831 5.99937 3.79991 5.88584 4.074C5.77231 4.34809 5.58005 4.58236 5.33337 4.74718C5.0867 4.912 4.79669 4.99998 4.50002 4.99998C4.10219 4.99998 3.72066 4.84194 3.43936 4.56064C3.15805 4.27933 3.00002 3.8978 3.00002 3.49998ZM6.00002 12.5C6.00002 12.7966 5.91205 13.0867 5.74722 13.3333C5.5824 13.58 5.34813 13.7723 5.07404 13.8858C4.79996 13.9993 4.49836 14.029 4.20738 13.9712C3.91641 13.9133 3.64914 13.7704 3.43936 13.5606C3.22958 13.3509 3.08672 13.0836 3.02884 12.7926C2.97096 12.5016 3.00067 12.2 3.1142 11.926C3.22773 11.6519 3.41999 11.4176 3.66666 11.2528C3.91334 11.088 4.20335 11 4.50002 11C4.89784 11 5.27938 11.158 5.56068 11.4393C5.84198 11.7206 6.00002 12.1022 6.00002 12.5ZM11.5 9.99998C11.2033 9.99998 10.9133 9.91201 10.6667 9.74718C10.42 9.58236 10.2277 9.34809 10.1142 9.074C10.0007 8.79991 9.97096 8.49831 10.0288 8.20734C10.0867 7.91637 10.2296 7.6491 10.4394 7.43932C10.6491 7.22954 10.9164 7.08668 11.2074 7.0288C11.4984 6.97092 11.8 7.00063 12.074 7.11416C12.3481 7.22769 12.5824 7.41995 12.7472 7.66662C12.912 7.9133 13 8.20331 13 8.49998C13 8.8978 12.842 9.27933 12.5607 9.56064C12.2794 9.84194 11.8978 9.99998 11.5 9.99998Z']
-    },kind=name==='stageAll'?'stage':name==='unstageAll'?'unstage':name;
+      resolve:['M11.5 5.99998C10.9265 6.00006 10.3704 6.19736 9.92505 6.55877C9.47971 6.92018 9.17217 7.42373 9.05402 7.98498C7.17202 7.85998 5.46602 6.96298 5.08102 5.93098C5.67998 5.78724 6.20478 5.42744 6.55479 4.92058C6.9048 4.41373 7.05538 3.7955 6.97763 3.18446C6.89989 2.57343 6.5993 2.0126 6.13352 1.60954C5.66774 1.20648 5.06956 0.989562 4.45369 1.00039C3.83782 1.01121 3.24763 1.24902 2.7963 1.6682C2.34497 2.08738 2.06428 2.65842 2.00806 3.27181C1.95184 3.8852 2.12404 4.49776 2.49165 4.992C2.85925 5.48624 3.39638 5.82737 4.00002 5.94998V10.05C3.393 10.1739 2.85361 10.5188 2.48642 11.0178C2.11923 11.5168 1.95041 12.1343 2.01268 12.7507C2.07495 13.3671 2.36387 13.9385 2.82344 14.3539C3.28301 14.7694 3.88048 14.9995 4.50002 14.9995C5.11956 14.9995 5.71703 14.7694 6.1766 14.3539C6.63616 13.9385 6.92509 13.3671 6.98736 12.7507C7.04963 12.1343 6.88081 11.5168 6.51362 11.0178C6.14643 10.5188 5.60704 10.1739 5.00002 10.05V7.46598C6.15462 8.38805 7.57188 8.92022 9.04802 8.98598C9.1401 9.4506 9.36227 9.8795 9.68867 10.2227C10.0151 10.566 10.4323 10.8094 10.8917 10.9248C11.3511 11.0401 11.8338 11.0225 12.2836 10.8741C12.7334 10.7257 13.1318 10.4526 13.4324 10.0865C13.733 9.72047 13.9234 9.27655 13.9815 8.80647C14.0395 8.33639 13.9629 7.85948 13.7604 7.43128C13.5579 7.00308 13.238 6.64122 12.8378 6.38782C12.4376 6.13442 11.9737 5.99992 11.5 5.99998ZM3.00002 3.49998C3.00002 3.20331 3.08799 2.9133 3.25282 2.66662C3.41764 2.41995 3.65191 2.22769 3.92599 2.11416C4.20008 2.00063 4.50168 1.97092 4.79265 2.0288C5.08363 2.08668 5.3509 2.22954 5.56068 2.43932C5.77046 2.6491 5.91332 2.91637 5.9712 3.20734C6.02908 3.49831 5.99937 3.79991 5.88584 4.074C5.77231 4.34809 5.58005 4.58236 5.33337 4.74718C5.0867 4.912 4.79669 4.99998 4.50002 4.99998C4.10219 4.99998 3.72066 4.84194 3.43936 4.56064C3.15805 4.27933 3.00002 3.8978 3.00002 3.49998ZM6.00002 12.5C6.00002 12.7966 5.91205 13.0867 5.74722 13.3333C5.5824 13.58 5.34813 13.7723 5.07404 13.8858C4.79996 13.9993 4.49836 14.029 4.20738 13.9712C3.91641 13.9133 3.64914 13.7704 3.43936 13.5606C3.22958 13.3509 3.08672 13.0836 3.02884 12.7926C2.97096 12.5016 3.00067 12.2 3.1142 11.926C3.22773 11.6519 3.41999 11.4176 3.66666 11.2528C3.91334 11.088 4.20335 11 4.50002 11C4.89784 11 5.27938 11.158 5.56068 11.4393C5.84198 11.7206 6.00002 12.1022 6.00002 12.5ZM11.5 9.99998C11.2033 9.99998 10.9133 9.91201 10.6667 9.74718C10.42 9.58236 10.2277 9.34809 10.1142 9.074C10.0007 8.79991 9.97096 8.49831 10.0288 8.20734C10.0867 7.91637 10.2296 7.6491 10.4394 7.43932C10.6491 7.22954 10.9164 7.08668 11.2074 7.0288C11.4984 6.97092 11.8 7.00063 12.074 7.11416C12.3481 7.22769 12.5824 7.41995 12.7472 7.66662C12.912 7.9133 13 8.20331 13 8.49998C13 8.8978 12.842 9.27933 12.5607 9.56064C12.2794 9.84194 11.8978 9.99998 11.5 9.99998Z'],
+      acceptYours:['M13.5 8.00023H3.70701L7.85301 3.85423C8.04801 3.65923 8.04801 3.34223 7.85301 3.14723C7.65801 2.95223 7.34101 2.95223 7.14601 3.14723L2.14601 8.14723C1.95101 8.34223 1.95101 8.65923 2.14601 8.85423L7.14601 13.8542C7.24401 13.9522 7.37201 14.0002 7.50001 14.0002C7.62801 14.0002 7.75601 13.9512 7.85401 13.8542C8.04901 13.6592 8.04901 13.3422 7.85401 13.1472L3.70801 9.00123H13.501C13.777 9.00123 14.001 8.77723 14.001 8.50123C14.001 8.22523 13.777 8.00123 13.501 8.00123L13.5 8.00023Z'],
+      acceptTheirs:['M13.854 8.14576L8.854 3.14576C8.659 2.95076 8.342 2.95076 8.147 3.14576C7.952 3.34076 7.952 3.65776 8.147 3.85276L12.293 7.99876H2.5C2.224 7.99876 2 8.22276 2 8.49876C2 8.77476 2.224 8.99876 2.5 8.99876H12.293L8.147 13.1448C7.952 13.3398 7.952 13.6568 8.147 13.8518C8.245 13.9498 8.373 13.9978 8.501 13.9978C8.629 13.9978 8.757 13.9488 8.855 13.8518L13.855 8.85176C14.05 8.65676 14.05 8.33976 13.855 8.14476L13.854 8.14576Z'],
+      openConflicts:['M2 4.5C2.55228 4.5 3 4.05228 3 3.5C3 2.94772 2.55228 2.5 2 2.5C1.44772 2.5 1 2.94772 1 3.5C1 4.05228 1.44772 4.5 2 4.5ZM2 9C2.55228 9 3 8.55228 3 8C3 7.44772 2.55228 7 2 7C1.44772 7 1 7.44772 1 8C1 8.55228 1.44772 9 2 9ZM3 12.5C3 13.0523 2.55228 13.5 2 13.5C1.44772 13.5 1 13.0523 1 12.5C1 11.9477 1.44772 11.5 2 11.5C2.55228 11.5 3 11.9477 3 12.5ZM5.5 3C5.22386 3 5 3.22386 5 3.5C5 3.77614 5.22386 4 5.5 4H14.5C14.7761 4 15 3.77614 15 3.5C15 3.22386 14.7761 3 14.5 3H5.5ZM5 8C5 7.72386 5.22386 7.5 5.5 7.5H14.5C14.7761 7.5 15 7.72386 15 8C15 8.27614 14.7761 8.5 14.5 8.5H5.5C5.22386 8.5 5 8.27614 5 8ZM5.5 12C5.22386 12 5 12.2239 5 12.5C5 12.7761 5.22386 13 5.5 13H14.5C14.7761 13 15 12.7761 15 12.5C15 12.2239 14.7761 12 14.5 12H5.5Z']
+    },kind=name==='stageAll'?'stage':name==='unstageAll'?'unstage':name==='merge'?'resolve':name;
     const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('class','menu-icon');icon.setAttribute('viewBox','0 0 16 16');icon.setAttribute('fill','currentColor');icon.setAttribute('aria-hidden','true');icon.setAttribute('focusable','false');
     for(const value of paths[kind]||[]){const segment=document.createElementNS('http://www.w3.org/2000/svg','path');segment.setAttribute('d',value);icon.append(segment);}return icon;
   };
   // Inline row actions use codicons, as native Source Control does.
-  const actionGlyph=id=>{const glyph=document.createElement('span');glyph.className='codicon codicon-'+({diff:'git-compare',open:'go-to-file',discard:'discard',stage:'add',stageAll:'add',unstage:'remove',unstageAll:'remove',resolve:'git-merge'})[id];glyph.setAttribute('aria-hidden','true');return glyph;};
+  const actionGlyph=id=>{const glyph=document.createElement('span');glyph.className='codicon codicon-'+({diff:'git-compare',open:'go-to-file',discard:'discard',stage:'add',stageAll:'add',unstage:'remove',unstageAll:'remove',resolve:'git-merge',merge:'git-merge',openConflicts:'list-unordered',acceptYours:'arrow-left',acceptTheirs:'arrow-right'})[id];glyph.setAttribute('aria-hidden','true');return glyph;};
   const focusRow=key=>{const target=rows.querySelector(`[data-key="${key}"]`);if(!target)return;focusedKey=key;for(const node of rows.querySelectorAll('[data-key]'))node.tabIndex=node===target?0:-1;target.focus();};
   const closeMenu=restore=>{if(menu){menu.remove();menu=undefined;}if(restore)focusRow(focusedKey);};
   const showMenu=(row,event)=>{
@@ -82,7 +93,7 @@
     focusedKey=row.key;menu=document.createElement('div');menu.className='context-menu';menu.setAttribute('role','menu');menu.setAttribute('aria-label',`${row.label} actions`);
     for(const [id,label] of contextActions(row)){
       if(id==='discard'){const separator=document.createElement('div');separator.className='menu-separator';separator.setAttribute('role','separator');separator.setAttribute('aria-orientation','horizontal');menu.append(separator);}
-      const bulk=['stage','unstage','discard'].includes(id),chosen=bulk&&selected.has(row.key)?[...selected]:[row.key];
+      const bulk=row.kind!=='group'&&bulkActions.has(id),chosen=bulk&&selected.has(row.key)?[...selected]:[row.key];
       const button=document.createElement('button');button.type='button';button.dataset.menuAction=id;button.setAttribute('role','menuitem');const text=document.createElement('span');text.className='menu-label';text.textContent=bulk&&chosen.length>1?`${label} ${chosen.length} Selected`:label;button.append(menuIcon(id),text);
       button.disabled=busy||bulk&&!canMutate(id,chosen.map(key=>rowByKey.get(key)).filter(Boolean));
       button.addEventListener('click',()=>{if(button.disabled)return;closeMenu(true);action(id,row.key,chosen);});menu.append(button);
@@ -96,23 +107,47 @@
     document.body.append(menu);const rect=menu.getBoundingClientRect();menu.style.left=`${Math.max(4,Math.min(event.clientX,innerWidth-rect.width-4))}px`;menu.style.top=`${Math.max(4,Math.min(event.clientY,innerHeight-rect.height-4))}px`;[...menu.querySelectorAll('button')].find(button=>!button.disabled)?.focus();
   };
   function renderSelection(){
-    const nodes=selectionNodes();
+    const nodes=selectionNodes(),conflicts=nodes.length>0&&nodes.every(row=>row.kind==='file'&&row.group==='conflicts');
     selectionBar.hidden=nodes.length===0;selectionCount.textContent=nodes.length?`${nodes.length} selected`:'';
-    for(const name of ['stage','unstage','discard'])selectionBar.querySelector(`[data-action="${name}"]`).disabled=busy||!canMutate(name,nodes);
+    // A conflict selection swaps Stage, Unstage and Discard for Accept Yours and Accept Theirs; the strip keeps its width.
+    for(const button of selectionBar.querySelectorAll('button[data-action]')){const name=button.dataset.action;button.hidden=conflictActions.has(name)!==conflicts;button.disabled=busy||!canMutate(name,nodes);}
     for(const item of rows.querySelectorAll('[data-key]')){item.setAttribute('aria-selected',String(selected.has(item.dataset.key)));item.tabIndex=item.dataset.key===focusedKey?0:-1;}
+    // Busy keeps banner buttons focusable (aria-disabled), so focus survives the confirmation a banner action opens.
+    for(const button of bannerActions.querySelectorAll('button'))button.setAttribute('aria-disabled',String(busy||button.dataset.reason!==undefined));
+  }
+  /** §3.4 operation banner. Host text arrives redacted and is rendered as text; only known action ids become buttons. */
+  function renderOperation(value){
+    const next=value&&typeof value==='object'&&typeof value.text==='string'&&Array.isArray(value.actions)?value:null,identity=JSON.stringify(next);
+    if(identity===operationIdentity)return;operationIdentity=identity;
+    const focused=banner.contains(document.activeElement)?document.activeElement.dataset.operationAction:undefined;
+    bannerActions.replaceChildren();banner.hidden=!next;
+    if(!next){bannerText.textContent='';return;}
+    banner.setAttribute('aria-label',typeof next.name==='string'?next.name:'Git operation');bannerIcon.className=`codicon codicon-${/^[a-z-]+$/.test(String(next.icon))?next.icon:'info'}`;
+    // Rewriting unchanged text would make the live region announce it again.
+    if(bannerText.textContent!==next.text)bannerText.textContent=next.text;
+    for(const item of next.actions){
+      if(!item||!operationActions.has(item.id)||typeof item.label!=='string')continue;
+      const button=document.createElement('button');button.type='button';button.dataset.operationAction=item.id;button.textContent=item.label;
+      button.title=typeof item.disabled==='string'?item.disabled:typeof item.title==='string'?item.title:item.label;if(item.primary===true)button.className='primary';
+      if(typeof item.disabled==='string')button.dataset.reason=item.disabled;
+      button.addEventListener('click',()=>{if(busy||button.dataset.reason!==undefined)return;closeMenu(false);send({type:'operation',action:item.id});});bannerActions.append(button);
+    }
+    renderSelection();if(focused)[...bannerActions.querySelectorAll('button')].find(button=>button.dataset.operationAction===focused)?.focus();
   }
   const selectRow=(row,event)=>{
     if(row.kind==='group')return;
+    // An anchor whose row is gone (staged, discarded, resolved) no longer anchors a range.
+    const anchored=rowByKey.has(anchorKey);
     if(event.ctrlKey||event.metaKey){if(selected.has(row.key))selected.delete(row.key);else if(selected.size<100)selected.add(row.key);else notice.textContent='Select up to 100 entries at a time.';}
-    else if(event.shiftKey&&anchorKey){const shown=shownRows().filter(item=>item.kind==='file'),from=shown.findIndex(item=>item.key===anchorKey),to=shown.findIndex(item=>item.key===row.key);selected.clear();if(from>=0&&to>=0)for(const item of shown.slice(Math.min(from,to),Math.max(from,to)+1).slice(0,100))selected.add(item.key);else selected.add(row.key);}
-    else{selected.clear();selected.add(row.key);}if(!event.shiftKey)anchorKey=row.key;focusedKey=row.key;publishSelection();renderSelection();
+    else if(event.shiftKey&&anchored){const shown=shownRows().filter(item=>item.kind==='file'),from=shown.findIndex(item=>item.key===anchorKey),to=shown.findIndex(item=>item.key===row.key);selected.clear();if(from>=0&&to>=0)for(const item of shown.slice(Math.min(from,to),Math.max(from,to)+1).slice(0,100))selected.add(item.key);else selected.add(row.key);}
+    else{selected.clear();selected.add(row.key);}if(!event.shiftKey||!anchored)anchorKey=row.key;focusedKey=row.key;publishSelection();renderSelection();
   };
   function render(){
     const restoreTreeFocus=rows.contains(document.activeElement),scroll=rows.scrollTop;rows.replaceChildren();rowByKey=new Map(items.map(row=>[row.key,row]));
     const pageRows=shownRows(),focusable=pageRows.filter(row=>row.kind!=='message');if(!focusable.some(row=>row.key===focusedKey))focusedKey=focusable[0]?.key||'';
     for(const row of pageRows){
       if(row.kind==='message'){const message=document.createElement('div');message.className='empty';message.textContent=row.label;rows.append(message);continue;}
-      const node=document.createElement('div');node.className=`entry depth-${Math.min(row.depth,8)} ${row.kind}${row.group?` ${row.group}`:''}${row.status?` state-${stateClass(row.status)}`:''}`;node.dataset.key=row.key;node.setAttribute('role','treeitem');node.tabIndex=focusedKey===row.key?0:-1;
+      const node=document.createElement('div');node.className=`entry depth-${Math.min(row.depth,8)} ${row.kind}${row.group?` ${row.group}`:''}${row.status?` state-${stateClass(row)}`:''}`;node.dataset.key=row.key;node.setAttribute('role','treeitem');node.tabIndex=focusedKey===row.key?0:-1;
       node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(selected.has(row.key)));if(branch(row))node.setAttribute('aria-expanded',String(!collapsed.has(row.key)));
       node.setAttribute('aria-label',row.kind==='file'?`${row.label}, ${row.status||row.group}`:row.kind==='group'?`${row.label}, ${row.count} changes`:`${row.label}, ${row.group} folder`);node.title=row.label;
       const main=document.createElement('span');main.className='entry-main';
@@ -128,7 +163,7 @@
       main.append(marker,name);node.append(main);
       if(row.kind==='group'){const count=document.createElement('span');count.className='count';count.textContent=String(row.count??0);node.append(count);}else if(row.kind==='file'){const badge=document.createElement('span');badge.className='status';badge.textContent=row.status||'Changed';badge.title=row.status||'Changed';
         // The word stays the text (and part of the row's label); CSS draws this one-letter decoration.
-        badge.dataset.letter=({'Added':'A','Untracked':'U','Modified':'M','Deleted':'D','Renamed':'R','Copied':'C','Type changed':'T','Conflict':'!'})[row.status]||'•';node.append(badge);}
+        badge.dataset.letter=row.group==='conflicts'?'!':({'Added':'A','Untracked':'U','Modified':'M','Deleted':'D','Renamed':'R','Copied':'C','Type changed':'T','Conflict':'!'})[row.status]||'•';node.append(badge);}
       else{const badge=document.createElement('span');badge.className='status folder-label';badge.textContent='Folder';badge.dataset.letter='';node.append(badge);}
       // Appended after the status so the row's semantic children keep their order; CSS places the bar before the status.
       const inline=inlineActions(row);
@@ -136,8 +171,8 @@
         for(const [id,label] of inline){const button=document.createElement('button');button.type='button';button.tabIndex=-1;button.dataset.inlineAction=id;button.title=label;button.setAttribute('aria-label',label);button.append(actionGlyph(id));
           for(const type of ['mousedown','dblclick'])button.addEventListener(type,event=>event.stopPropagation());
           button.addEventListener('click',event=>{event.stopPropagation();event.preventDefault();closeMenu(false);if(busy)return;
-            if(id==='stageAll'||id==='unstageAll'){action(id,row.key,[row.key]);return;}
-            const bulk=['stage','unstage','discard'].includes(id),chosen=bulk&&selected.has(row.key)&&selected.size>1?[...selected]:[row.key];
+            if(row.kind==='group'){action(id,row.key,[row.key]);return;}
+            const bulk=bulkActions.has(id),chosen=bulk&&selected.has(row.key)&&selected.size>1?[...selected]:[row.key];
             if(bulk&&!canMutate(id,chosen.map(key=>rowByKey.get(key)).filter(Boolean)))return;action(id,row.key,chosen);});
           bar.append(button);}
         node.append(bar);}
@@ -146,17 +181,20 @@
         closeMenu(false);focusRow(row.key);if(row.kind==='group'||row.kind==='folder'&&event.target?.className==='disclosure'){if(collapsed.has(row.key))collapsed.delete(row.key);else collapsed.add(row.key);render();return;}
         selectRow(row,event);
       });
-      node.addEventListener('dblclick',()=>{if(row.kind==='file')action('diff',row.key);else if(row.kind==='folder'){if(collapsed.has(row.key))collapsed.delete(row.key);else collapsed.add(row.key);render();}});
+      node.addEventListener('dblclick',()=>{if(row.kind==='file')openRow(row);else if(row.kind==='folder'){if(collapsed.has(row.key))collapsed.delete(row.key);else collapsed.add(row.key);render();}});
       node.addEventListener('contextmenu',event=>{event.preventDefault();showMenu(row,event);});
       node.addEventListener('keydown',event=>{
         if(event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey){event.preventDefault();const rect=node.getBoundingClientRect();showMenu(row,{clientX:rect.left+24,clientY:rect.top+20});return;}
         if(event.key===' '&&row.kind!=='group'){event.preventDefault();selectRow(row,{ctrlKey:true});return;}
-        if(event.key==='Enter'||event.key===' '&&row.kind==='group'){event.preventDefault();if(row.kind==='file')action('diff',row.key);else if(branch(row)){if(collapsed.has(row.key))collapsed.delete(row.key);else collapsed.add(row.key);render();}return;}
+        if(event.key==='Enter'||event.key===' '&&row.kind==='group'){event.preventDefault();if(row.kind==='file')openRow(row);else if(branch(row)){if(collapsed.has(row.key))collapsed.delete(row.key);else collapsed.add(row.key);render();}return;}
         const shown=shownRows().filter(item=>item.kind!=='message'),index=shown.findIndex(item=>item.key===row.key);let next;
         if(event.key==='ArrowDown')next=shown[index+1];else if(event.key==='ArrowUp')next=shown[index-1];else if(event.key==='Home')next=shown[0];else if(event.key==='End')next=shown.at(-1);
         else if(event.key==='ArrowRight'&&branch(row)){if(collapsed.has(row.key)){collapsed.delete(row.key);render();}else next=shown.find(item=>item.parent===row.key);}
         else if(event.key==='ArrowLeft'){if(branch(row)&&!collapsed.has(row.key)){collapsed.add(row.key);render();}else next=shown.find(item=>item.key===row.parent);}else return;
-        event.preventDefault();if(next){focusRow(next.key);if(event.shiftKey)selectRow(next,{shiftKey:true});}
+        event.preventDefault();if(!next)return;
+        // Shift+Arrow extends from the row that had focus when no anchor is set yet (reached by Tab, without a click).
+        if(event.shiftKey&&!rowByKey.has(anchorKey)&&row.kind!=='group')anchorKey=row.key;
+        focusRow(next.key);if(event.shiftKey)selectRow(next,{shiftKey:true});
       });rows.append(node);
     }
     rows.scrollTop=scroll;const remaining=items.filter(visible).length-pageRows.length;more.hidden=remaining<=0;more.textContent=`Show ${Math.min(200,remaining)} more changes (${remaining} remaining)`;if(restoreTreeFocus)focusRow(focusedKey);renderSelection();
@@ -164,6 +202,7 @@
   window.addEventListener('message',event=>{
     const data=event.data;if(!data||typeof data!=='object'||data.session!==session)return;
     if(data.type==='state'){
+      renderOperation(data.operation);
       const nextItems=Array.isArray(data.rows)?data.rows:[],nextIdentity=JSON.stringify([data.repository,data.total,data.message,nextItems]);
       if(nextIdentity===stateIdentity)return;stateIdentity=nextIdentity;
       const restore=Boolean(menu);closeMenu(false);items=nextItems;rowByKey=new Map(items.map(row=>[row.key,row]));for(const key of selected)if(!rowByKey.has(key))selected.delete(key);for(const key of collapsed)if(!rowByKey.has(key))collapsed.delete(key);publishSelection();notice.textContent=typeof data.message==='string'?data.message:'';notice.classList.remove('error');rows.setAttribute('aria-label',data.repository?`${data.repository} changes`:'Repository changes');render();if(restore)focusRow(focusedKey);return;

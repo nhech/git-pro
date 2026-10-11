@@ -19,6 +19,12 @@ export function parseComparisonCounts(buffer:Buffer):{left:number;right:number}{
   if(!match||!Number.isSafeInteger(Number(match[1]))||!Number.isSafeInteger(Number(match[2])))throw new Error('Invalid comparison commit counts.');
   return{left:Number(match[1]),right:Number(match[2])};
 }
+/** `merge-base --all` prints one base per line; empty output (exit 1) means the histories share no commit. */
+export function parseMergeBase(buffer:Buffer):{oid:string|null;multiple:boolean}{
+  const lines=decode(buffer).split('\n').map(line=>line.trim()).filter(Boolean);
+  if(lines.length>1024)throw new Error('Too many merge bases.');
+  const bases=lines.map(validateOid);return{oid:bases[0]??null,multiple:new Set(bases).size>1};
+}
 function nulFields(buffer: Buffer): string[] {
   if (!buffer.length) return [];
   if (buffer.at(-1) !== 0) throw new Error('Truncated Git records.');

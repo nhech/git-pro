@@ -44,6 +44,8 @@ Selecting a file does not stage it. The composer commits the current index, incl
 | Branches and sync | Branch and upstream actions, fetch, explicit pull strategy, push, init and clone |
 | History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History |
 | File review | Text hunk actions, saved-file commits and optional active-line blame and CodeLens |
+| Conflicts | Conflicts tab with Yours/Theirs by branch, bulk Accept Yours/Theirs, Merge… in VS Code's merge editor, Continue/Abort banner |
+| Branch compare | Compare with Current, two-branch and working-tree comparisons, commits on each side, Open All Changes, Get from Branch |
 | Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase |
 | Repository tools | Stashes, tags, remotes and worktrees |
 

@@ -3,7 +3,7 @@ import { lstat, readlink } from 'node:fs/promises';
 import * as path from 'node:path';
 import { GitService } from '../git.service';
 import { parseStatus, type StatusSnapshot } from '../git-parser';
-import { detectOperation, type GitOperation } from '../../state/operation-state';
+import { detectConflictOperation, type GitOperation } from '../../state/operation-state';
 import { OperationCoordinator } from '../../state/operation-coordinator';
 import { validateOid } from '../../security/refs';
 import { buildAdvancedMutation, type AdvancedMutation } from './advanced-builders';
@@ -12,6 +12,7 @@ import { decode, parseHistory, parseChangedFiles, parseComparisonCounts,type His
 import { boundedFile } from '../../utils/bounded-file';
 import { LinkOutsideError } from '../../security/paths';
 import type { EditorJob } from './owned-editor';
+import type { ControlOptions } from '../conflicts/conflict-contract';
 
 /** `external` lists untracked paths Git reaches through a symlink or junction that leaves the repository. */
 export interface OperationSnapshot { repositoryId: string; head?: string; operation: GitOperation; status: StatusSnapshot; fingerprint: string; external: readonly string[] }
@@ -36,7 +37,7 @@ export class AdvancedService {
   constructor(readonly git: GitService, private readonly coordinator: OperationCoordinator) {}
   private async inspect(repo: RepositoryDescriptor): Promise<OperationSnapshot> {
     const statusBuffer = (await this.git.executor.read(repo.root,{kind:'status'})).stdout;
-    const parsed = parseStatus(statusBuffer), status = Object.freeze({...parsed,changes:Object.freeze(parsed.changes.map(change=>Object.freeze(change)))}), operation = await detectOperation(repo.gitDir);
+    const parsed = parseStatus(statusBuffer), status = Object.freeze({...parsed,changes:Object.freeze(parsed.changes.map(change=>Object.freeze(change)))}), operation = await detectConflictOperation(repo.gitDir,()=>status.changes.some(change=>change.group==='conflicts'));
     const digest = createHash('sha256');
     const append=(tag:string,data:Buffer)=>digest.update(`${Buffer.byteLength(tag)}:${tag}:${data.length}:`).update(data);
     append('status',statusBuffer);
@@ -114,8 +115,11 @@ export class AdvancedService {
       await this.git.executor.mutate(repo.root,preview.command);
     },()=>this.git.registry.refresh(repo.id));
   }
-  control(snapshot: OperationSnapshot, action: 'continue'|'abort'|'skip'): Promise<void> {
-    const repo = this.git.repository(snapshot.repositoryId);
+  /** `mergeMessage` (merge Continue only) is a message the user reviewed in the owned editor, committed with `-m`. */
+  control(snapshot: OperationSnapshot, action: 'continue'|'abort'|'skip', options: ControlOptions = {}): Promise<void> {
+    const repo = this.git.repository(snapshot.repositoryId), message = options.mergeMessage;
+    // Checked before the coordinator so a rejected message never spends the reviewed snapshot.
+    if (message!==undefined) try{buildAdvancedMutation({kind:'operationControl',operation:snapshot.operation==='merging'?'merging':'rebasing',action,message});}catch(error){return Promise.reject(error);}
     return this.coordinator.run(repo.commonDir,async()=>{
       await this.fresh(snapshot);
       const operation = snapshot.operation;
@@ -123,7 +127,7 @@ export class AdvancedService {
       if (action==='continue' && snapshot.status.changes.some(change=>change.group==='conflicts')) throw new Error('Resolve and stage all conflicts before continuing.');
       this.snapshots.delete(snapshot);
       const editorJob=operation==='rebasing'&&action!=='abort'?await this.editorJobs?.resume(repo.id):undefined;
-      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action},{...(editorJob?{editorJob}:{})});}
+      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action,...(message!==undefined?{message}:{})},{...(editorJob?{editorJob}:{})});}
       finally{await this.editorJobs?.cleanup(repo.id);}
     },()=>this.git.registry.refresh(repo.id));
   }
@@ -131,7 +135,7 @@ export class AdvancedService {
     const repo=this.git.repository(snapshot.repositoryId);
     return this.coordinator.run(repo.commonDir,async()=>{await this.fresh(snapshot);this.snapshots.delete(snapshot);return action(repo);},()=>this.git.registry.refresh(repo.id));
   }
-  async isEditStop(snapshot:OperationSnapshot):Promise<boolean>{
+  async isEditStop(snapshot:Pick<OperationSnapshot,'repositoryId'|'operation'|'status'>):Promise<boolean>{
     if(snapshot.operation!=='rebasing'||snapshot.status.changes.some(change=>change.group==='conflicts'))return false;
     const repo=this.git.repository(snapshot.repositoryId);
     try{const done=decode(await boundedFile(path.join(repo.gitDir,'rebase-merge','done'),1024*1024)).split(/\r?\n/).filter(line=>line&&!line.startsWith('#')).at(-1);return /^edit [a-f0-9]+(?: |$)/.test(done??'');}catch{return false;}

@@ -17,8 +17,13 @@ const rows=[
   {key:'gu',kind:'group',group:'untracked',label:'Untracked',count:1,depth:0},
   {key:'untracked',kind:'file',group:'untracked',status:'Untracked',label:'notes.txt',parent:'gu',depth:1},
   {key:'gc',kind:'group',group:'conflicts',label:'Conflicts',count:1,depth:0},
-  {key:'conflict',kind:'file',group:'conflicts',status:'Conflict',label:'merge-conflict.txt',parent:'gc',depth:1},
+  {key:'conflict',kind:'file',group:'conflicts',status:'Both modified',label:'merge-conflict.txt',parent:'gc',depth:1,conflict:{mergeable:true,workingFile:true}},
 ];
+// The §3.4 banner as the host posts it: redacted text, fixed action ids, Continue disabled with its reason while conflicts remain.
+const operation={operation:'merging',name:'Merge in progress',icon:'warning',text:'Merging feature/<img src=x onerror=alert(1)>-'+'y'.repeat(120)+' into main · 1 conflict',actions:[
+  {id:'resolve',label:'Resolve…',title:'Open the Conflicts tab',primary:true},
+  {id:'continue',label:'Continue Merge…',title:'Resolve and stage all conflicts first',disabled:'Resolve and stage all conflicts first'},
+  {id:'abort',label:'Abort…',title:'Abort the merge and return to the original state'}]};
 
 const driver=`(() => {
   const bridge=acquireVsCodeApi(),session=document.body.dataset.session,captured=[];
@@ -49,6 +54,18 @@ const driver=`(() => {
       }
       for(const selector of ['body','.entry','.entry-main'])container(selector);
       check('document-inside-viewport',document.documentElement.scrollWidth<=innerWidth+1);
+      const banner=byId('operation'),bannerButtons=[...document.querySelectorAll('#operation-actions button')];
+      check('banner-region',!banner.hidden&&banner.getAttribute('role')==='region'&&banner.getAttribute('aria-label')===data.operation.name&&byId('operation-text').getAttribute('aria-live')==='polite');
+      check('banner-literal-text',byId('operation-text').textContent===data.operation.text&&!banner.querySelector('img'));
+      check('banner-actions',bannerButtons.map(node=>node.textContent).join('|')==='Resolve…|Continue Merge…|Abort…'&&bannerButtons[0].classList.contains('primary'));
+      check('banner-disabled-reason',bannerButtons[1].getAttribute('aria-disabled')==='true'&&bannerButtons[1].title===data.operation.actions[1].disabled&&!bannerButtons[1].disabled&&bannerButtons[1].tabIndex===0);
+      // Focus order: the banner's buttons come before the selection strip and the tree.
+      check('banner-focus-order',Boolean(banner.compareDocumentPosition(byId('rows'))&Node.DOCUMENT_POSITION_FOLLOWING)&&bannerButtons.every(node=>node.tabIndex===0));
+      for(const node of bannerButtons){const rect=node.getBoundingClientRect(),box=banner.getBoundingClientRect();measurements.push({selector:'#operation-actions button',text:node.textContent,left:rect.left,right:rect.right,height:rect.height});check('banner-button-inside:'+node.dataset.operationAction,rect.left>=box.left&&rect.right<=box.right+0.5&&rect.height>=20&&rect.height<=24);}
+      container('#operation');container('#operation-actions');
+      for(const node of bannerButtons)outline('banner-'+node.dataset.operationAction,node);
+      bannerButtons[1].click();await settle();check('banner-disabled-sends-nothing',!captured.some(value=>value.type==='operation'));
+      bannerButtons[0].click();await settle();check('banner-request',captured.filter(value=>value.type==='operation').map(value=>value.action).join('|')==='resolve'&&!('path' in captured.filter(value=>value.type==='operation')[0]));
       row('modified').click();await settle();check('compatible-selection-actions',!byId('selection-actions').hidden&&!document.querySelector('#selection-actions [data-action=stage]').disabled&&document.querySelector('#selection-actions [data-action=unstage]').disabled&&!document.querySelector('#selection-actions [data-action=discard]').disabled);container('#selection-actions');
       outline('changed-row',row('modified'));for(const button of document.querySelectorAll('#selection-actions button:not(:disabled)'))outline('selected-'+button.dataset.action,button);row('modified').focus();
       row('modified').dispatchEvent(new MouseEvent('contextmenu',{clientX:innerWidth-1,clientY:innerHeight-1,bubbles:true,cancelable:true}));await settle();bounds();
@@ -72,6 +89,12 @@ const driver=`(() => {
       const treeName=byId('rows').getAttribute('aria-label'),count=byId('rows').childElementCount,notice=byId('notice').textContent;post({type:'state',session:'expired-fixture-session',repository:'Expired',total:999,rows:[]});post({type:'error',session:'expired-fixture-session',message:'Expired'});await settle();check('foreign-session-ignored',byId('rows').getAttribute('aria-label')===treeName&&byId('rows').childElementCount===count&&byId('notice').textContent===notice&&row('modified'));
       row('modified').focus();key(row('modified'),'End');await settle();check('tree-end-focus',document.activeElement===row('conflict'));key(row('conflict'),'Home');await settle();check('tree-home-focus',document.activeElement===row('gw'));
       key(row('gw'),'ArrowLeft');await settle();check('collapse-group',row('gw').getAttribute('aria-expanded')==='false'&&!row('modified')&&!row('folder'));key(row('gw'),'ArrowRight');await settle();check('expand-group',row('gw').getAttribute('aria-expanded')==='true'&&row('modified')&&row('folder'));
+      // §3.6: a conflict row shows its kind, offers Open File and Merge… inline, and Enter merges instead of running Diff.
+      check('conflict-kind',row('conflict').querySelector('.status').textContent==='Both modified'&&row('conflict').classList.contains('state-conflict'));
+      check('conflict-inline-actions',[...row('conflict').querySelectorAll('.row-actions button')].map(node=>node.dataset.inlineAction).join('|')==='open|merge');
+      const before=actions().length;key(row('conflict'),'Enter');await settle();check('conflict-enter-merges',actions().length===before+1&&actions().at(-1).action==='merge'&&actions().at(-1).key==='conflict');
+      row('conflict').click();await settle();check('conflict-selection-accept',[...document.querySelectorAll('#selection-actions button')].filter(node=>!node.hidden).map(node=>node.dataset.action).join('|')==='acceptYours|acceptTheirs');container('#selection-actions');
+      post({type:'state',repository:'Fixture',total:4,rows:data.rows,message:'',operation:null});await settle();check('banner-hidden-when-idle',byId('operation').hidden&&!document.querySelector('#operation-actions button'));
       bridge.postMessage({type:'changesReport',session,themeClass:data.themeClass,bodyClasses:document.body.className,width:innerWidth,height:innerHeight,focused:document.hasFocus(),measurements,outlines,checks,failures,messageCount:captured.length,observedActions:actions()});
     }catch(error){bridge.postMessage({type:'changesError',session,error:String(error),checks,failures,measurements,outlines});}
   });
@@ -94,7 +117,7 @@ async function probe(extension:vscode.Extension<unknown>,themeClass:string):Prom
       timer=setTimeout(()=>reject(new Error('Changes DOM probe exceeded 30 seconds.')),30_000);
       receiver=panel!.webview.onDidReceiveMessage((value:unknown)=>{
         if(!value||typeof value!=='object')return;const data=value as Record<string,unknown>;if(data.session!==session)return;
-        if(data.type==='ready')void (async()=>{await panel!.webview.postMessage({type:'state',session,repository:'Fixture',total:4,rows,message:''});await panel!.webview.postMessage({type:'changesProbe',session,rows,themeClass});})().catch(reject);
+        if(data.type==='ready')void (async()=>{await panel!.webview.postMessage({type:'state',session,repository:'Fixture',total:4,rows,message:'',operation});await panel!.webview.postMessage({type:'changesProbe',session,rows,operation,themeClass});})().catch(reject);
         if(data.type==='changesError')reject(new Error(JSON.stringify(data)));
         if(data.type==='changesReport')resolve(data);
         // No outgoing renderer request is routed to production receive/run.

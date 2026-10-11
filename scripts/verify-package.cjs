@@ -9,9 +9,9 @@ const docs = ['docs/GIT_API_PROVENANCE.md', ...guides.map(name => `docs/user-gui
 const images = ['docs/images/changes-and-commit.jpg', 'docs/images/file-actions.jpg', 'docs/images/history.jpg'];
 const required = ['readme.md', 'changelog.md', 'dist/extension.js', 'package.json', 'LICENSE.txt', 'package.nls.json', 'THIRD_PARTY_NOTICES.txt', ...docs, ...images,
   'media/icon.png', 'media/codicons/codicon.css', 'media/codicons/codicon.ttf', 'media/git-pro.svg', 'media/changes.js', 'media/changes.css', 'media/commit.js', 'media/commit.css',
-  'media/history.js', 'media/history.css', 'media/rebase.js', 'media/rebase.css',
+  'media/history.js', 'media/history.css', 'media/rebase.js', 'media/rebase.css', 'media/conflicts.js', 'media/conflicts.css', 'media/compare.js', 'media/compare.css',
   'media/helpers/preserve-editor.cjs', 'media/helpers/rebase-editor.cjs',
-  ...['play', 'add', 'edit', 'debug-step-over', 'circle-slash'].map(name => `media/operation-icons/${name}.svg`)];
+  ...['play', 'add', 'edit', 'debug-step-over', 'circle-slash', 'git-merge-light', 'git-merge-dark', 'git-compare-light', 'git-compare-dark'].map(name => `media/operation-icons/${name}.svg`)];
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 // Validate the file destinations used by the shipped Markdown dialect.

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { lstat, readFile, stat } from 'node:fs/promises';
 import { GitExecutor } from './git-executor';
 import type { DailyBackend, CommitRequest, RemoteInfo } from './daily-backend';
 import { parseStatus, stagedFingerprint, type StatusSnapshot } from './git-parser';
 import { PathPolicy, containsPath } from '../security/paths';
-import { validateBranchName } from '../security/refs';
+import { validateBranchName, validateOid } from '../security/refs';
+import type { RestoreFromSource } from '../webviews/compare/compare-contract';
 import { RepositoryRegistry, type RepositoryDescriptor } from '../repositories/repository-registry';
 import { OperationCoordinator } from '../state/operation-coordinator';
 import { detectOperation } from '../state/operation-state';
@@ -13,6 +14,7 @@ import { partiallyApplied } from './git-error-parser';
 import { displayBranchOutput } from './branch-display';
 import { Emitter } from '../utils/events';
 import { chunkPaths } from './argv-chunks';
+import { parseIndex } from './conflicts/index-parser';
 
 interface Ready { repo: RepositoryDescriptor; status: StatusSnapshot; raw: Buffer }
 export interface DailyPreview { repositoryId: string; head: string | undefined; refs: string; index: string; working: string; paths: readonly string[]; status: StatusSnapshot }
@@ -29,7 +31,7 @@ async function inGroups(paths: readonly string[], action: (group: readonly strin
     catch (error) { throw index ? partiallyApplied(error, index, total) : error; }
   }
 }
-export class GitService {
+export class GitService implements RestoreFromSource {
   private readonly branchSearchCache=new Map<string,{repo:RepositoryDescriptor;until:number;value:Promise<readonly BranchInfo[]>}>();
   private readonly fetchTimes = new Map<string, number>();
   private readonly fetched = new Emitter<string>();
@@ -46,7 +48,7 @@ export class GitService {
   private async ready(id: string): Promise<Ready> {
     const repo = this.repository(id); await this.policy.authorizeRoot(repo.root);
     const raw = (await this.executor.read(repo.root, { kind: 'status' })).stdout, status = parseStatus(raw);
-    if (await detectOperation(repo.gitDir) !== 'idle') throw new DailyError('operation', 'A Git operation is in progress. Resolve it in native Source Control before starting another action.');
+    if (await detectOperation(repo.gitDir) !== 'idle') throw new DailyError('operation', 'A Git operation is in progress. Finish or abort it first: Git Pro: Resolve Conflicts… lists its conflicts, and Operation Actions… continues or aborts it.');
     if (this.repository(id) !== repo) throw new DailyError('stale', 'Repository changed. Refresh and review again.');
     return { repo, status, raw };
   }
@@ -170,6 +172,36 @@ export class GitService {
       }
       await this.executor.mutate(repo.root, { kind: 'discard', paths: preview.paths });
     });
+  }
+  /**
+   * Get from Branch (§3.8, N7): `restore --source=<oid> --worktree` for exactly the reviewed paths, which also removes a tracked path the source lacks.
+   * Idle repository, coordinator lock and the reviewed working content of those paths; the index is untouched.
+   */
+  restoreFromSource(preview: DailyPreview, oid: string): Promise<void> {
+    validateOid(oid);
+    return this.run(preview.repositoryId, async ready => {
+      if (!preview.paths.length) throw new Error('Select files to get from the branch.');
+      await this.checkPreview(preview, ready, true);
+      const repo = this.repository(preview.repositoryId), selected = [...new Set(preview.paths)], absolute = await this.paths(repo, selected);
+      if (ready.status.changes.some(item => item.group === 'conflicts' && selected.includes(item.path))) throw new DailyError('conflict', 'Resolve the conflicts in the selected files first.');
+      const untracked = await this.untrackedOnDisk(repo, selected, absolute);
+      if (untracked.length) throw new DailyError('dirty', `${untracked[0]} is not tracked by Git${untracked.length > 1 ? ` (and ${untracked.length - 1} more)` : ''}. Get from Branch would overwrite it, and Git keeps no copy to restore it from. Move or delete it first.`);
+      await this.executor.mutate(repo.root, { kind: 'restoreFromSource', oid, paths: preview.paths });
+    });
+  }
+  /**
+   * Selected paths that exist on disk but not in the index: untracked or ignored files. `git diff <oid>` shows such a path only as the branch's file, and
+   * `restore --source` would overwrite it with nothing in Git to recover it from, which is why discard refuses untracked paths too.
+   */
+  private async untrackedOnDisk(repo: RepositoryDescriptor, paths: readonly string[], absolute: readonly string[]): Promise<string[]> {
+    const present: string[] = [];
+    for (let start = 0; start < paths.length; start += 64) {
+      const found = await Promise.all(absolute.slice(start, start + 64).map(file => lstat(file).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; })));
+      present.push(...paths.slice(start, start + 64).filter((_, index) => found[index]));
+    }
+    const tracked = new Set<string>();
+    for (const group of chunkPaths(present)) for (const entry of parseIndex((await this.executor.read(repo.root, { kind: 'index', paths: group })).stdout)) tracked.add(entry.path);
+    return present.filter(file => !tracked.has(file));
   }
   commit(preview: DailyPreview, message: string, options: CommitRequest, push = false): Promise<CommitResult> {
     return this.run(preview.repositoryId, async ready => {

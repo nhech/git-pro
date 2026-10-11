@@ -27,7 +27,9 @@ export function recoveryFor(error:unknown):Recovery{
     timeout:'Git state may have changed before timeout. Refresh and inspect before retrying.',
     'output-limit':'Narrow the query or use native Git for oversized data.'
   };
-  const result:Recovery=kind==='conflict'?{message:`${summary}\n${guidance.conflict}`,diagnostic,label:'Review Changes',command:'gitPro.changes.focus'}:
+  // The Conflicts tab lists every conflicted file with Accept Yours / Theirs and Merge…; opening it only reveals UI. Git Pro's own conflict guards
+  // ("Conflict markers remain in a.txt…") already say what to do, so they keep their text instead of the generic Git summary.
+  const result:Recovery=kind==='conflict'?{message:gitDiagnostic?`${summary}\n${guidance.conflict}`:original,diagnostic,label:'Resolve Conflicts…',command:'gitPro.conflicts.open'}:
     kind==='cancelled'||kind==='timeout'||kind==='repository'?{message:`${summary}\n${guidance[kind]}`,diagnostic,label:'Refresh Git State',command:'gitPro.refresh'}:
     {message:guidance[kind??'unknown']?`${summary}\n${guidance[kind??'unknown']}`:summary,diagnostic,label:'Show Output',command:'gitPro.showOutput'};
   // A later batch failed after earlier ones took effect: a generic Git summary alone would hide that the state changed.

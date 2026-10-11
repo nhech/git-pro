@@ -17,6 +17,9 @@ import { BuiltinGitAdapter } from '../../src/git/builtin-git.adapter';
 import { advancedFixture } from '../fixtures/advanced-fixture';
 import { InteractiveService, type RebaseJobInfo } from '../../src/git/rebase/interactive.service';
 import { RebasePlanner } from '../../src/webviews/rebase/rebase-planner';
+import { verifyConflictsHost } from './conflicts-host';
+import { verifyCompareHost } from './compare-host';
+import { verifyBranchCompareHost } from './branch-picker-native';
 async function webviewTab(label: string): Promise<void> {
   const exists = () => vscode.window.tabGroups.all.flatMap(group => group.tabs).some(tab => tab.input instanceof vscode.TabInputWebview && tab.label === label);
   if (exists()) return;
@@ -154,6 +157,9 @@ async function runHostChecks(): Promise<void> {
   await vscode.commands.executeCommand('gitPro.commitView.focus');
   await vscode.commands.executeCommand('gitPro.branchesView.focus');
   await vscode.commands.executeCommand('gitPro.toolsView.focus');
+  await verifyConflictsHost(extension,api,root);
+  await verifyCompareHost(extension,api,root);
+  await verifyBranchCompareHost(extension,api,root);
   if(process.env.GIT_PRO_STRESS_HOST==='1'){
     const closeHistory=async()=>{const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>tab.input instanceof vscode.TabInputWebview&&tab.label.startsWith('Git Pro:'));if(tabs.length)await vscode.window.tabGroups.close(tabs);assert.equal(api.historyPanelCount(),0);};
     const inspector=new Session();inspector.connect();

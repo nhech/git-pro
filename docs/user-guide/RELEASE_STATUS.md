@@ -16,7 +16,8 @@ Git identity, authentication and signing use the configured Git environment. Rem
 - Text revisions must be UTF-8 and no larger than 5 MiB. Unsupported binary, submodule and symlink revisions show guidance.
 - File History follows one file path through renames; bounded traversal may require an explicit continuation.
 - Interactive rebase supports a linear range of 1–200 commits. Use native Git for merge ranges.
-- When the native Merge Editor is unavailable, use conflict guidance and native diffs.
+- Merge… uses VS Code's merge editor through an internal command; if it is unavailable, Git Pro opens the file with its conflict markers. Symlink, submodule and larger-than-5 MiB conflicts need native Git. Bisect and git am are finished in native Git.
+- Open All Changes opens at most 300 text files; binary files are listed but not diffed. Folder comparison with a branch or tag is not available yet.
 - File actions use saved content. Unsaved buffers are not saved-file revisions.
 - Other Git tools can change a repository while Git Pro is open. Refresh after external changes or an interrupted operation.
 

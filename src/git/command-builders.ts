@@ -9,7 +9,7 @@ export type Marker = typeof markers[number];
 export type ReadCommand = { kind: 'version' } | { kind: 'status' } | { kind: 'historyHead' } | { kind: 'index'; paths?: readonly string[] } |
   {kind:'filePatch';path:string;index:boolean} | { kind: 'branches' | 'branchIdentities' | 'branchUpstreamKeys' | 'branchConfig' } | {kind:'branchUpstreams';refs:readonly string[]} | { kind: 'worktrees' } | { kind: 'workDiff'; paths: readonly string[] } |
   { kind: 'tree'; oid: string; path: string } | { kind: 'blobSize' | 'blob'; oid: string } |
-  { kind: 'ref'; ref: string } | {kind:'linearRange';base:string;tip:string} | {kind:'remoteUrls';remote:string;push:boolean} | {kind:'remoteRef';url:string;branch:string} |
+  { kind: 'ref'; ref: string } | {kind:'pointsAt';oid:string} | {kind:'linearRange';base:string;tip:string} | {kind:'remoteUrls';remote:string;push:boolean} | {kind:'remoteRef';url:string;branch:string} |
   { kind: 'metadata'; field: 'root' | 'gitDir' | 'commonDir' } | { kind: 'marker'; marker: Marker } | HistoryReadCommand | ToolsRead;
 
 export function buildReadCommand(command: ReadCommand): string[] {
@@ -36,6 +36,8 @@ export function buildReadCommand(command: ReadCommand): string[] {
     case 'blobSize': return [...prefix, 'cat-file', '-s', validateOid(command.oid)];
     case 'blob': return [...prefix, 'cat-file', 'blob', validateOid(command.oid)];
     case 'ref': return [...prefix, 'rev-parse', '--verify', '--end-of-options', `${validateRef(command.ref)}^{commit}`];
+    // Side labels for an operation's commits (MERGE_HEAD, onto, CHERRY_PICK_HEAD): branches sort before remotes and tags.
+    case 'pointsAt': return [...prefix, 'for-each-ref', `--points-at=${validateOid(command.oid)}`, '--count=4', '--format=%(refname)%00', 'refs/heads/', 'refs/remotes/', 'refs/tags/'];
     case 'remoteUrls': return [...prefix,'remote','get-url','--all',...(command.push?['--push']:[]),validateBranchName(command.remote)];
     case 'remoteRef': return [...prefix,'ls-remote','--refs','--exit-code',validateRemoteUrl(command.url),`refs/heads/${validateBranchName(command.branch)}`];
     case 'linearRange': return [...prefix,'rev-list','--reverse','--parents','--max-count=201',`${validateOid(command.base)}..${validateOid(command.tip)}`,'--'];
@@ -47,7 +49,7 @@ export function buildReadCommand(command: ReadCommand): string[] {
     case 'marker':
       if (!markers.includes(command.marker)) throw new Error('Unsupported operation marker.');
       return [...prefix, 'rev-parse', '--git-path', command.marker];
-    case 'history':case 'historyWindow':case 'rangeMessages':case 'historyLinearPrefix':case 'followHistory':case 'lineageHistory':case 'historyEdges': case 'comparisonCommits':case 'comparisonCount':case 'commitMetadata':case 'commitMessage': case 'containingRefs': case 'changedFiles': case 'numstat': case 'blame':
+    case 'history':case 'historyWindow':case 'rangeMessages':case 'historyLinearPrefix':case 'followHistory':case 'lineageHistory':case 'historyEdges': case 'comparisonCommits':case 'comparisonCount':case 'commitMetadata':case 'commitMessage': case 'containingRefs': case 'changedFiles': case 'numstat': case 'blame': case 'mergeBase': case 'worktreeDiff': case 'worktreeNumstat':
       return buildHistoryRead(command);
     case 'stashes': case 'tags': case 'remoteNames': case 'remotePrunePreview': case 'worktreePrunePreview': case 'stashFiles': case 'tagMessage': case 'remoteTagRef':
       return buildToolsRead(command);
@@ -72,7 +74,7 @@ export type MutationCommand = {kind:'applyHunk';paths:readonly string[];directio
   { kind: 'renameBranch'; oldName: string; newName: string } | { kind: 'unsetUpstream'; branch: string } |
   { kind: 'integrate'; strategy: 'ff-only' | 'merge' | 'rebase'; oid: string } |
   { kind: 'acceptConflict'; side: 'ours'|'theirs'; paths: readonly string[] } |
-  { kind: 'deleteConflict'; paths: readonly string[] } | {kind:'pushLease';url:string;branch:string;source:string;expected:string} | AdvancedMutation | ToolsMutation;
+  { kind: 'deleteConflict'; paths: readonly string[] } | {kind:'restoreFromSource';oid:string;paths:readonly string[]} | {kind:'pushLease';url:string;branch:string;source:string;expected:string} | AdvancedMutation | ToolsMutation;
 export function buildMutationCommand(command: MutationCommand): string[] {
   const prefix = ['--literal-pathspecs', '--no-pager', '-c', 'color.ui=false'];
   switch (command.kind) {
@@ -88,6 +90,8 @@ export function buildMutationCommand(command: MutationCommand): string[] {
       return [...prefix,'restore',`--${command.side}`,'--worktree',...fromStdin(command.paths)];
     }
     case 'deleteConflict': return [...prefix,'rm','-f',...fromStdin(command.paths)];
+    // Get from Branch: working tree only, and a tracked path the source lacks is removed (restore's default no-overlay mode).
+    case 'restoreFromSource': return [...prefix,'restore',`--source=${validateOid(command.oid)}`,'--worktree',...fromStdin(command.paths)];
     case 'pushLease': {
       const ref=`refs/heads/${validateBranchName(command.branch)}`;
       return [...prefix,'push','--no-follow-tags','--recurse-submodules=no',`--force-with-lease=${ref}:${validateOid(command.expected)}`,validateRemoteUrl(command.url),`${validateOid(command.source)}:${ref}`];

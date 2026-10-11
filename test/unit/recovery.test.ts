@@ -6,7 +6,7 @@ test('failure recovery is redacted and never retries a mutation or removes a loc
   const kinds:FailureKind[]=['auth','signing','conflict','cancelled','timeout','repository','locked','output-limit','unknown'];
   for(const kind of kinds){const result=recoveryFor(new GitFailure(kind,'https://user:PRIVATE_SENTINEL@example.test/repo?%74oken=TOKEN_SENTINEL'));
     assert.equal(result.message.includes('PRIVATE_SENTINEL'),false);assert.equal(result.message.includes('TOKEN_SENTINEL'),false);
-    assert.ok(['gitPro.refresh','gitPro.changes.focus','gitPro.showOutput'].includes(result.command));
+    assert.ok(['gitPro.refresh','gitPro.conflicts.open','gitPro.showOutput'].includes(result.command));
   }
   assert.match(recoveryFor(new GitFailure('locked','busy')).message,/will not remove lock files/);
   assert.match(recoveryFor(new GitFailure('timeout','expired')).message,/state may have changed/);
@@ -37,8 +37,18 @@ test('a failure after earlier batches applied says so in the message and offers 
   const note=/Batches 1-2 of 3 were already applied; refresh and review before retrying\./;
   const git=recoveryFor(new GitFailure('unknown','fatal: unable to write new index file\nBatches 1-2 of 3 were already applied; refresh and review before retrying.',128,{applied:2,total:3}));
   assert.match(git.message,/^Git could not complete the operation\./);assert.match(git.message,note);assert.equal(git.command,'gitPro.refresh');
-  const conflict=recoveryFor(new GitFailure('conflict','conflict',1,{applied:2,total:3}));assert.match(conflict.message,note);assert.equal(conflict.command,'gitPro.changes.focus');
+  const conflict=recoveryFor(new GitFailure('conflict','conflict',1,{applied:2,total:3}));assert.match(conflict.message,note);assert.equal(conflict.command,'gitPro.conflicts.open');
   const other=recoveryFor(Object.assign(new Error('Workspace trust was revoked.\nBatches 1-2 of 3 were already applied; refresh and review before retrying.'),{partial:{applied:2,total:3}}));
   assert.equal(other.message.match(/already applied/g)?.length,1,'the note is not repeated');assert.equal(other.command,'gitPro.refresh');
   assert.doesNotMatch(recoveryFor(new GitFailure('unknown','fatal')).message,/already applied/);
+});
+test('a conflict failure offers Resolve Conflicts…, which only opens the Conflicts tab; other failures keep their recovery',()=>{
+  for(const error of [new GitFailure('conflict','Git stopped with 2 conflicts.',1),Object.assign(new Error('Failed to execute git'),{stderr:'error: could not apply 1a2b3c4... CONFLICT (content)',exitCode:1})]){
+    const result=recoveryFor(error);assert.equal(result.label,'Resolve Conflicts…');assert.equal(result.command,'gitPro.conflicts.open');assert.match(result.message,/^Git reported unresolved conflicts\.\nReview conflicts and stage resolutions/);
+  }
+  assert.equal(recoveryFor(new GitFailure('unknown','Git exited with code 1.',1)).command,'gitPro.showOutput','an unclassified merge failure is not sent to Conflicts');
+  for(const text of ['Conflict markers remain in src/app.ts. Review the file before marking resolved.','Resolve and stage all conflicts before continuing.']){
+    const guard=recoveryFor(new Error(text));assert.ok(guard.message.endsWith(text),'Git Pro guard text is not replaced by the generic Git summary');assert.doesNotMatch(guard.message,/Git reported/);assert.equal(guard.command,'gitPro.conflicts.open');
+  }
+  assert.equal(recoveryFor(new Error('Conflict in https://user:PRIVATE_SENTINEL@example.test/x')).message.includes('PRIVATE_SENTINEL'),false);
 });

@@ -3,7 +3,7 @@ export type AdvancedMutation = { kind: 'merge'; oid: string; strategy: 'ff' | 'f
   { kind: 'rebase'; oid: string } | {kind:'interactiveRebase';base:string} | {kind:'amendStopped';message?:string} |
   { kind: 'cherryPick' | 'revert'; oids: readonly string[]; parent?: number } |
   { kind: 'reset'; oid: string; mode: 'soft' | 'mixed' | 'hard' | 'keep' } |
-  { kind: 'operationControl'; operation: 'merging' | 'rebasing' | 'cherry-picking' | 'reverting'; action: 'continue' | 'abort' | 'skip' };
+  { kind: 'operationControl'; operation: 'merging' | 'rebasing' | 'cherry-picking' | 'reverting'; action: 'continue' | 'abort' | 'skip'; message?: string };
 export function buildAdvancedMutation(command: AdvancedMutation): string[] {
   const prefix = ['--literal-pathspecs', '--no-pager', '-c', 'color.ui=false'];
   switch (command.kind) {
@@ -28,9 +28,14 @@ export function buildAdvancedMutation(command: AdvancedMutation): string[] {
     }
     case 'operationControl': {
       if (!['continue','abort','skip'].includes(command.action)) throw new Error('Invalid operation control.');
+      if (command.message!==undefined&&(command.operation!=='merging'||command.action!=='continue')) throw new Error('A commit message applies only to continuing a merge.');
       if (command.operation==='merging') {
         if (command.action==='skip') throw new Error('Merge cannot skip.');
-        return [...prefix,...(command.action==='continue'?['commit','--no-edit']:['merge','--abort'])];
+        if (command.action==='abort') return [...prefix,'merge','--abort'];
+        if (command.message===undefined) return [...prefix,'commit','--no-edit'];
+        if (!command.message.trim()||command.message.length>65536||command.message.includes('\0')) throw new Error('Enter a non-empty merge message of at most 65536 characters.');
+        // `-m` keeps Git's default cleanup (whitespace): --cleanup=strip would also delete lines the user typed that start with '#', such as "#123 fix".
+        return [...prefix,'commit','-m',command.message];
       }
       const name = {rebasing:'rebase','cherry-picking':'cherry-pick',reverting:'revert'}[command.operation];
       if (!name) throw new Error('Unsupported operation.');

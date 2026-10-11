@@ -18,6 +18,9 @@ Open VS Code Settings and search for `gitPro`. Resource settings apply to the se
 | `gitPro.graph.pageSize` | `100` | 25–100 | resource | Commits read per history page; loaded graph remains bounded at 2000 commits. |
 | `gitPro.graph.showRemoteBranches` | `true` | true / false | resource | Include remote branches in the native history reference chooser. Explicit refs entered in the panel remain available. |
 | `gitPro.changes.groupBy` | `"status"` | status, folder | resource | Display paths directly or as folders within each staged/working/untracked/conflict group. |
+| `gitPro.conflicts.autoOpen` | `"gitPro"` | gitPro, always, never | resource | When the Conflicts tab opens by itself: after a Git Pro action stops on conflicts; also in the background, without focus, when conflicts appear from Git run elsewhere; or never. Opening it changes nothing. |
+| `gitPro.conflicts.groupByDirectory` | `false` | true / false | resource | Group conflicted files by directory in the Conflicts tab. |
+| `gitPro.compare.defaultFilesMode` | `"fork"` | fork, tips | resource | Files a branch comparison lists first: changes since the merge base, or the direct tip-to-tip difference. |
 | `gitPro.cli.readTimeout` | `15` | 5–600 | machine | Local CLI read timeout in seconds. Built-in Git API requests use their own host behavior. |
 | `gitPro.cli.timeout` | `120` | 15–600 | machine | Local CLI mutation timeout in seconds. Interruption may leave Git state changed; inspect before retrying. |
 | `gitPro.cli.networkTimeout` | `180` | 30–900 | machine | Explicit CLI remote operation timeout in seconds. Does not cancel built-in Git API fetch/push. |
@@ -28,8 +31,8 @@ CLI timeouts are seconds and do not control exported built-in Git API calls. The
 
 The subject limit warns; it does not truncate the message. A message-history limit of zero hides the history and stops retaining new entries. History page size does not raise the 2,000 loaded-commit cap. Remote-branch visibility affects the native scope chooser; an explicit panel ref selection is retained.
 
-No global keybindings are contributed. Assign existing Git Pro commands in VS Code Keyboard Shortcuts; Compare is reached from History.
+No global keybindings are contributed. Assign existing Git Pro commands in VS Code Keyboard Shortcuts, for example Resolve Conflicts…, Apply & Next Conflict, Continue Operation… or Compare with Current. Alt+Y, Alt+T and Alt+M work only inside the Conflicts tab.
 
-Git Pro follows your colour theme. Its one accent colour, used for HEAD and the current branch in History and for an in-progress rebase, is the theme colour `gitPro.accent`; change it with `workbench.colorCustomizations`, for example `"gitPro.accent": "#3794ff"`.
+Git Pro follows your colour theme. Its one accent colour, used for HEAD and the current branch in History and Compare and for an in-progress rebase, is the theme colour `gitPro.accent`; change it with `workbench.colorCustomizations`, for example `"gitPro.accent": "#3794ff"`.
 
 [Getting started](GETTING_STARTED.md) · [Workflows](WORKFLOWS.md) · [Compatibility](RELEASE_STATUS.md)

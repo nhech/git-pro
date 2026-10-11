@@ -24,3 +24,17 @@ export function classifyGitDiagnostic(diagnostic:string):FailureKind {
 export function parseGitError(stderr: string, exitCode: number | null): GitFailure {
   return new GitFailure(classifyGitDiagnostic(stderr), stderr.trim().slice(0, 2000) || `Git exited with code ${exitCode}.`, exitCode);
 }
+/** Mutations that stop on merge conflicts. `git merge` (so also a squash merge and a pull that merges) and `git stash apply` print their conflicts to stdout only. */
+const mergeFamily: ReadonlySet<string> = new Set(['merge', 'integrate', 'stashApply', 'cherryPick', 'revert', 'rebase', 'interactiveRebase', 'operationControl']);
+/**
+ * A failed mutation. Exit 1 with a `CONFLICT (` line in a merge-family kind's stdout is a conflict whatever stderr says (often nothing). The whole captured
+ * stdout is scanned: Git prints an `Auto-merging` line for every content-merged path first, so the first conflict can come long after any prefix. Stdout never
+ * becomes the message, which is stderr or the conflict count.
+ */
+export function parseMutationError(kind: string, stdout: Buffer, stderr: string, exitCode: number | null): GitFailure {
+  if (exitCode === 1 && mergeFamily.has(kind)) {
+    const count = stdout.toString('latin1').match(/^CONFLICT \(/gm)?.length ?? 0;
+    if (count) return new GitFailure('conflict', stderr.trim().slice(0, 2000) || `Git stopped with ${count} ${count === 1 ? 'conflict' : 'conflicts'}.`, exitCode);
+  }
+  return parseGitError(stderr, exitCode);
+}

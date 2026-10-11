@@ -7,7 +7,7 @@ import { parseWorktrees } from './tools/tools-parser';
 import { boundedFile } from '../utils/bounded-file';
 import { historyEdgeInput } from './history/history-builders';
 import { buildReadCommand, buildMutationCommand, pathspecInput, type ReadCommand, type MutationCommand } from './command-builders';
-import { GitFailure, parseGitError } from './git-error-parser';
+import { GitFailure, parseGitError, parseMutationError } from './git-error-parser';
 import { silentLogger, type Logger } from '../utils/logging';
 import { editorCommand, type OwnedEditor, type EditorJob } from './advanced/owned-editor';
 
@@ -18,8 +18,8 @@ export interface MutationOptions extends ReadOptions {editorJob?:EditorJob;patch
 export interface ExecutionDefaults {readTimeoutMs:number;mutationTimeoutMs:number;networkTimeoutMs:number}
 export interface ExecutionResult { stdout: Buffer; stderr: Buffer; exitCode: number; durationMs: number; digest?: string }
 /** Mutations whose only variable input is a list of paths, passed with --pathspec-from-file. */
-type BulkPathMutation = Extract<MutationCommand, { kind: 'stage' | 'unstage' | 'unstageUnborn' | 'discard' | 'acceptConflict' | 'deleteConflict' }>;
-const bulkPathKinds: ReadonlySet<string> = new Set(['stage', 'unstage', 'unstageUnborn', 'discard', 'acceptConflict', 'deleteConflict']);
+type BulkPathMutation = Extract<MutationCommand, { kind: 'stage' | 'unstage' | 'unstageUnborn' | 'discard' | 'acceptConflict' | 'deleteConflict' | 'restoreFromSource' }>;
+const bulkPathKinds: ReadonlySet<string> = new Set(['stage', 'unstage', 'unstageUnborn', 'discard', 'acceptConflict', 'deleteConflict', 'restoreFromSource']);
 const isBulkPathMutation = (command: MutationCommand): command is BulkPathMutation => bulkPathKinds.has(command.kind);
 
 export function readEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -144,10 +144,10 @@ export class GitExecutor {
         options.signal?.removeEventListener('abort', cancelled);
         controller.signal.removeEventListener('abort', cancelled);
         const result: ExecutionResult = { stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), exitCode: code ?? -1, durationMs: Date.now() - started, ...(hash ? { digest: hash.digest('hex') } : {}) };
-        // These exact queries use empty exit 1 for no keys/unresolved HEAD. All other
+        // These exact queries use empty exit 1 for no keys/unresolved HEAD/unrelated histories. All other
         // failures (including cancellation, limits and config diagnostics) reject.
-        const emptyOptionalRead = (label === 'branchUpstreamKeys' || label === 'branchConfig' || label === 'historyHead') && code === 1 && !result.stdout.length && !result.stderr.length;
-        failure ??= code === 0 || emptyOptionalRead ? undefined : parseGitError(result.stderr.toString('utf8'), code);
+        const emptyOptionalRead = (label === 'branchUpstreamKeys' || label === 'branchConfig' || label === 'historyHead' || label === 'mergeBase') && code === 1 && !result.stdout.length && !result.stderr.length;
+        failure ??= code === 0 || emptyOptionalRead ? undefined : mutation ? parseMutationError(label, result.stdout, result.stderr.toString('utf8'), code) : parseGitError(result.stderr.toString('utf8'), code);
         // Never log stdout, stderr, argv, messages or remote URLs.
         if (failure) { this.logger.error(`${label.toUpperCase()} failed (${failure.kind}) ${result.durationMs}ms`); reject(failure); }
         else {

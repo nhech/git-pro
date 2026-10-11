@@ -9,7 +9,7 @@ type Change = { path: string; group: 'staged' | 'working' | 'untracked' | 'confl
 type Node = { kind: 'group'; group: Change['group'] } | { kind: 'folder'; repositoryId: string; group: Change['group']; prefix: string } | { kind: 'file'; repositoryId: string; change: Change } | { kind: 'message'; message: string };
 const disposable = { dispose: () => undefined };
 
-function harness(initial: Change[], mode = 'folder') {
+function harness(initial: Change[], mode = 'folder', operation = 'idle') {
   const file = path.resolve(__dirname, '../../src/views/changes/changes.provider.js'), load = createRequire(file), exports: Record<string, unknown> = {};
   let reads = 0, current = mode; const configListeners: ((event: { affectsConfiguration: (key: string) => boolean }) => void)[] = [];
   class TreeItem { id?: string; description?: string; contextValue?: string; tooltip?: string; iconPath?: unknown; command?: unknown; constructor(readonly label: string, readonly collapsibleState?: number) {} }
@@ -21,7 +21,7 @@ function harness(initial: Change[], mode = 'folder') {
   runInNewContext(readFileSync(file, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   const repo = { id: 'repo', root: 'fixture/repo' };
   let changes: readonly Change[] = Object.freeze(initial.map(change => Object.freeze(change)));
-  const registry = { active: repo, errors: new Map<string, string>(), store: { get: () => ({ changes }) }, onDidChange: () => disposable };
+  const registry = { active: repo, errors: new Map<string, string>(), store: { get: () => ({ changes, operation }) }, onDidChange: () => disposable };
   type Provider = { getChildren(node?: Node): Node[]; getTreeItem(node: Node): { label: string; description?: string; iconPath?: unknown; tooltip?: string }; dispose(): void };
   const provider = new (exports.ChangesProvider as new (registry: unknown) => Provider)(registry);
   return { provider, repo, get reads() { return reads; }, setMode: (value: string) => { current = value; for (const listener of configListeners) listener({ affectsConfiguration: key => key === 'gitPro.changes.groupBy' }); },
@@ -92,4 +92,15 @@ test('tree items share icons, redact once per row and keep their contract', () =
   assert.equal(item.iconPath, other.iconPath, 'equal visuals share one immutable icon object');
   assert.equal(h.provider.getTreeItem(third!).label, 'src/token=[redacted]', 'secret-looking text is still redacted');
   assert.equal(h.provider.getTreeItem(group!).description, '3');
+});
+
+test('conflict rows describe their kind from the repository operation and never run Diff', () => {
+  const conflicts = [change('both.ts', 'conflicts', 'UU'), change('gone.ts', 'conflicts', 'DU'), change('kept.ts', 'conflicts', 'UD')];
+  const describeRows = (operation: string) => { const h = harness(conflicts, 'status', operation); const [group] = h.provider.getChildren(); return h.provider.getChildren(group).map(node => h.provider.getTreeItem(node)); };
+  assert.deepEqual(describeRows('merging').map(item => item.description), ['Both modified', 'Deleted by us', 'Deleted by them']);
+  assert.deepEqual(describeRows('rebasing').map(item => item.description), ['Both modified', 'Deleted by them', 'Deleted by us'], 'a rebase swaps Yours and Theirs (D3)');
+  const item = describeRows('merging')[0] as { command?: { command: string } };
+  assert.equal(item.command?.command, 'gitPro.resolveConflict', 'a conflicted file has no diff to open');
+  const working = harness([change('a.ts')], 'status'); const [group] = working.provider.getChildren();
+  assert.equal((working.provider.getTreeItem(working.provider.getChildren(group)[0]!) as { command?: { command: string } }).command?.command, 'gitPro.diff');
 });

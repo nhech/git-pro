@@ -266,6 +266,106 @@
         "command": "gitPro.openBlameCommit",
         "title": "%command.gitPro.openBlameCommit.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.conflicts.open",
+        "title": "%command.gitPro.conflicts.open.title%",
+        "category": "%command.category%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "gitPro.conflicts.acceptYours",
+        "title": "%command.gitPro.conflicts.acceptYours.title%",
+        "category": "%command.category%",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "gitPro.conflicts.acceptTheirs",
+        "title": "%command.gitPro.conflicts.acceptTheirs.title%",
+        "category": "%command.category%",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "gitPro.conflicts.merge",
+        "title": "%command.gitPro.conflicts.merge.title%",
+        "category": "%command.category%",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "gitPro.mergeEditor.apply",
+        "title": "%command.gitPro.mergeEditor.apply.title%",
+        "category": "%command.category%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gitPro.mergeEditor.nextFile",
+        "title": "%command.gitPro.mergeEditor.nextFile.title%",
+        "category": "%command.category%",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "gitPro.mergeEditor.back",
+        "title": "%command.gitPro.mergeEditor.back.title%",
+        "category": "%command.category%",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "gitPro.operation.menu",
+        "title": "%command.gitPro.operation.menu.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.operation.continue",
+        "title": "%command.gitPro.operation.continue.title%",
+        "category": "%command.category%",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "gitPro.operation.abort",
+        "title": "%command.gitPro.operation.abort.title%",
+        "category": "%command.category%",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "gitPro.operation.skip",
+        "title": "%command.gitPro.operation.skip.title%",
+        "category": "%command.category%",
+        "icon": "$(debug-step-over)"
+      },
+      {
+        "command": "gitPro.compareWithCurrent",
+        "title": "%command.gitPro.compareWithCurrent.title%",
+        "category": "%command.category%",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "gitPro.diffWithWorkingTree",
+        "title": "%command.gitPro.diffWithWorkingTree.title%",
+        "category": "%command.category%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "gitPro.compareBranches",
+        "title": "%command.gitPro.compareBranches.title%",
+        "category": "%command.category%",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "gitPro.compareWithRef",
+        "title": "%command.gitPro.compareWithRef.title%",
+        "category": "%command.category%",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "gitPro.mergeIntoCurrent",
+        "title": "%command.gitPro.mergeIntoCurrent.title%",
+        "category": "%command.category%",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "gitPro.rebaseCurrentOnto",
+        "title": "%command.gitPro.rebaseCurrentOnto.title%",
+        "category": "%command.category%"
       }
     ],
     "viewsContainers": {
@@ -368,6 +468,11 @@
           "group": "history"
         },
         {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && gitPro.hasConflicts",
+          "group": "navigation"
+        },
+        {
           "command": "gitPro.advancedActions",
           "when": "view == gitPro.changes && gitPro.hasRepositories",
           "group": "navigation"
@@ -386,13 +491,38 @@
       "view/item/context": [
         {
           "command": "gitPro.branchActions",
-          "when": "view == gitPro.branchesView && (viewItem == gitPro.branch.local || viewItem == gitPro.branch.remote)",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./",
           "group": "inline"
         },
         {
           "command": "gitPro.branchActions",
-          "when": "view == gitPro.branchesView && (viewItem == gitPro.branch.local || viewItem == gitPro.branch.remote)",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./",
           "group": "gitPro"
+        },
+        {
+          "command": "gitPro.compareWithCurrent",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
+          "group": "compare@1"
+        },
+        {
+          "command": "gitPro.diffWithWorkingTree",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
+          "group": "compare@2"
+        },
+        {
+          "command": "gitPro.compareBranches",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./ && listDoubleSelection",
+          "group": "compare@3"
+        },
+        {
+          "command": "gitPro.mergeIntoCurrent",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
+          "group": "integrate@1"
+        },
+        {
+          "command": "gitPro.rebaseCurrentOnto",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
+          "group": "integrate@2"
         },
         {
           "command": "gitPro.repositoryTools",
@@ -405,6 +535,92 @@
           "command": "gitPro.fileHistory",
           "when": "resourceScheme == file && gitPro.hasRepositories",
           "group": "gitPro"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "gitPro.mergeEditor.apply",
+          "when": "isMergeEditor && mergeEditorResultUri in gitPro.conflictResources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitPro.mergeEditor.nextFile",
+          "when": "isMergeEditor && mergeEditorResultUri in gitPro.conflictResources",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitPro.mergeEditor.back",
+          "when": "isMergeEditor && mergeEditorResultUri in gitPro.conflictResources",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitPro.conflicts.merge",
+          "when": "resourceScheme == file && resource in gitPro.conflictResources && !isMergeEditor",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "gitPro.compareWithRef",
+          "when": "resourceScheme == file && gitPro.hasRepositories",
+          "group": "3_compare"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "gitPro.compareWithRef",
+          "when": "resourceScheme == file && gitPro.hasRepositories && !explorerResourceIsFolder",
+          "group": "3_compare"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitPro.conflicts.acceptYours",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.conflicts.acceptTheirs",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.conflicts.merge",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.compareBranches",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.mergeIntoCurrent",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.rebaseCurrentOnto",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.mergeEditor.apply",
+          "when": "isMergeEditor && mergeEditorResultUri in gitPro.conflictResources"
+        },
+        {
+          "command": "gitPro.mergeEditor.nextFile",
+          "when": "gitPro.hasConflicts"
+        },
+        {
+          "command": "gitPro.mergeEditor.back",
+          "when": "gitPro.hasConflicts"
+        },
+        {
+          "command": "gitPro.operation.continue",
+          "when": "gitPro.operation =~ /^(merging|rebasing|cherry-picking|reverting)$/"
+        },
+        {
+          "command": "gitPro.operation.abort",
+          "when": "gitPro.operation =~ /^(merging|rebasing|cherry-picking|reverting)$/"
+        },
+        {
+          "command": "gitPro.operation.skip",
+          "when": "gitPro.operation =~ /^(rebasing|cherry-picking|reverting)$/"
         }
       ]
     },
@@ -531,6 +747,42 @@
           "default": "status",
           "scope": "resource",
           "description": "%setting.gitPro.changes.groupBy.description%"
+        },
+        "gitPro.conflicts.autoOpen": {
+          "type": "string",
+          "enum": [
+            "gitPro",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "%setting.gitPro.conflicts.autoOpen.gitPro%",
+            "%setting.gitPro.conflicts.autoOpen.always%",
+            "%setting.gitPro.conflicts.autoOpen.never%"
+          ],
+          "default": "gitPro",
+          "scope": "resource",
+          "description": "%setting.gitPro.conflicts.autoOpen.description%"
+        },
+        "gitPro.conflicts.groupByDirectory": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%setting.gitPro.conflicts.groupByDirectory.description%"
+        },
+        "gitPro.compare.defaultFilesMode": {
+          "type": "string",
+          "enum": [
+            "fork",
+            "tips"
+          ],
+          "enumDescriptions": [
+            "%setting.gitPro.compare.defaultFilesMode.fork%",
+            "%setting.gitPro.compare.defaultFilesMode.tips%"
+          ],
+          "default": "fork",
+          "scope": "resource",
+          "description": "%setting.gitPro.compare.defaultFilesMode.description%"
         },
         "gitPro.cli.readTimeout": {
           "type": "integer",

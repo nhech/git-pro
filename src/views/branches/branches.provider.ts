@@ -23,8 +23,9 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
       return item;
     }
     const item = new vscode.TreeItem(redact(node.branch.name)); item.id = `${node.repositoryId}:${node.branch.ref}`;
-    item.contextValue = node.branch.remote ? 'gitPro.branch.remote' : 'gitPro.branch.local';
-    const current = this.git.registry.store.get(node.repositoryId)?.head === node.branch.name;
+    const current = !node.branch.remote && this.git.registry.store.get(node.repositoryId)?.head === node.branch.name;
+    // The checked-out branch keeps Branch Actions but not Compare with Current, Merge into Current or Rebase Current onto This.
+    item.contextValue = node.branch.remote ? 'gitPro.branch.remote' : current ? 'gitPro.branch.current' : 'gitPro.branch.local';
     item.description = current ? 'Current' : node.branch.remote ? `Remote${node.branch.upstream ? ` · ${redact(node.branch.upstream)}` : ''}` : redact(node.branch.upstream);
     item.tooltip = redact(`${node.branch.name}\n${node.branch.oid}${node.branch.worktree ? `\nChecked out: ${node.branch.worktree}` : ''}`);
     const visual = branchVisual({ remote: node.branch.remote, current });

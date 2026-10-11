@@ -102,6 +102,20 @@ input:not([type=checkbox]):focus-visible,textarea:focus-visible,select:focus-vis
 
 /* Page */
 body{margin:0;padding:0;background:var(--vscode-sideBar-background);color:var(--vscode-sideBar-foreground,var(--vscode-foreground));font:var(--gp-fs)/var(--gp-row) var(--gp-font)}
+/* Operation banner (§3.4): the theme's banner colours and native buttons; it wraps instead of scrolling in a narrow sidebar */
+#operation{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 6px;padding:6px 8px 8px 12px;background:var(--vscode-banner-background,var(--vscode-editorWidget-background));color:var(--vscode-banner-foreground,var(--gp-fg));border-bottom:1px solid var(--vscode-sideBarSectionHeader-border,var(--gp-border));font-size:12px;line-height:16px}
+#operation-icon{flex:0 0 16px;color:var(--vscode-banner-iconForeground,var(--vscode-editorWarning-foreground))}
+#operation-text{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+#operation-actions{display:flex;flex-wrap:wrap;gap:4px;flex:1 1 100%;min-width:0;padding-inline-start:22px}
+#operation-actions:empty{display:none}
+#operation-actions button{max-width:100%;height:22px;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--vscode-button-border,transparent);border-radius:var(--gp-radius-sm);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);font:12px/20px var(--gp-font);cursor:pointer}
+#operation-actions button:hover:not([aria-disabled=true]){background:var(--vscode-button-secondaryHoverBackground,var(--vscode-button-secondaryBackground))}
+#operation-actions button.primary{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}
+#operation-actions button.primary:hover:not([aria-disabled=true]){background:var(--vscode-button-hoverBackground,var(--vscode-button-background))}
+#operation-actions button[aria-disabled=true]{opacity:.5;cursor:default}
+#operation-actions button:focus-visible{outline-offset:1px}
+body.vscode-high-contrast #operation,body.vscode-high-contrast-light #operation{border:1px solid var(--vscode-contrastBorder)}
+body.vscode-high-contrast #operation-actions button,body.vscode-high-contrast-light #operation-actions button{border-color:var(--vscode-contrastBorder)}
 #notice:empty{display:none}
 #notice{padding:4px 12px 4px 20px;font-size:12px;line-height:16px;color:var(--gp-muted);overflow-wrap:anywhere}
 #notice.error{color:var(--vscode-errorForeground)}
@@ -207,4 +221,4 @@ body:has(#rows[data-busy="true"])::before{content:"";position:fixed;top:0;left:0
 #more{display:block;width:100%;height:22px;padding:0 12px 0 32px;border:0;background:transparent;color:var(--vscode-textLink-foreground);font:12px/22px var(--gp-font);text-align:left;cursor:pointer}
 #more:hover{text-decoration:underline;color:var(--vscode-textLink-activeForeground,var(--vscode-textLink-foreground))}
 
-@media (forced-colors:active){.entry[aria-selected=true]{outline:1px solid Highlight}.status{color:CanvasText}.count{border:1px solid CanvasText}.marker{color:CanvasText!important}.menu-icon{color:CanvasText}#selection-actions{border-top-color:CanvasText}}
+@media (forced-colors:active){#operation{border:1px solid CanvasText}#operation-actions button{border-color:ButtonText}#operation-actions button[aria-disabled=true]{color:GrayText}.entry[aria-selected=true]{outline:1px solid Highlight}.status{color:CanvasText}.count{border:1px solid CanvasText}.marker{color:CanvasText!important}.menu-icon{color:CanvasText}#selection-actions{border-top-color:CanvasText}}

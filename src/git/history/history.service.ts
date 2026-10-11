@@ -3,7 +3,8 @@ import { GitExecutor } from '../git-executor';
 import { GitFailure } from '../git-error-parser';
 import type { ReadCommand } from '../command-builders';
 import { buildHistoryRead, historyPath, type HistoryFilters } from './history-builders';
-import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, decode, type HistoryCommit } from './history-parser';
+import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, parseMergeBase, decode, type HistoryCommit } from './history-parser';
+import type { CompareFiles, CompareFilesMode, CompareService, MergeBase, RefComparison } from '../../webviews/compare/compare-contract';
 import { initialFileCursor, advanceFileCursor, parseLineageHistory, parseHistoryEdges, type FileCursor } from './file-lineage';
 import { parseBlame } from './blame-parser';
 import { parseStatus } from '../git-parser';
@@ -15,7 +16,7 @@ import { lstat } from 'node:fs/promises';
 
 export interface PinnedHistory { repositoryId: string; tips: readonly string[]; filters: Readonly<HistoryFilters>;refs?:readonly {name:string;oid:string}[] }
 export interface HistoryPage { commits: readonly HistoryCommit[]; offset: number; hasMore: boolean; nextOffset: number }
-export class HistoryService {
+export class HistoryService implements CompareService {
   private readonly scheduler = new ReadScheduler();
   private fileQueries=new WeakMap<PinnedHistory,{repository:RepositoryDescriptor;cursor?:FileCursor}>();
   private track(query:PinnedHistory):PinnedHistory {this.policy.checkTrust();this.fileQueries.set(query,{repository:this.repository(query.repositoryId)});return query;}
@@ -166,6 +167,33 @@ export class HistoryService {
     return { from: a, to: b, files: parseChangedFiles(files), stats: parseNumstat(stats),leftCommits:parseHistory(leftCommits),rightCommits:parseHistory(rightCommits),leftCount:count.left,rightCount:count.right,leftOffset:0,rightOffset:0 };
   }
   async comparisonPage(id:string,tip:string,exclude:string,offset:number,signal?:AbortSignal):Promise<HistoryCommit[]>{return parseHistory(await this.read(id,{kind:'comparisonCommits',tip,exclude,offset},signal));}
+  /** A branch, tag or exact OID, pinned to its commit; ranges and other revision syntax stay rejected by the `ref` recipe. */
+  async resolveRef(id:string,ref:string,signal?:AbortSignal):Promise<string>{return validateOid(decode(await this.read(id,{kind:'ref',ref},signal)).trim());}
+  async mergeBase(id:string,left:string,right:string,signal?:AbortSignal):Promise<MergeBase>{
+    validateOid(left);validateOid(right);return Object.freeze(parseMergeBase(await this.read(id,{kind:'mergeBase',left,right},signal)));
+  }
+  /** Changed files and line counts between two pinned trees (or a tree and the working tree); a listing past the output bound keeps the comparison and says so. */
+  private async listedFiles(id:string,scope:CompareFiles['scope'],from:string,to:string|undefined,signal?:AbortSignal,note?:CompareFiles['note']):Promise<CompareFiles>{
+    const bounded=(command:ReadCommand)=>this.read(id,command,signal).catch((error:unknown)=>{if(error instanceof GitFailure&&error.kind==='output-limit')return undefined;throw error;});
+    const [files,stats]=await Promise.all(to===undefined?[bounded({kind:'worktreeDiff',oid:from}),bounded({kind:'worktreeNumstat',oid:from})]:[bounded({kind:'changedFiles',from,to}),bounded({kind:'numstat',from,to})]);
+    return Object.freeze({scope,from,to,files:Object.freeze(files?parseChangedFiles(files):[]),stats:Object.freeze(files&&stats?parseNumstat(stats):[]),omitted:!files,...(note?{note}:{})});
+  }
+  /** Since fork: what `left` changed after it forked from `right` (first merge base when there are several); unrelated histories fall back to tip to tip. */
+  async comparisonFiles(id:string,left:string,right:string,mode:CompareFilesMode,signal?:AbortSignal,fork?:MergeBase):Promise<CompareFiles>{
+    validateOid(left);validateOid(right);if(mode!=='fork'&&mode!=='tips')throw new Error('Choose Since fork or Tip to tip.');
+    if(mode==='tips')return this.listedFiles(id,'tips',left,right,signal);
+    const base=fork??await this.mergeBase(id,left,right,signal);
+    if(!base.oid)return this.listedFiles(id,'tips',left,right,signal,'noCommonAncestor');
+    return this.listedFiles(id,'fork',base.oid,left,signal,base.multiple?'multipleMergeBases':undefined);
+  }
+  async worktreeFiles(id:string,oid:string,signal?:AbortSignal):Promise<CompareFiles>{validateOid(oid);return this.listedFiles(id,'worktree',oid,undefined,signal);}
+  async compareRefs(id:string,leftRef:string,rightRef:string,mode:CompareFilesMode,signal?:AbortSignal):Promise<RefComparison>{
+    const [left,right]=await Promise.all([this.resolveRef(id,leftRef,signal),this.resolveRef(id,rightRef,signal)]);
+    const [fork,leftCommits,rightCommits,counts]=await Promise.all([this.mergeBase(id,left,right,signal),this.read(id,{kind:'comparisonCommits',tip:left,exclude:right},signal),this.read(id,{kind:'comparisonCommits',tip:right,exclude:left},signal),this.read(id,{kind:'comparisonCount',from:left,to:right},signal)]);
+    const count=parseComparisonCounts(counts),files=await this.comparisonFiles(id,left,right,mode,signal,fork);
+    return Object.freeze({repositoryId:id,left:Object.freeze({name:leftRef,oid:left}),right:Object.freeze({name:rightRef,oid:right}),fork,
+      leftOnly:Object.freeze({count:count.left,offset:0,commits:Object.freeze(parseHistory(leftCommits))}),rightOnly:Object.freeze({count:count.right,offset:0,commits:Object.freeze(parseHistory(rightCommits))}),files});
+  }
   async blame(id: string, file: string, line: number, signal?: AbortSignal) {
     const repo = this.repository(id); const absolute = await this.policy.authorizeFile(repo.root, file);
     const info = await lstat(absolute);

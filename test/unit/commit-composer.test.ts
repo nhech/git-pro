@@ -74,4 +74,7 @@ test('Ctrl+Enter in the message box commits like the Commit button, and only whe
   message.value='Greet loudly';message.handlers.get('input')!({});
   assert.equal(press({}),false,'a plain Enter adds a new line');assert.equal(press({ctrlKey:true,shiftKey:true}),false);
   press({ctrlKey:true});const sent=posted.filter(item=>item.type==='commit');assert.equal(sent.length,1);assert.equal(sent[0]!.push,false);assert.equal(sent[0]!.message,'Greet loudly');
+  // During an operation the composer points to Git Pro's own Conflicts tab, not to Source Control.
+  receive!({data:{type:'state',session:'s',repositoryId:'repo',repository:'repo',message:'',busy:false,staged:1,operation:'merging',subjectLimit:72,history:[]}});
+  assert.equal(elements.get('staged')!.textContent,'merging in progress · resolve in Git Pro Conflicts');assert.equal(elements.get('commit')!.disabled,true);
 });

@@ -10,6 +10,7 @@ export type HistoryReadCommand = { kind: 'history' | 'historyWindow'; tips: read
   {kind:'comparisonCommits';tip:string;exclude:string;offset?:number} | {kind:'comparisonCount';from:string;to:string} |
   { kind: 'commitMetadata' | 'commitMessage' | 'containingRefs'; oid: string } |
   { kind: 'changedFiles' | 'numstat'; from?: string; to: string; paths?: readonly string[] } |
+  {kind:'mergeBase';left:string;right:string} | {kind:'worktreeDiff'|'worktreeNumstat';oid:string;paths?:readonly string[]} |
   { kind: 'blame'; path: string; line: number; oid?: string };
 function bounded(value: string, maximum = 500): string {
   if (typeof value !== 'string' || value.includes('\0') || value.length > maximum) throw new Error('Invalid history filter.');
@@ -77,6 +78,11 @@ export function buildHistoryRead(command: HistoryReadCommand): string[] {
       const args = command.from ? ['diff', validateOid(command.from), validateOid(command.to)] : ['diff-tree', '--root', '--no-commit-id', '-r', validateOid(command.to)];
       return [...prefix, ...args, '--no-ext-diff', '--no-textconv', '-M', '-l1000', output, '-z', '--', ...paths];
     }
+    // Exit 1 with no output means unrelated histories; the executor accepts that empty answer for this label only.
+    case 'mergeBase': return [...prefix,'merge-base','--all',validateOid(command.left),validateOid(command.right)];
+    // One OID and no second tree: Git compares it with the working tree (tracked files, staged plus unstaged).
+    case 'worktreeDiff': case 'worktreeNumstat':
+      return [...prefix,'diff',validateOid(command.oid),'--no-ext-diff','--no-textconv','-M','-l1000',command.kind==='worktreeDiff'?'--name-status':'--numstat','-z','--',...(command.paths??[]).map(historyPath)];
     case 'blame': {
       if (!Number.isInteger(command.line) || command.line < 1 || command.line > 10_000_000) throw new Error('Invalid blame line.');
       // Like every other content read, never run the repository's textconv programs.

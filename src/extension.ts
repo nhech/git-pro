@@ -38,6 +38,10 @@ import { ToolsProvider } from './views/tools/tools.provider';
 import { boundedInteger } from './utils/settings';
 import { recoveryFor } from './utils/recovery';
 import { FileActionsCommands } from './commands/file-actions.commands';
+import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfterFailure, type FeatureDeps } from './conflicts/surfaces';
+import { registerConflicts } from './commands/conflicts.commands';
+import { registerOperation } from './commands/operation.commands';
+import { registerCompare } from './commands/compare.commands';
 
 export interface ExtensionDiagnostics {
   repositories: () => number;
@@ -81,9 +85,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const registry = new RepositoryRegistry(policy, executor, store, logger, 5000, { isActive: () => vscode.window.state.focused, isBusy: repo => coordinator.busy(repo.commonDir) });
     const coordinator = new OperationCoordinator(() => { policy.checkTrust(); if (!adapter.enabled) throw new Error('Built-in Git is disabled.'); });
     const providers = { repositories: new RepositoriesProvider(registry), changes: new ChangesProvider(registry) };
-    const changesPanel = new ChangesPanel(context,registry,providers.changes);
+    // One late-bound holder: the register* calls below fill in the feature surfaces these constructors use.
+    const surfaces = createSurfaces();
+    const changesPanel = new ChangesPanel(context,registry,providers.changes,surfaces);
     const git = new GitService(registry, executor, policy, coordinator, adapter.dailyBackend());
-    const statusbar = new StatusbarController(registry, id => git.lastFetched(id), git.onDidFetch);
+    const statusbar = new StatusbarController(registry, id => git.lastFetched(id), git.onDidFetch, surfaces);
     const autoFetch = new AutoFetch(git, logger);
     const revisions = new RevisionProvider();
     const advanced = new AdvancedService(git,coordinator);
@@ -91,18 +97,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       workspaceRebaseJournal(context.workspaceState));
     advanced.setEditorJobs(interactive);
     const planner=new RebasePlanner(context);context.subscriptions.push(planner);
-    const advancedCommands = new AdvancedCommands(advanced,revisions,interactive,planner,context.extensionUri);
+    const advancedCommands = new AdvancedCommands(advanced,revisions,interactive,planner,context.extensionUri,surfaces);
     const fileActions = new FileActionsCommands(advanced,revisions);
     const tools = new ToolsService(advanced);
     const toolsProvider = new ToolsProvider(tools);
     context.subscriptions.push(toolsProvider,vscode.window.createTreeView('gitPro.toolsView',{treeDataProvider:toolsProvider}));
     const history = new HistoryService(registry, executor, policy);
-    const toolsCommands = new ToolsCommands(tools,new WorktreeService(tools,policy),history,revisions);
+    const toolsCommands = new ToolsCommands(tools,new WorktreeService(tools,policy),history,revisions,surfaces);
     const historyPanels = new HistoryPanel(context, history, revisions);
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
-    const daily = new DailyCommands(git, revisions, adapter, changesPanel, logger);
+    const daily = new DailyCommands(git, revisions, adapter, changesPanel, logger, surfaces);
     const branches = new BranchesProvider(git);
     const composer = new CommitComposer(context, git, (id, message, options, push) => daily.commit(id, message, options, push),logger);
     const lifetime = new AbortController();
@@ -112,12 +118,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       changesPanel, vscode.window.registerWebviewViewProvider('gitPro.changes',changesPanel,{webviewOptions:{retainContextWhenHidden:false}}),
       revisions, daily, branches, composer, autoFetch, history, historyPanels, blame,
       vscode.workspace.registerTextDocumentContentProvider('git-pro-revision', revisions),
-      vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches }),
+      // Ctrl/Shift-click selects two branches for Compare Branches; a plain click still runs the row's Branch Actions.
+      vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches, canSelectMany: true }),
       vscode.window.registerWebviewViewProvider('gitPro.commitView', composer));
     const command = (id: string, action: (...args: unknown[]) => Promise<unknown>) => {
       context.subscriptions.push(vscode.commands.registerCommand(id, async (...args: unknown[]) => {
         try { policy.checkTrust(); if (!adapter.enabled) throw new Error('Enable the built-in Git extension first.'); return await action(...args); }
-        catch (error) { const recovery=recoveryFor(error);logger.error(recovery.diagnostic);const choice=await vscode.window.showErrorMessage(`Git Pro: ${recovery.message}`,recovery.label);if(choice===recovery.label)await vscode.commands.executeCommand(recovery.command); }
+        catch (error) {
+          const recovery=recoveryFor(error);logger.error(recovery.diagnostic);
+          // GitFailure names no repository; every Git Pro mutation acts on the active one, and its refresh has run before the rejection arrives here.
+          const repo=registry.active,snapshot=repo?store.get(repo.id):undefined,conflict=isConflictFailure(error);
+          if(conflict&&repo)await openConflictsAfterFailure(surfaces,{error,repositoryId:repo.id,conflicts:snapshot?.changes.filter(change=>change.group==='conflicts').length??0,
+            mode:conflictsAutoOpen(vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)).get('conflicts.autoOpen'))}).catch((failure:unknown)=>{logger.error(recoveryFor(failure).diagnostic);return false;});
+          // Abort only navigates to the operation command, which asks before it changes anything.
+          const abort=conflict&&snapshot&&['merging','rebasing','cherry-picking','reverting'].includes(snapshot.operation)?'Abort…':undefined;
+          const choice=await vscode.window.showErrorMessage(`Git Pro: ${recovery.message}`,recovery.label,...(abort?[abort]:[]));
+          if(choice===recovery.label)await vscode.commands.executeCommand(recovery.command);
+          else if(abort&&choice===abort)await vscode.commands.executeCommand('gitPro.operation.abort');
+        }
       }));
     };
     command('gitPro.refresh', () => registry.refresh());
@@ -169,6 +187,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       const file = await policy.authorizeFile(repo.root, relative);
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
+    const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,surfaces};
+    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);
     let syncTail: Promise<void> = Promise.resolve();
     const synchronize = () => {
       syncTail = syncTail.then(async () => {

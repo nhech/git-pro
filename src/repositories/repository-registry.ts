@@ -6,7 +6,7 @@ import { GitExecutor } from '../git/git-executor';
 import { parseStatus, sameStatus, type StatusSnapshot } from '../git/git-parser';
 import { PathPolicy, containsPath, canonicalFilePath } from '../security/paths';
 import { redact } from '../security/redaction';
-import { detectOperation, type GitOperation } from '../state/operation-state';
+import { detectConflictOperation, type GitOperation } from '../state/operation-state';
 import { RepositoryStore } from '../state/repository-store';
 import { Emitter, type Disposable } from '../utils/events';
 import { Limiter } from '../utils/limiter';
@@ -182,7 +182,8 @@ export class RepositoryRegistry implements Disposable {
       try {
         // Owned read captures external checkout/status even when API events are delayed.
         const result = await this.executor.read(entry.descriptor.root, { kind: 'status' }, { signal: entry.controller.signal });
-        const operation = await detectOperation(entry.descriptor.gitDir);
+        // The operation that owns the conflicts, as AdvancedService and the Conflicts tab see it, so the status bar and banner name the same one.
+        const operation = await detectConflictOperation(entry.descriptor.gitDir, () => parseStatus(result.stdout).changes.some(change => change.group === 'conflicts'));
         if (this.entries.get(id) !== entry || this.disposed) return;
         changed = this.install(id, entry, result.stdout, operation);
         if (this.errors.delete(id)) changed = true;

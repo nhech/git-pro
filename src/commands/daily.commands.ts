@@ -15,13 +15,15 @@ import { recoveryFor } from '../utils/recovery';
 import { changedPathsInFolder } from '../views/changes/folder-selection';
 import type { ChangeGroup } from '../git/git-parser';
 import { branchVisual } from '../views/tree-visuals';
+import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfterFailure, type Surfaces } from '../conflicts/surfaces';
 
 export class DailyCommands implements vscode.Disposable {
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly branchPickers = new Set<vscode.Disposable>();
   readonly diffs: DiffService;
   constructor(private readonly git: GitService, private readonly revisions: RevisionProvider,
-    private readonly adapter: BuiltinGitAdapter, private readonly changesView: { readonly selection: readonly ChangeNode[] }, private readonly logger: Logger) {
+    private readonly adapter: BuiltinGitAdapter, private readonly changesView: { readonly selection: readonly ChangeNode[] }, private readonly logger: Logger,
+    private readonly surfaces: Surfaces = createSurfaces()) {
     this.diffs = new DiffService(git);
     const register = (id: string, action: (...args: unknown[]) => Promise<unknown>) => {
       this.subscriptions.push(vscode.commands.registerCommand(id, async (...args: unknown[]) => {
@@ -43,7 +45,7 @@ export class DailyCommands implements vscode.Disposable {
     register('gitPro.push', () => this.push());
     register('gitPro.pull', () => this.pull());
     register('gitPro.branches', () => this.branches());
-    register('gitPro.branchActions', arg => this.branchActions(arg));
+    register('gitPro.branchActions', (arg, selected) => this.branchActions(arg, selected));
     register('gitPro.createBranch', () => this.createBranch());
     register('gitPro.copyPath', arg => this.copyPath(arg));
     register('gitPro.init', async () => {
@@ -207,22 +209,35 @@ export class DailyCommands implements vscode.Disposable {
     if (selected.create) await this.createBranch();
     else if (selected.node) await this.branchActions(selected.node);
   }
-  private async branchActions(arg: unknown): Promise<void> {
-    const node = arg as BranchNode;
+  /** `selection` is the multi-selection VS Code passes from the Branches view menus; the actions apply to the clicked branch alone. */
+  private async branchActions(arg: unknown, selection?: unknown): Promise<void> {
+    const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined)) as BranchNode | undefined;
     if (!node || node.kind !== 'branch') return this.branches();
     const { branch, repositoryId: id } = node;
-    type Action = 'Checkout' | 'Checkout Tracking Branch' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
+    type Action = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
     type Item = vscode.QuickPickItem & { action?: Action };
     const item = (action: Action, description: string, icon: string): Item => ({ label: action, action, description, iconPath: new vscode.ThemeIcon(icon) });
-    const copy = item('Copy Name', 'Copy the full branch name', 'copy');
-    const actions: Item[] = branch.remote ? [item('Checkout Tracking Branch', 'Create a local branch that tracks this remote', 'git-branch'), copy] : [
-      item('Checkout', 'Switch to this local branch', 'git-branch'), item('Rename', 'Change the local branch name', 'edit'),
+    const copy = item('Copy Name', 'Copy the full branch name', 'copy'), head = this.git.registry.store.get(id)?.head;
+    // WebStorm's branch popup: the checked-out branch cannot be compared with, merged into or rebased onto itself.
+    const current = !branch.remote && branch.name === head, into = head && head !== '(detached)' ? redact(head) : 'HEAD';
+    const integrate: Item[] = current ? [] : [
+      { label: 'Compare and integrate', kind: vscode.QuickPickItemKind.Separator },
+      item('Compare with Current', `Commits and files that differ from ${into}`, 'git-compare'), item('Show Diff with Working Tree', 'Files that differ from your working tree', 'diff'),
+      item('Merge into Current…', `Merge this branch into ${into}`, 'git-merge'), item('Rebase Current onto This…', `Replay ${into} commits on top of this branch`, 'arrow-up'),
+      { label: 'Branch', kind: vscode.QuickPickItemKind.Separator },
+    ];
+    const actions: Item[] = branch.remote ? [item('Checkout Tracking Branch', 'Create a local branch that tracks this remote', 'git-branch'), ...integrate, copy] : [
+      item('Checkout', 'Switch to this local branch', 'git-branch'), ...integrate, item('Rename', 'Change the local branch name', 'edit'),
       item('Set Upstream', 'Choose a remote tracking branch', 'link'), item('Unset Upstream', 'Remove local tracking configuration', 'remove'), copy,
       { label: 'Delete branch', kind: vscode.QuickPickItemKind.Separator },
       item('Delete', 'Delete a local branch if fully merged', 'trash'), item('Force Delete', 'Unmerged commits may become unreachable', 'warning'),
     ];
     const choice = (await vscode.window.showQuickPick(actions, { title: redact(branch.name) }))?.action;
     if (!choice) return;
+    // These run through their own trusted commands, so a merge or rebase that stops on conflicts opens Conflicts like any other Git Pro mutation.
+    const routed: Partial<Record<Action, string>> = { 'Compare with Current': 'gitPro.compareWithCurrent', 'Show Diff with Working Tree': 'gitPro.diffWithWorkingTree', 'Merge into Current…': 'gitPro.mergeIntoCurrent', 'Rebase Current onto This…': 'gitPro.rebaseCurrentOnto' };
+    const routedCommand = routed[choice];
+    if (routedCommand) { await vscode.commands.executeCommand(routedCommand, node); return; }
     if (choice === 'Copy Name') { await vscode.env.clipboard.writeText(branch.name); return; }
     if (choice === 'Checkout') { await this.git.checkout(id, branch.name); return; }
     if (choice === 'Checkout Tracking Branch') {
@@ -243,11 +258,18 @@ export class DailyCommands implements vscode.Disposable {
     if (await vscode.window.showWarningMessage(`${choice} ${redact(branch.name)} at ${branch.oid.slice(0, 12)}?${choice === 'Force Delete' ? ' Unmerged commits may become unreachable.' : ''}`, { modal: true }, choice) === choice) await this.git.branchAction(preview, branch.name, choice === 'Force Delete' ? 'force-delete' : 'delete');
   }
   private async copyPath(arg: unknown): Promise<void> { await vscode.env.clipboard.writeText((await this.selection(arg)).paths.join('\n')); }
+  /** Same conflict handling as the trusted wrapper in extension.ts: a pull that stops on conflicts opens Conflicts on the active repository, and the toast offers Abort…. */
   async error(error: unknown): Promise<void> {
     const recovery=recoveryFor(error);this.logger.error(recovery.diagnostic);
-    const choice = await vscode.window.showErrorMessage(`Git Pro: ${recovery.message}`, recovery.label,'Open Source Control');
+    const repo=this.git.registry.active,snapshot=repo?this.git.registry.store.get(repo.id):undefined,conflict=isConflictFailure(error);
+    if(conflict&&repo)await openConflictsAfterFailure(this.surfaces,{error,repositoryId:repo.id,conflicts:snapshot?.changes.filter(change=>change.group==='conflicts').length??0,
+      mode:conflictsAutoOpen(vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)).get('conflicts.autoOpen'))}).catch((failure:unknown)=>{this.logger.error(recoveryFor(failure).diagnostic);return false;});
+    // Abort only navigates to the operation command, which asks before it changes anything.
+    const abort=conflict&&snapshot&&['merging','rebasing','cherry-picking','reverting'].includes(snapshot.operation)?'Abort…':undefined;
+    const choice = await vscode.window.showErrorMessage(`Git Pro: ${recovery.message}`, recovery.label,...(abort?[abort]:[]),'Open Source Control');
     if(choice===recovery.label)await vscode.commands.executeCommand(recovery.command);
-    if (choice === 'Open Source Control') await vscode.commands.executeCommand('workbench.view.scm');
+    else if(abort&&choice===abort)await vscode.commands.executeCommand('gitPro.operation.abort');
+    else if (choice === 'Open Source Control') await vscode.commands.executeCommand('workbench.view.scm');
   }
   dispose(): void {
     for (const picker of this.branchPickers) picker.dispose();
