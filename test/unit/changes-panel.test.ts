@@ -134,10 +134,14 @@ test('Changes rows never wait long for a slow operation summary and pick up its 
   const summary={repositoryId:'repo-A',operation:'rebasing',title:'Rebasing feature onto main',progress:{current:3,total:7},yours:{label:'Yours',oid:'9f8e7d6c5b4a39281706f5e4d3c2b1a098765432',subject:'Add login',detail:'Rebasing 9f8e7d6 from feature'},theirs:{label:'Theirs',detail:'main'},sides:{yours:{stage:3,flag:'theirs'},theirs:{stage:2,flag:'ours'}},conflicts:2,editStop:false,canContinue:false,canSkip:true,canAbort:true,nativeOnly:false};
   const calls:string[]=[];
   const h=await conflictHarness('fixture-missing','rebasing',[{group:'conflicts',path:'a.ts',status:'UU'},{group:'conflicts',path:'b.ts',status:'UU'}],{operation:{summary:(id:string)=>{calls.push(id);return pending;}}});
-  await new Promise(resolve=>setTimeout(resolve,400));
+  // The summary is still pending here, so the plain wording must appear once the 300 ms wait lapses.
+  for(let i=0;i<200&&(h.state()?.operation as {text:string}|undefined)?.text!=='Rebase in progress · 2 conflicts';i++)await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal((h.state().operation as {text:string}).text,'Rebase in progress · 2 conflicts','plain wording first');assert.equal(h.rows().length,3,'the rows did not wait');
-  release(summary);await settle();await settle();await settle();
-  assert.equal((h.state().operation as {text:string}).text,'Rebasing feature onto main · 3/7 · 9f8e7d6 Add login · 2 conflicts');
+  release(summary);
+  // The re-render reads working files with lstat, so wait for its result instead of a fixed number of turns.
+  const worded='Rebasing feature onto main · 3/7 · 9f8e7d6 Add login · 2 conflicts';
+  for(let i=0;i<200&&(h.state().operation as {text:string}).text!==worded;i++)await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal((h.state().operation as {text:string}).text,worded);
   same((h.state().operation as {actions:{id:string}[]}).actions.map(item=>item.id),['resolve','continue','skip','abort']);
   assert.ok(calls.length>=2&&calls.length<=3,'one re-render once the summary arrives');
   h.panel.dispose();
