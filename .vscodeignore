@@ -14,9 +14,6 @@ docs/**
 !docs/user-guide/WORKFLOWS.md
 !docs/user-guide/SETTINGS.md
 !docs/user-guide/RELEASE_STATUS.md
-!docs/images/changes-and-commit.jpg
-!docs/images/file-actions.jpg
-!docs/images/history.jpg
 designs/**
 tsconfig*.json
 eslint.config.mjs

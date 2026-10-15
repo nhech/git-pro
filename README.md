@@ -1,6 +1,6 @@
 # Git Pro
 
-Git workflows for VS Code: review changes, stage files, write commits, browse History and manage repositories from one sidebar.
+Review changes, commit, browse History, compare branches, resolve merge conflicts and recover a stopped rebase, all from one Git sidebar in VS Code.
 
 Website: [git-pro.longtd.me](https://git-pro.longtd.me/) · Source: [github.com/nhech/git-pro](https://github.com/nhech/git-pro)
 
@@ -24,7 +24,7 @@ Hover or select a file for inline Open Changes, Open File, Discard and Stage but
 
 ### Browse History and compare revisions
 
-Follow the commit graph, select a commit for details and changed files, or compare revisions without leaving VS Code.
+Follow the commit graph, select a commit for details and changed files, or compare revisions without leaving VS Code. Right-click a commit to check it out, branch or tag from it, cherry-pick, revert, start an interactive rebase from it or compare it with the current branch or the working tree.
 
 ![Git Pro History panel with a commit graph and selected commit details](docs/images/history.jpg)
 
@@ -43,15 +43,15 @@ Selecting a file does not stage it. The composer commits the current index, incl
 | Area | Workflows |
 |---|---|
 | Changes and commits | File and folder staging, native diffs, reviewed discard, commit, amend and signoff |
-| Branches and sync | Branch and upstream actions, fetch, explicit pull strategy, push, init and clone |
-| History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History |
+| Branches and sync | Branch and upstream actions from the view's own right-click menu, fetch, explicit pull strategy, push, init and clone |
+| History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History; commit actions in the right-click menu |
 | File review | Text hunk actions, saved-file commits and optional active-line blame and CodeLens |
 | Conflicts | Conflicts tab with Yours/Theirs by branch, bulk Accept Yours/Theirs, Merge… in VS Code's merge editor, Continue/Abort banner |
-| Branch compare | Compare with Current or any other branch or tag, two-branch and working-tree comparisons, commits on each side, Open All Changes, Get from Branch |
-| Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase |
-| Repository tools | Stashes, tags, remotes and worktrees |
+| Compare | Any branch, tag or revision such as `HEAD~3` against another; a branch, tag or revision against the working tree or one folder of it; commits on each side; changed files as a tree with diffs opened beside the list; Open All Changes; Get from Branch |
+| Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase with a right-click menu on each step |
+| Repository tools | Stashes, tags, remotes and worktrees, each with its own right-click menu |
 
-Hover a row for inline actions or right-click it for all of them. Icons, theme colors and right-aligned status labels distinguish changes. Auto-fetch, blame and CodeLens are off by default.
+Right-click menus are VS Code's own, so they look and behave like the rest of the workbench. Hover a row for inline actions. Icons, theme colors and right-aligned status labels distinguish changes. Discard, delete, reset, rebase and force push show what they will do and ask first. Auto-fetch, blame and CodeLens are off by default.
 
 Read [getting started](docs/user-guide/GETTING_STARTED.md), [workflows and recovery](docs/user-guide/WORKFLOWS.md) and [settings](docs/user-guide/SETTINGS.md).
 
