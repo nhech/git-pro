@@ -47,5 +47,5 @@ Fixes found in a full audit:
 - Merge into Current… and Rebase Current onto This… in Branch Actions, with the Advanced Actions review.
 - Manage stashes, tags, remotes and worktrees.
 - Use theme-aware icons, clear change statuses and responsive History panels.
-- A native look across every view: 22px rows, status letters, codicons, theme colours throughout, a column-based History with a sticky header and theme lane colours, and a GitLens-style rebase planner. The orange accent marks HEAD and the current branch and can be changed through the theme colour `gitPro.accent`.
+- A native look across every view: 22px rows, status letters, codicons, theme colours throughout, a column-based History with a sticky header and theme lane colours, and an interactive rebase planner. The orange accent marks HEAD and the current branch and can be changed through the theme colour `gitPro.accent`.
 - Work in large repositories: Stage All and selections of thousands of files, very large unstaged or untracked files, slow containing-ref lookups and very large commits are handled without blocking other actions.
