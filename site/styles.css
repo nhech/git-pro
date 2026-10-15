@@ -1725,6 +1725,90 @@ html:has(.lightbox[open]) {
   text-align: center;
 }
 
+/* The comparison page. */
+.compare-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--step-3);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.compare-intro .section-lead {
+  max-width: 52rem;
+}
+
+.compare-table {
+  min-width: 62rem;
+}
+
+.compare-table th,
+.compare-table td {
+  min-width: 11rem;
+}
+
+.compare-table tbody th {
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* On a narrow screen the table scrolls sideways; the feature names stay in view while the columns move. */
+@media (max-width: 959px) {
+  .compare-table th:first-child {
+    min-width: 7.5rem;
+  }
+
+  .compare-table thead th:first-child,
+  .compare-table tbody th {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--border);
+  }
+
+  .compare-table thead th:first-child {
+    background: var(--surface-2);
+  }
+}
+
+/* The Git Pro column is the one being read; the others sit one step back. */
+.compare-table td:nth-child(2) {
+  color: var(--text);
+  white-space: normal;
+}
+
+.compare-table code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.compare-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  margin-top: var(--space-7);
+}
+
+@media (min-width: 960px) {
+  .compare-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7); }
+}
+
+.compare-columns h2,
+.compare-sources h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--step-1);
+}
+
+.compare-columns .ticks strong,
+.compare-sources .ticks strong {
+  color: var(--text);
+}
+
+.compare-sources {
+  margin-top: var(--space-7);
+}
+
 .roadmap-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

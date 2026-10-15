@@ -59,6 +59,13 @@
     "codeRepository": "https://github.com/nhech/git-pro",
     "programmingLanguage": "TypeScript",
     "keywords": "git, source control, commit, stage, history, graph, blame, rebase, stash, worktree",
+    "operatingSystem": "Windows, macOS, Linux",
+    "dateModified": "{{RELEASE_DATE_ISO}}",
+    "releaseNotes": "https://github.com/nhech/git-pro/blob/main/CHANGELOG.md",
+    "installUrl": "{{MARKETPLACE_URL}}",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "sameAs": ["{{MARKETPLACE_URL}}", "https://github.com/nhech/git-pro"],
     "author": { "@type": "Person", "name": "longtd", "url": "https://longtd.me" }
   }
   </script>
@@ -146,7 +153,7 @@
           <div class="window">
             <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
             <div class="window-view">
-              <img src="images/changes-and-commit.jpg" width="2160" height="1350" fetchpriority="high"
+              <img src="images/changes-and-commit.jpg" srcset="img/changes-and-commit-1080.jpg 1080w, img/changes-and-commit-1600.jpg 1600w, images/changes-and-commit.jpg 2160w" sizes="(min-width: 1200px) 1120px, calc(100vw - 2rem)" width="2160" height="1350" fetchpriority="high"
                 alt="Git Pro Changes sidebar with right-aligned file status labels and the commit composer">
             </div>
           </div>
@@ -294,7 +301,7 @@
         <div class="shots">
           <figure class="shot shot-wide reveal">
             <a class="shot-link" href="images/history.jpg" data-lightbox>
-              <img src="images/history.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+              <img src="images/history.jpg" srcset="img/history-1080.jpg 1080w, img/history-1600.jpg 1600w, images/history.jpg 2160w" sizes="(min-width: 1200px) 1120px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
                 alt="Git Pro History panel with a commit graph and selected commit details">
               <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
             </a>
@@ -303,7 +310,7 @@
 
           <figure class="shot reveal">
             <a class="shot-link" href="images/changes-and-commit.jpg" data-lightbox>
-              <img src="images/changes-and-commit.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+              <img src="images/changes-and-commit.jpg" srcset="img/changes-and-commit-1080.jpg 1080w, img/changes-and-commit-1600.jpg 1600w, images/changes-and-commit.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
                 alt="Git Pro Changes sidebar with right-aligned file status labels and the commit composer">
               <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
             </a>
@@ -312,7 +319,7 @@
 
           <figure class="shot reveal" style="--i: 1">
             <a class="shot-link" href="images/file-actions.jpg" data-lightbox>
-              <img src="images/file-actions.jpg" width="2160" height="1350" loading="lazy" decoding="async"
+              <img src="images/file-actions.jpg" srcset="img/file-actions-1080.jpg 1080w, img/file-actions-1600.jpg 1600w, images/file-actions.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
                 alt="Git Pro file context menu showing diff, staging, file history, copy path and discard actions">
               <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
             </a>
@@ -493,6 +500,13 @@
           </details>
 
           <details>
+            <summary>How does Git Pro compare with GitLens or Git Graph?</summary>
+            <div class="faq-body">
+              <p>They overlap but make different choices: GitLens centres on blame, hovers and integrations with paid plans, Git Graph on a commit graph, and Git Pro on conflicts, comparing branches, interactive rebase and reviewed destructive actions, with no account and no telemetry. A dated, sourced <a href="/compare/">comparison</a> lists where each one is ahead, including where Git Pro is behind.</p>
+            </div>
+          </details>
+
+          <details>
             <summary>Does Git Pro replace VS&nbsp;Code's built-in Git?</summary>
             <div class="faq-body">
               <p>No. Git Pro requires the built-in Git extension and builds on it. Line-level partial staging stays in native Source Control, and Git Pro commits that index. Git Pro lists conflicts in its own Conflicts tab and opens VS&nbsp;Code's native merge editor for three-way edits; when it is unavailable, use the conflict guidance and native diffs. Authentication and signing use your configured Git identity, credential helpers, SSH agent and signing settings.</p>
@@ -558,6 +572,7 @@
           <article class="card roadmap-card reveal" style="--i: 1">
             <h3>Known limits, not yet lifted</h3>
             <ul class="ticks" role="list">
+              <li>Acting on a commit straight from its History row: checkout, branch, cherry-pick and reset are Advanced Actions that ask for the commit</li>
               <li>Comparing a folder with a branch or tag</li>
               <li>Remote WSL and Dev Containers have not completed release validation</li>
               <li>Interactive rebase covers linear ranges of 1–200 commits; merges in the range need native Git</li>
@@ -607,6 +622,7 @@
           <h2 id="footer-project" class="footer-heading">Project</h2>
           <ul>
             <li><a href="#trust">Under the hood</a></li>
+            <li><a href="/compare/">Compare with others</a></li>
             <li><a href="#roadmap">Roadmap</a></li>
             <li><a href="https://github.com/nhech/git-pro">GitHub</a></li>
             <li><a href="https://github.com/nhech/git-pro/issues">Issues</a></li>

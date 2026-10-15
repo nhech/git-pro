@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Git Pro compares with VS Code Source Control, GitLens and Git Graph</title>
+  <meta name="description" content="A dated, sourced comparison of Git Pro with the built-in VS Code Source Control, GitLens and Git Graph: conflicts, rebase, branch comparison, accounts and price.">
+  <link rel="canonical" href="https://git-pro.longtd.me/compare/">
+  <meta name="robots" content="index, follow">
+  <meta name="author" content="longtd">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0a0b">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Git Pro">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://git-pro.longtd.me/compare/">
+  <meta property="og:title" content="How Git Pro compares with VS Code Source Control, GitLens and Git Graph">
+  <meta property="og:description" content="A dated, sourced comparison: conflicts, rebase, branch comparison, accounts and price.">
+  <meta property="og:image" content="https://git-pro.longtd.me/og.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How Git Pro compares with VS Code Source Control, GitLens and Git Graph">
+  <meta name="twitter:description" content="A dated, sourced comparison: conflicts, rebase, branch comparison, accounts and price.">
+  <meta name="twitter:image" content="https://git-pro.longtd.me/og.jpg">
+  <meta name="twitter:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
+
+  <!-- Root-relative URLs: this page lives in a folder. -->
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="256x256">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <script>
+    (function (d) {
+      d.classList.add('js');
+      // main.js adds "js-ready". If it failed to load or run, return to the no-JS layout (no theme toggle).
+      document.addEventListener('DOMContentLoaded', function () { if (!d.classList.contains('js-ready')) d.classList.remove('js'); });
+      try { var t = localStorage.getItem('git-pro-theme'); if (t === 'light' || t === 'dark') d.dataset.theme = t; } catch (e) { /* storage unavailable */ }
+    })(document.documentElement);
+  </script>
+  <script src="/main.js" defer></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "How Git Pro compares with VS Code Source Control, GitLens and Git Graph",
+    "url": "https://git-pro.longtd.me/compare/",
+    "dateModified": "2026-10-15",
+    "isPartOf": { "@type": "WebSite", "name": "Git Pro", "url": "https://git-pro.longtd.me/" },
+    "about": { "@type": "SoftwareApplication", "name": "Git Pro", "url": "https://git-pro.longtd.me/" },
+    "author": { "@type": "Person", "name": "longtd", "url": "https://longtd.me" }
+  }
+  </script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">
+        <img class="brand-mark" src="/favicon.svg" width="28" height="28" alt="">
+        <span class="brand-name">Git Pro</span>
+      </a>
+      <div class="header-actions">
+        <a class="header-link" href="https://github.com/nhech/git-pro">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 5l-3 14"/></svg>
+          <span class="header-link-label">GitHub</span>
+        </a>
+        <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme">
+          <svg class="icon icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.75v2M12 19.25v2M2.75 12h2M19.25 12h2M5.46 5.46l1.41 1.41M17.13 17.13l1.41 1.41M5.46 18.54l1.41-1.41M17.13 6.87l1.41-1.41"/></svg>
+          <svg class="icon icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M19.25 14.6A7.75 7.75 0 0 1 9.4 4.75a7.75 7.75 0 1 0 9.85 9.85z"/></svg>
+        </button>
+        <a class="btn btn-primary btn-header" href="{{MARKETPLACE_URL}}">Install<span class="sr-only"> Git Pro from the VS Code Marketplace</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="section compare-intro" aria-labelledby="compare-title">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Comparison</p>
+          <h1 id="compare-title" class="compare-title">How Git Pro compares</h1>
+          <p class="section-lead">Last checked <strong>15 October 2026</strong> against Git Pro {{VERSION}}, Visual Studio Code 1.142 (built-in Source Control), GitLens 19.3.0 and Git Graph 1.30.0. This page is written by the author of Git Pro. Every cell below comes from the sources linked underneath, and "not listed" means the linked documentation does not describe it, not that it cannot exist.</p>
+        </header>
+
+        <div class="table-wrap" role="region" aria-labelledby="compare-title" tabindex="0">
+          <table class="compare-table">
+            <caption class="sr-only">Git Pro compared with VS Code Source Control, GitLens and Git Graph, last checked 15 October 2026</caption>
+            <thead>
+              <tr>
+                <th scope="col">Feature</th>
+                <th scope="col">Git Pro {{VERSION}}</th>
+                <th scope="col">VS Code Source Control</th>
+                <th scope="col">GitLens</th>
+                <th scope="col">Git Graph</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Conflicts list and merge editor</th>
+                <td>A Conflicts tab lists every conflicted file, with Yours and Theirs named after their branches. Merge… opens VS&nbsp;Code's own merge editor.</td>
+                <td>A "Merge Changes" group. The merge editor opens for one file at a time and completes that file.</td>
+                <td>Not listed in its README.</td>
+                <td>Not listed in its README.</td>
+              </tr>
+              <tr>
+                <th scope="row">Take one side for many conflicted files</th>
+                <td>Accept Yours or Accept Theirs for up to 100 files at once, staged after one confirmation.</td>
+                <td>Per conflict (CodeLens) or per file, and each file is staged on its own.</td>
+                <td>Not listed in its README.</td>
+                <td>Not listed in its README.</td>
+              </tr>
+              <tr>
+                <th scope="row">Interactive rebase</th>
+                <td>A visual planner for linear ranges of 1–200 commits: pick, reword, edit, squash, fixup, drop. Ranges with merges need native Git.</td>
+                <td>Not built in: its commands cover rebase, abort and pull with rebase only.</td>
+                <td>An Interactive Rebase Editor in the free Community tier. AI-assisted rebase needs a paid plan.</td>
+                <td>Not listed in its README (standard Rebase actions only).</td>
+              </tr>
+              <tr>
+                <th scope="row">Compare branches</th>
+                <td>Compare with Another Branch… (branch to branch), a branch or tag with the working tree, commits on each side, files since the fork or tip to tip, and Open All Changes.</td>
+                <td>Compare with… and Compare with Merge Base from the graph, in version 1.142.</td>
+                <td>Side bar views for comparing references; see its documentation.</td>
+                <td>Compare any two commits, or uncommitted changes with a commit.</td>
+              </tr>
+              <tr>
+                <th scope="row">Commit graph</th>
+                <td>History with filters, details and a parent choice for merges; up to 2,000 loaded commits.</td>
+                <td>The Source Control Graph.</td>
+                <td>The Commit Graph: free for public repositories with a free GitKraken account; private repositories need a paid plan.</td>
+                <td>Its main feature.</td>
+              </tr>
+              <tr>
+                <th scope="row">Pull requests and issues</th>
+                <td>Not included.</td>
+                <td>Through the separate GitHub Pull Requests extension.</td>
+                <td>A Pull Requests panel and Launchpad on paid plans.</td>
+                <td>Opens a pull request form in the browser; see its README.</td>
+              </tr>
+              <tr>
+                <th scope="row">Account and usage data</th>
+                <td>No account. No telemetry code and no network access of its own.</td>
+                <td>No account for Git. VS&nbsp;Code's own telemetry setting applies to VS&nbsp;Code.</td>
+                <td>The Commit Graph needs a free GitKraken account. It has a telemetry setting, <code>gitlens.telemetry.enabled</code>.</td>
+                <td>No account. Its source sends anonymous install and update events that carry version numbers.</td>
+              </tr>
+              <tr>
+                <th scope="row">License and price</th>
+                <td>MIT, free.</td>
+                <td>Free; built from the MIT-licensed Code - OSS project.</td>
+                <td>The Community tier is free; paid plans add private-repository features, Launchpad and AI. MIT license, except its <code>plus</code> folders (GitLens Pro License).</td>
+                <td>Free, under its own license; see its LICENSE.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="note">Versions and plans change. If a cell is out of date or wrong, <a href="https://github.com/nhech/git-pro/issues/new/choose">open an issue</a> and it will be corrected.</p>
+
+        <div class="compare-columns">
+          <section aria-labelledby="choose-title">
+            <h2 id="choose-title">Which one to choose</h2>
+            <ul class="ticks" role="list">
+              <li><strong>Built-in Source Control</strong> if you mostly stage, commit and push, and want its graph and merge editor without installing anything.</li>
+              <li><strong>GitLens</strong> if you want rich blame, hovers and CodeLens, pull request integrations or AI-assisted workflows, and a GitKraken account and paid plans for some features suit you.</li>
+              <li><strong>Git Graph</strong> if you mainly want a configurable commit graph with right-click actions and do not need staging or conflict tools.</li>
+              <li><strong>Git Pro</strong> if you want conflicts, branch comparison, interactive rebase and reviewed destructive actions in one sidebar, with no account and no telemetry, and you can live with the limits on the right.</li>
+              <li>They are not exclusive: Git Pro builds on VS&nbsp;Code's built-in Git, and any of them can sit beside the GitHub Pull Requests extension.</li>
+            </ul>
+          </section>
+          <section aria-labelledby="limits-title">
+            <h2 id="limits-title">Where Git Pro is behind</h2>
+            <ul class="ticks" role="list">
+              <li>No pull request or issue integration.</li>
+              <li>No actions on a commit row in History yet; checkout, branch, cherry-pick and reset are Advanced Actions that ask for the commit.</li>
+              <li>Line-level staging stays in native Source Control; Git Pro commits that index.</li>
+              <li>No blame heatmap or line history. Active-line blame and the File History CodeLens are optional and off by default.</li>
+              <li>Not available in untrusted or virtual workspaces. Remote WSL and Dev Containers have not completed release validation.</li>
+            </ul>
+            <p class="note">The <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">compatibility page</a> lists every limit.</p>
+          </section>
+        </div>
+
+        <section class="compare-sources" aria-labelledby="sources-title">
+          <h2 id="sources-title">Sources, checked 15 October 2026</h2>
+          <ul class="ticks" role="list">
+            <li><strong>VS Code:</strong> <a href="https://code.visualstudio.com/docs/sourcecontrol/merge-conflicts">merge conflicts</a>, <a href="https://code.visualstudio.com/docs/sourcecontrol/history">history</a> and the <a href="https://github.com/microsoft/vscode/blob/1.142.0/extensions/git/package.json">Git extension manifest at 1.142.0</a>.</li>
+            <li><strong>GitLens:</strong> its <a href="https://github.com/gitkraken/vscode-gitlens/blob/main/README.md">README</a>, <a href="https://help.gitkraken.com/gitlens/gitlens-community-vs-gitlens-pro/">Community and Pro</a> help page and <a href="https://github.com/gitkraken/vscode-gitlens/blob/main/LICENSE">license</a>.</li>
+            <li><strong>Git Graph:</strong> its <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/README.md">README</a>, <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/LICENSE">license</a> and <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/src/life-cycle/startup.ts">start-up code</a>.</li>
+            <li><strong>Git Pro:</strong> its <a href="https://github.com/nhech/git-pro/blob/main/README.md">README</a>, <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md">workflows</a> and <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">compatibility</a> pages.</li>
+          </ul>
+          <p class="note">This comparison was written by the author of Git Pro and reflects the versions and public documentation linked above as of 15 October 2026. Product names belong to their owners; Git Pro is not affiliated with or endorsed by Microsoft, GitKraken or the authors of Git Graph. Git and the Git logo are either registered trademarks or trademarks of Software Freedom Conservancy, Inc.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="cta-band" aria-labelledby="cta-title">
+      <div class="container">
+        <div class="cta-card">
+          <img src="/favicon.svg" width="56" height="56" alt="" class="cta-mark">
+          <h2 id="cta-title">Try Git Pro beside what you use today</h2>
+          <p>It builds on VS&nbsp;Code's built-in Git, so installing it does not take anything away.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="{{MARKETPLACE_URL}}">Install from VS&nbsp;Code Marketplace</a>
+            <a class="btn btn-secondary" href="/">Back to the home page</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer site-footer-compact">
+    <div class="container">
+      <div class="footer-bottom">
+        <p>© 2026 longtd. Released under the MIT license.</p>
+        <p>Made by <a href="https://longtd.me">longtd</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <p id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+</body>
+</html>

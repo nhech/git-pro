@@ -168,8 +168,8 @@ function build() {
   // Cloudflare may keep CSS and JS at the edge for hours, so the URLs carry a content hash: a deploy never pairs new HTML with old assets.
   for (const name of ['styles.css', 'main.js']) {
     const hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(output, name))).digest('hex').slice(0, 10);
-    for (const page of fs.readdirSync(output).filter(file => file.endsWith('.html'))) {
-      const file = path.join(output, page);
+    for (const page of walk(output).filter(file => file.endsWith('.html'))) {
+      const file = path.join(output, ...page.split('/'));
       fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split(`"${name}"`).join(`"${name}?v=${hash}"`).split(`"/${name}"`).join(`"/${name}?v=${hash}"`));
     }
   }
@@ -259,6 +259,8 @@ function validate() {
 
     for (const tag of tags) {
       for (const attribute of ['href', 'src']) if (tag.attributes[attribute] !== undefined && tag.name !== 'base') check(file, tag.attributes[attribute]);
+      // Every candidate of a srcset must exist too, or a high-density screen would load a broken image.
+      if (tag.attributes.srcset !== undefined) for (const candidate of tag.attributes.srcset.split(',')) { const url = candidate.trim().split(/\s+/)[0]; if (url) check(file, url); }
       if (tag.name !== 'img') continue;
       counts.images++;
       const { alt, width, height, src } = tag.attributes;
@@ -302,8 +304,13 @@ function validate() {
       let data;
       try { data = JSON.parse(script.body); } catch (error) { fail(`${file}: invalid JSON-LD (${error.message})`); continue; }
       const types = [].concat(data['@type']);
-      if (!types.includes('SoftwareApplication')) fail(`${file}: JSON-LD must describe a SoftwareApplication`);
       if (/"(?:aggregateRating|review|ratingValue)"/.test(script.body)) fail(`${file}: JSON-LD must not contain ratings or reviews`);
+      // Other pages describe themselves (a WebPage about Git Pro); the home page describes the product.
+      if (file !== 'index.html') {
+        if (!types.length || data.url !== expectedUrl) fail(`${file}: JSON-LD needs a @type and url ${expectedUrl}`);
+        continue;
+      }
+      if (!types.includes('SoftwareApplication')) fail(`${file}: JSON-LD must describe a SoftwareApplication`);
       if (data.name !== 'Git Pro' || data.applicationCategory !== 'DeveloperApplication' || data.url !== SITE_URL) fail(`${file}: JSON-LD name, applicationCategory or url is wrong`);
       // No offers while the Marketplace listing is not live; if one is added later it must not carry a price.
       if ([].concat(data.offers || []).some(offer => Number(offer && offer.price) !== 0)) fail(`${file}: JSON-LD offers must not carry a price`);

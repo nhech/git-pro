@@ -25,8 +25,11 @@ function run(command, args) {
 function contentSecurityPolicy() {
   const scripts = new Set(), styles = new Set();
   const hash = text => `'sha256-${crypto.createHash('sha256').update(text, 'utf8').digest('base64')}'`;
-  for (const file of fs.readdirSync(dist).filter(name => name.endsWith('.html'))) {
-    const html = fs.readFileSync(path.join(dist, file), 'utf8');
+  const pages = [];
+  const collect = directory => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const full = path.join(directory, entry.name); if (entry.isDirectory()) collect(full); else if (entry.name.endsWith('.html')) pages.push(full); } };
+  collect(dist);
+  for (const page of pages) {
+    const html = fs.readFileSync(page, 'utf8');
     for (const match of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/g)) {
       const attributes = match[1] || '';
       if (/\ssrc=/.test(attributes) || /type="application\/ld\+json"/.test(attributes)) continue;

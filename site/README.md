@@ -5,6 +5,8 @@ Static source for <https://git-pro.longtd.me>. No framework, no npm dependencies
 | Path | Purpose |
 |---|---|
 | `site/index.html` | The single landing page. Uses the `{{MARKETPLACE_URL}}`, `{{VERSION}}`, `{{SETTINGS_COUNT}}`, `{{RELEASE_DATE}}`, `{{RELEASE_DATE_ISO}}`, `{{GIT_MINIMUM}}` and `{{VSCODE_MINIMUM}}` placeholders. |
+| `site/compare/index.html` | The comparison page at `/compare/`: a dated, sourced table against VS Code Source Control, GitLens and Git Graph. Its "Last checked" date and the versions it names are written by hand; re-check every cell against the linked sources before changing them. |
+| `site/img/` | The 1080 and 1600 pixel JPEG sizes of the three screenshots, for `srcset`. Regenerate with `powershell -ExecutionPolicy Bypass -File scripts/make-site-images.ps1` when a screenshot in `docs/images/` changes, and commit the result. |
 | `site/404.html` | Not-found page. Uses root-relative URLs because nginx serves it for missing paths at any depth. |
 | `site/deploy/` | Production origin: `Dockerfile`, `nginx.conf` and `compose.yml` for the nginx container behind the Cloudflare Tunnel. Source-only, never copied into `site-dist/`. |
 | `site/styles.css` | Design tokens (dark for every visitor by default; light only after choosing it with the toggle, which is stored), layout and motion. |
