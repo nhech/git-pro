@@ -8,8 +8,8 @@ export type CompareFilesMode = 'fork' | 'tips';
 /** WP4's Compare tab. Refs are validated, resolved and pinned to OIDs before the tab shows; the same (repository, left OID, right OID) reveals the existing tab. */
 export interface CompareSurface {
   openRefs(repositoryId: string, leftRef: string, rightRef: string): Promise<void>;
-  /** Working-tree mode (§3.8): the ref against the working tree, with an editable working side and Get from Branch. */
-  openWorktree(repositoryId: string, ref: string): Promise<void>;
+  /** Working-tree mode (§3.8): the ref against the working tree, with an editable working side and Get from Branch. `folder` (a repository-relative path) limits the files to that folder. */
+  openWorktree(repositoryId: string, ref: string, folder?: string): Promise<void>;
 }
 /** Exported by WP4 as `createCompareSurface` from src/webviews/compare/compare-panel.ts; WP5's `registerCompare` calls it, sets `deps.surfaces.compare` and owns the disposal. It also registers the `git-pro-blob:` provider. */
 export type CreateCompareSurface = (context: vscode.ExtensionContext, deps: FeatureDeps) => CompareSurface & vscode.Disposable;

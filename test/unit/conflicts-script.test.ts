@@ -61,7 +61,7 @@ function harness(focused = false) {
   };
   const rows = () => elements.get('rows')!.children, row = (key: string) => rows().find(node => node.dataset.key === key)!;
   const operations = () => elements.get('operation-actions')!.children;
-  return { elements, created, sent, body, post, press, rows, row, operations, last: (type: string) => sent.slice().reverse().find(value => value.type === type), documentListeners };
+  return { elements, created, sent, body, post, press, rows, row, operations, windowListeners, last: (type: string) => sent.slice().reverse().find(value => value.type === type), documentListeners };
 }
 const key = (index: number) => `${String(index).padStart(3, '0')}${'k'.repeat(40)}`;
 type RowInit = { key?: string; group?: string; path: string; kind?: string; yours?: string; theirs?: string; markers?: string; blocks?: number | null; binary?: boolean; mergeable?: boolean; unsupported?: string; mergeOpen?: boolean; workingFile?: boolean };
@@ -274,6 +274,12 @@ test('the Compare and More Actions menus return focus to their button; Use Colum
   assert.equal(h.press(h.body.children.find(node => node.className === 'context-menu'), { key: 'Escape' }).stopped, true); assert.equal(Element.active, compare, 'Escape returns to the Compare button');
   compare.fire('click'); const menu = h.body.children.find(node => node.className === 'context-menu')!;
   menu.fire('keydown', { key: 'Tab' }); assert.equal(Element.active, compare, 'Tab closes it the same way');
+  // A dropdown is anchored to its button: it does not stay behind when the panel loses focus, is resized or scrolls.
+  for (const [target, type] of [['window', 'blur'], ['window', 'resize'], ['document', 'scroll']] as const) {
+    compare.fire('click'); assert.equal(h.body.children.some(node => node.className === 'context-menu'), true, `${type}: opened`);
+    if (target === 'window') h.windowListeners.get(type)!(event()); else for (const handler of h.documentListeners.get(type) ?? []) handler(event());
+    assert.equal(h.body.children.some(node => node.className === 'context-menu'), false, `${type} closes it`);
+  }
   assert.equal(overflow.hidden, true, 'hidden while VS Code has no merge.columnLayout');
   state(h, [...sample(), conflict(4, { path: 'clean.txt', markers: 'none', blocks: 0 })], { columnLayout: true });
   assert.equal(overflow.hidden, false); overflow.fire('click');

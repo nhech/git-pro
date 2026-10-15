@@ -24,17 +24,18 @@ const node = (info: BranchInfo, repositoryId = 'owned') => ({ kind: 'branch', re
 class Uri { constructor(readonly scheme: string, readonly fsPath: string) {} static file(file: string) { return new Uri('file', file); } }
 class ThemeIcon { constructor(readonly id: string, readonly color?: { id: string }) {} }
 class ThemeColor { constructor(readonly id: string) {} }
-type Pick = { label: string; description?: string; iconPath?: ThemeIcon; choice?: { ref: string; name: string } };
+type Pick = { label: string; description?: string; iconPath?: ThemeIcon; choice?: { ref: string; name: string }; custom?: true };
 
 function compareHarness(head = 'main') {
   const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'git-pro-compare-commands-')));
   writeFileSync(path.join(root, 'app.ts'), 'working\n'); mkdirSync(path.join(root, 'src'));
   const repo = { id: 'owned', root }, store = { head, changes: [] as { group: string; path: string }[] };
   const picks: { items: Pick[]; title: string }[] = [], warnings: { text: string; detail: string; choices: string[] }[] = [], infos: string[] = [], executed: unknown[][] = [], previews: unknown[] = [], executions: unknown[] = [];
-  const state = { pick: ((): Pick | undefined => undefined) as (items: Pick[]) => Pick | undefined, confirm: undefined as string | undefined, resolved: new Map<string, string>(), trees: new Map<string, string>(), activeEditor: undefined as { document: { uri: Uri } } | undefined };
+  const state = { input: undefined as string | undefined, pick: ((): Pick | undefined => undefined) as (items: Pick[]) => Pick | undefined, confirm: undefined as string | undefined, resolved: new Map<string, string>(), trees: new Map<string, string>(), activeEditor: undefined as { document: { uri: Uri } } | undefined };
   const vscode = { Uri, ThemeIcon, ThemeColor, ProgressLocation: { Window: 10 },
     window: { get activeTextEditor() { return state.activeEditor; },
       showQuickPick: async (items: Pick[], options: { title: string }) => { picks.push({ items, title: options.title }); return state.pick(items); },
+      showInputBox: async () => state.input,
       showWarningMessage: async (text: string, options: { detail: string }, ...choices: string[]) => { warnings.push({ text, detail: options.detail, choices }); return state.confirm; },
       showInformationMessage: async (text: string) => { infos.push(text); return undefined; }, withProgress: (_options: unknown, run: () => Promise<unknown>) => run() },
     commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); } } };
@@ -47,7 +48,7 @@ function compareHarness(head = 'main') {
     tools: { tags: async () => [{ name: 'v1.0', oid: oid('9'), target: oid('8'), annotated: true }] },
     advanced: { resolve: async (_id: string, ref: string) => { const value = state.resolved.get(ref); if (!value) throw new Error(`unresolved ${ref}`); return value; },
       preview: async (_id: string, command: unknown) => { previews.push(command); return preview; }, execute: async (value: unknown) => { executions.push(value); } },
-    history: { revision: async (_id: string, at: string, file: string) => Buffer.from(`${file}@${at}`) },
+    history: { revision: async (_id: string, at: string, file: string) => Buffer.from(`${file}@${at}`), resolveRef: async (_id: string, ref: string) => { const value = state.resolved.get(ref); if (!value) throw new Error(`unresolved ${ref}`); return value; } },
     revisions: { add: (content: Buffer, label: string) => ({ snapshot: content.toString(), label }) },
     surfaces: { conflictSources: new Map() } as { conflictSources: Map<string, unknown>; compare?: unknown } };
   const surface = { refs: [] as string[][], worktrees: [] as string[][], disposed: 0, getFromBranch: undefined as ((request: unknown) => Promise<boolean>) | undefined,
@@ -100,7 +101,7 @@ test('Compare with Current and Show Diff with Working Tree open the tab with ful
     await h.run('gitPro.compareWithCurrent', node({ ...branch('feature'), ref: 'refs/heads/other' }));
     const offered = h.picks.at(-1)!;
     assert.match(offered.title, /Compare with Current \(main\)/);
-    assert.deepEqual(plain(offered.items.map(item => [item.label, item.description, item.iconPath?.id])), [['feature', 'Local branch', 'git-branch'], ['origin/main', 'Remote branch', 'cloud'], ['v1.0', 'Tag', 'tag']]);
+    assert.deepEqual(plain(offered.items.filter(item => item.choice).map(item => [item.label, item.description, item.iconPath?.id])), [['feature', 'Local branch', 'git-branch'], ['origin/main', 'Remote branch', 'cloud'], ['v1.0', 'Tag', 'tag']]);
     assert.deepEqual(h.surface.refs.at(-1), ['owned', 'refs/tags/v1.0', 'refs/heads/main']);
     h.state.pick = () => undefined; const before = h.surface.worktrees.length;
     await h.run('gitPro.diffWithWorkingTree'); assert.equal(h.surface.worktrees.length, before);
@@ -130,7 +131,7 @@ test('Compare Branches needs exactly two branches of one repository and keeps th
 test('Compare with Another Branch works from any branch, lists the others with the checked-out one first, and keeps the checked-out branch on the right', async () => {
   const h = compareHarness();
   try {
-    const labelsOf = (items: Pick[]) => plain(items.map(item => item.label));
+    const labelsOf = (items: Pick[]) => plain(items.filter(item => item.choice).map(item => item.label));
     // A local branch: the choice list leaves out the branch itself and offers the current branch, remote branches and tags.
     h.state.pick = items => items.find(item => item.label === 'origin/main');
     await h.run('gitPro.compareWithBranch', node(branch('feature')));
@@ -178,7 +179,7 @@ test('Compare with Branch or Tag shows the ref blob against the editable file, c
     h.state.trees.set('app.ts', `100644 blob ${oid('d')}\tapp.ts`);
     h.state.pick = items => items.find(item => item.label === 'feature');
     await h.run('gitPro.compareWithRef', file);
-    assert.deepEqual(plain(h.picks[0]!.items.map(item => item.description)), ['Current branch', 'Local branch', 'Remote branch', 'Tag']);
+    assert.deepEqual(plain(h.picks[0]!.items.filter(item => item.choice).map(item => item.description)), ['Current branch', 'Local branch', 'Remote branch', 'Tag']);
     assert.match(h.picks[0]!.title, /Compare app\.ts with Branch or Tag/);
     const diff = h.executed[0]!;
     assert.equal(diff[0], 'vscode.diff'); assert.deepEqual(diff[1], { snapshot: `app.ts@${oid('b')}`, label: 'app.ts' }); assert.equal(diff[2], file);
@@ -186,7 +187,11 @@ test('Compare with Branch or Tag shows the ref blob against the editable file, c
     h.state.trees.clear(); await h.run('gitPro.compareWithRef', file);
     assert.deepEqual(h.infos, ['app.ts does not exist in feature.']); assert.equal(h.executed.length, 1);
     h.state.activeEditor = { document: { uri: file } }; h.state.pick = () => undefined; await h.run('gitPro.compareWithRef'); assert.equal(h.picks.length, 3);
-    await assert.rejects(h.run('gitPro.compareWithRef', Uri.file(path.join(h.root, 'src'))), /Choose a file/);
+    // A folder is compared as a whole: the ref against the working tree, limited to the files inside it. The repository root is the whole working tree.
+    h.state.pick = items => items.find(item => item.label === 'feature'); await h.run('gitPro.compareWithRef', Uri.file(path.join(h.root, 'src')));
+    assert.deepEqual(h.surface.worktrees, [[h.repo.id, 'refs/heads/feature', 'src']]); assert.match(h.picks.at(-1)!.title, /Compare src with Branch or Tag/);
+    await h.run('gitPro.compareWithRef', Uri.file(h.root)); assert.deepEqual(h.surface.worktrees.at(-1), [h.repo.id, 'refs/heads/feature', undefined]);
+    assert.equal(h.executed.length, 1, 'no file diff opened for a folder');
     await assert.rejects(h.run('gitPro.compareWithRef', new Uri('git-pro-revision', '/x/app.ts')), /Open a file/);
     await assert.rejects(h.run('gitPro.compareWithRef', Uri.file(path.join(tmpdir(), 'elsewhere.ts'))), /outside an open repository/);
   } finally { h.cleanup(); }
@@ -318,5 +323,25 @@ test('Get from Branch refuses unsaved editors and open merge editors on any targ
     h.state.onModal = () => { h.documents.push({ uri: { scheme: 'file', fsPath: path.join(h.root, 'added.txt') }, isDirty: true }); };
     await assert.rejects(h.run(rows), /Save or revert added\.txt first/);
     assert.equal(h.warnings.length, modals + 1); assert.equal(h.state.restores.length, 1);
+  } finally { h.cleanup(); }
+});
+
+test('Enter a revision takes a commit ID, HEAD~3 or a branch name, pins nothing it cannot resolve and sits after the branches and tags', async () => {
+  const h = compareHarness();
+  try {
+    h.state.resolved.set('HEAD~3', oid('e')).set('refs/heads/feature', oid('b'));
+    h.state.pick = items => items.find(item => item.custom); h.state.input = ' HEAD~3 ';
+    await h.run('gitPro.compareWithCurrent');
+    const offered = h.picks.at(-1)!, last = offered.items.at(-1)!;
+    assert.equal(last.custom, true); assert.equal(last.label, 'Enter a revision…'); assert.ok(offered.items.slice(0, -1).every(item => item.choice), 'branches and tags come first');
+    assert.deepEqual(h.surface.refs.at(-1), ['owned', 'HEAD~3', 'refs/heads/main'], 'the typed revision is trimmed and compared with the current branch');
+    h.state.input = 'HEAD~99';
+    await assert.rejects(h.run('gitPro.compareWithCurrent'), /HEAD~99 does not name a commit/);
+    const count = h.surface.refs.length; h.state.input = undefined; await h.run('gitPro.compareWithCurrent'); h.state.input = '   '; await h.run('gitPro.compareWithCurrent');
+    assert.equal(h.surface.refs.length, count, 'cancelling or typing nothing opens no tab');
+    // From the palette both sides are picked, and either may be typed; the current branch still reads on the right.
+    h.state.input = 'HEAD~3'; let calls = 0; h.state.pick = items => calls++ === 0 ? items.find(item => item.custom) : items.find(item => item.label === 'main');
+    await h.run('gitPro.compareWithBranch');
+    assert.deepEqual(h.surface.refs.at(-1), ['owned', 'HEAD~3', 'refs/heads/main']);
   } finally { h.cleanup(); }
 });

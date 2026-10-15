@@ -52,7 +52,7 @@
   "setting.gitPro.codeLens.enabled.description": "Show a read-only File History CodeLens on saved files in open trusted repositories. No automatic Git read.",
   "setting.gitPro.blame.delay.description": "Delay in milliseconds before reading active-line blame. Dirty buffers never receive disk attribution.",
   "setting.gitPro.graph.pageSize.description": "Commits read per history page; loaded graph remains bounded at 2000 commits.",
-  "extension.description": "Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.",
+  "extension.description": "Review changes, commit, browse History, compare branches, resolve merge conflicts and recover a stopped rebase from one Git sidebar.",
   "setting.gitPro.changes.groupBy.description": "Display paths directly or as folders within each staged/working/untracked/conflict group.",
   "setting.gitPro.cli.readTimeout.description": "Local CLI read timeout in seconds. Built-in Git API requests use their own host behavior.",
   "setting.gitPro.cli.timeout.description": "Local CLI mutation timeout in seconds. Interruption may leave Git state changed; inspect before retrying.",
@@ -165,5 +165,6 @@
   "command.gitPro.tools.tags.create.title": "Create Tag…",
   "command.gitPro.tools.remotes.create.title": "Add Remote…",
   "command.gitPro.tools.worktrees.create.title": "Create Worktree…",
-  "command.gitPro.tools.worktrees.prune.title": "Prune Stale Worktree Metadata…"
+  "command.gitPro.tools.worktrees.prune.title": "Prune Stale Worktree Metadata…",
+  "setting.gitPro.compare.openDiffsBeside.description": "Open a file's diff in the editor group beside the Compare tab, so the list stays in view and the next click replaces the diff. Off: the diff opens in the Compare tab's own group, and the tab comes back when you close it."
 }

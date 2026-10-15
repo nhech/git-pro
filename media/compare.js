@@ -6,6 +6,7 @@
   const workspace = byId('workspace'), commitsPane = byId('commits'), modeGroup = byId('files-mode'), layout = byId('layout'), heading = byId('files-heading'), legend = byId('legend');
   const tree = byId('file-rows'), filesEmpty = byId('files-empty'), pager = byId('files-pager'), footer = byId('files-footer'), worktreeBar = byId('worktree-actions'), getButton = byId('get-from-branch'), selectionHint = byId('selection-hint');
   const swapButton = byId('swap'), refreshButton = byId('refresh'), openAll = byId('open-all');
+  const filterRow = byId('files-filter'), filterText = byId('filter-text'), filterStatus = byId('filter-status');
   const saved = (() => { try { const value = api.getState?.(); return value && typeof value === 'object' ? value : {}; } catch { return {}; } })();
   // The tab keeps no renderer while hidden (a diff opened over it): the Get from Branch selection and the focused row come back with the same captured list.
   const own = saved.session === session && Number.isSafeInteger(saved.revision), isIndex = value => Number.isSafeInteger(value) && value >= 0;
@@ -121,6 +122,28 @@
     }
   };
 
+  // The filter is the host's: it keeps the captured list and says which files to show, so paging, counts and Open All Changes all follow it.
+  const changeTypes = [['A', 'Added'], ['M', 'Modified'], ['D', 'Deleted'], ['R', 'Renamed']];
+  const chips = changeTypes.map(([letter, word]) => {
+    const chip = button('radio', letter); chip.dataset.status = letter; chip.title = `Show only ${word.toLowerCase()} files`; chip.setAttribute('aria-label', `${word} files`); chip.setAttribute('aria-pressed', 'false');
+    chip.addEventListener('click', () => { chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true')); pushFilter(); }); filterStatus.append(chip); return chip;
+  });
+  const wantedFilter = () => ({ text: String(filterText.value || '').trim().slice(0, 200), statuses: chips.filter(chip => chip.getAttribute('aria-pressed') === 'true').map(chip => chip.dataset.status).join('') });
+  const pushFilter = () => {
+    if (busy || !state || state.loading || typeof state.revision !== 'number') return;
+    const wanted = wantedFilter(), current = state.filter || { text: '', statuses: '' };
+    if (wanted.text !== current.text || wanted.statuses !== current.statuses) act('filter', wanted);
+  };
+  let filterTimer;
+  filterText.addEventListener('input', () => { clearTimeout(filterTimer); filterTimer = setTimeout(pushFilter, 250); });
+  filterText.addEventListener('keydown', event => { if (event.key === 'Escape' && filterText.value) { event.preventDefault(); event.stopPropagation?.(); filterText.value = ''; clearTimeout(filterTimer); pushFilter(); } });
+  const renderFilter = files => {
+    // Shown whenever there is a list to narrow, also when the filter itself has left nothing to show.
+    filterRow.hidden = !files || Boolean(files.omitted) || (files.unfiltered ?? files.total) === 0;
+    const current = state?.filter || { text: '', statuses: '' };
+    if (document.activeElement !== filterText) filterText.value = current.text;
+    for (const chip of chips) { chip.setAttribute('aria-pressed', String(current.statuses.includes(chip.dataset.status))); chip.disabled = busy; }
+  };
   const renderModes = files => {
     modeGroup.replaceChildren(); const show = state?.mode === 'commits' && Boolean(files) && files.scope !== 'commit'; modeGroup.hidden = !show;
     if (!show) return;
@@ -156,7 +179,15 @@
     const worktree = state.mode === 'worktree', picked = worktree && chosen.has(item.index) ? [...chosen] : [item.index];
     tag(row, { webviewSection: 'file', index: item.index, indexes: picked.join(','), compareWorktree: worktree, fileOnlyInBranch: item.presence === 'branch' });
   };
+  // Select All belongs to the list, as in the Explorer: every file of this page, up to the 100 Get from Branch takes at once (a branch comparison has nothing to select).
+  const selectAll = () => {
+    const indexes = treeRows.filter(row => row.dataset.index !== undefined).map(row => Number(row.dataset.index));
+    chosen.clear(); for (const value of indexes.slice(0, 100)) chosen.add(value); anchor = indexes[0];
+    if (indexes.length > 100) { status.textContent = 'Selected the first 100 files. Get from Branch takes up to 100 at a time.'; status.className = ''; }
+    markChosen();
+  };
   const treeKeys = (event, row, entry, activate) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && String(event.key).toLowerCase() === 'a' && state.mode === 'worktree') { event.preventDefault(); event.stopPropagation?.(); selectAll(); return; }
     const index = treeRows.indexOf(row); let target;
     if (event.key === 'ArrowDown') target = treeRows[index + 1]; else if (event.key === 'ArrowUp') target = treeRows[index - 1]; else if (event.key === 'Home') target = treeRows[0]; else if (event.key === 'End') target = treeRows.at(-1);
     else if (event.key === 'ArrowRight' && entry.dir) { if (collapsed.has(entry.dir)) { event.preventDefault(); activate(); return; } target = treeRows[index + 1]; }
@@ -215,7 +246,7 @@
   const renderFiles = () => {
     tree.replaceChildren(); heading.replaceChildren(); pager.replaceChildren(); legend.replaceChildren(); treeRows = []; fileItems.clear();
     const files = state?.files, worktree = state?.mode === 'worktree';
-    renderModes(files);
+    renderModes(files); renderFilter(files);
     layout.replaceChildren(glyph(flat ? 'list-tree' : 'list-flat')); layout.title = flat ? 'View as Tree' : 'View as List'; layout.setAttribute('aria-label', layout.title); layout.disabled = busy;
     worktreeBar.hidden = true; pager.hidden = true; legend.hidden = true; footer.textContent = '';
     // The tree only ever holds treeitems: an empty or omitted list is said beside it, and the empty tree is hidden.
@@ -226,7 +257,10 @@
     if (files.scope === 'commit' && files.commit) {
       head.append(node('span', 'heading-text', `Files in ${short(files.commit.oid)} · ${files.commit.subject}`));
       const back = button('link', 'All changes', 'all-changes'); back.disabled = busy; back.addEventListener('click', () => act('allChanges')); head.append(back);
-    } else head.append(node('span', 'heading-text', files.scope === 'worktree' ? `Changed files · ${files.total.toLocaleString()}` : files.scope === 'fork' ? `Changes in ${state.left.name} since the fork point · ${files.total.toLocaleString()}` : `Changes between the tips · ${files.total.toLocaleString()}`));
+    } else {
+      const counted = files.unfiltered === undefined ? files.total.toLocaleString() : `${files.total.toLocaleString()} of ${files.unfiltered.toLocaleString()}`;
+      head.append(node('span', 'heading-text', files.scope === 'worktree' ? `Changed files${state.folder ? ` in ${state.folder}` : ''} · ${counted}` : files.scope === 'fork' ? `Changes in ${state.left.name} since the fork point · ${counted}` : `Changes between the tips · ${counted}`));
+    }
     heading.append(head);
     if (files.note === 'multipleMergeBases') heading.append(node('p', 'note', `Multiple merge bases; showing changes since ${short(files.from)}.`));
     if (files.note === 'noCommonAncestor') heading.append(node('p', 'note', 'No common ancestor; showing tip-to-tip file changes.'));
@@ -239,7 +273,7 @@
     }
     tree.setAttribute('aria-multiselectable', String(worktree));
     if (files.omitted) { empty(files.note === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so the file list is unavailable here; use a terminal for this comparison.' : 'Too many changed files to list here.'); return; }
-    if (!files.total) { empty(worktree ? `No differences between ${state.left.name} and the working tree.` : 'No differences.'); return; }
+    if (!files.total) { empty(files.unfiltered ? 'No files match the filter.' : worktree ? `No differences${state.folder ? ` in ${state.folder}` : ''} between ${state.left.name} and the working tree.` : 'No differences.'); return; }
     const entries = [];
     if (flat) for (const item of files.items) entries.push({ item, level: 1 });
     else {
@@ -304,7 +338,7 @@
     }
     if (data.type === 'busy') {
       const next = data.busy === true; if (next && !busy) { const active = document.activeElement; restoreKey = restoreKey || active?.dataset?.focusKey; }
-      busy = next; render(); return;
+      busy = next; render(); if (!busy) pushFilter(); return;
     }
     if (data.type === 'error' || data.type === 'notice') { status.textContent = typeof data.message === 'string' ? data.message : 'Compare action failed.'; status.className = data.type === 'error' ? 'error' : ''; }
   });

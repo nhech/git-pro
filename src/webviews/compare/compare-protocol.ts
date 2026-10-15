@@ -7,6 +7,8 @@ export type CompareAction = { type: 'ready'; session: string } | { type: 'refres
   { type: 'selectCommit' | 'copyRevision' | 'showInHistory'; session: string; revision: number; oid: string } |
   { type: 'filesMode'; session: string; revision: number; mode: 'fork' | 'tips' } |
   { type: 'filesPage'; session: string; revision: number; offset: number } |
+  /** Which changed files the list shows: a name fragment and the change types (any of A, M, D, R) to keep; empty means all. */
+  { type: 'filter'; session: string; revision: number; text: string; statuses: string } |
   { type: 'diff' | 'localDiff' | 'openFile' | 'copyPath'; session: string; revision: number; index: number } |
   { type: 'getFromBranch'; session: string; revision: number; indexes: number[] };
 const index = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) < 1_000_000;
@@ -30,6 +32,9 @@ export function parseCompareAction(value: unknown): CompareAction {
       break;
     case 'filesMode':
       if (item.mode === 'fork' || item.mode === 'tips') return { type: 'filesMode', session, revision, mode: item.mode };
+      break;
+    case 'filter':
+      if (typeof item.text === 'string' && item.text.length <= 200 && typeof item.statuses === 'string' && /^[AMDR]{0,4}$/.test(item.statuses) && new Set(item.statuses).size === item.statuses.length && ![...item.text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) return { type: 'filter', session, revision, text: item.text.trim(), statuses: [...item.statuses].sort().join('') };
       break;
     case 'filesPage':
       if (index(item.offset) && item.offset % 200 === 0) return { type: 'filesPage', session, revision, offset: item.offset };

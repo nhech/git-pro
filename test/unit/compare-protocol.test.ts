@@ -29,3 +29,11 @@ test('Compare protocol rejects forged sessions, revisions, offsets, indexes, OID
   ];
   for (const value of rejected) assert.throws(() => parseCompareAction(value), Error, JSON.stringify(value));
 });
+
+test('Compare protocol takes a bounded name fragment and a set of change types for the file filter, and nothing else', () => {
+  assert.deepEqual(parseCompareAction({ type: 'filter', session: s, revision: 2, text: '  src/app  ', statuses: 'RA', path: '/etc' }), { type: 'filter', session: s, revision: 2, text: 'src/app', statuses: 'AR' }, 'trimmed, types sorted');
+  assert.deepEqual(parseCompareAction({ type: 'filter', session: s, revision: 0, text: '', statuses: '' }), { type: 'filter', session: s, revision: 0, text: '', statuses: '' });
+  for (const bad of [{ text: 'x'.repeat(201), statuses: '' }, { text: 7, statuses: '' }, { text: '', statuses: 'X' }, { text: '', statuses: 'AA' }, { text: '', statuses: 'AMDRA' }, { text: '', statuses: ['A'] }, { text: 'a\u0000b', statuses: '' }, { text: 'tab\there', statuses: '' }, { statuses: '' }, { text: '' }])
+    assert.throws(() => parseCompareAction({ type: 'filter', session: s, revision: 1, ...bad }), /Unknown Compare action/, JSON.stringify(bad));
+  assert.throws(() => parseCompareAction({ type: 'filter', session: s, text: '', statuses: '' }), /Invalid Compare revision/);
+});

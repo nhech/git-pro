@@ -37,14 +37,14 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   await mkdir(path.join(root, 'src')); await writeFile(path.join(root, 'src', 'app.ts'), 'working\n'); await writeFile(path.join(root, 'README.md'), 'readme\n');
   const panels: FakePanel[] = [], executed: unknown[][] = [], clipboard: string[] = [], histories: unknown[][] = [], calls: string[] = [];
   const tabs: { label: string; input: unknown }[] = [];
-  const settings = { mode: 'fork' as string };
+  const settings = { mode: 'fork' as string, beside: true as boolean };
   const vscode = {
     window: { createWebviewPanel: (_type: string, title: string) => { const panel = new FakePanel(title); panels.push(panel); return panel; },
       tabGroups: { get all() { return [{ tabs }]; }, close: async (closing: { label: string }[]) => { for (const tab of closing) tabs.splice(tabs.indexOf(tab as never), 1); return true; } } },
     commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); if (args[0] === 'vscode.changes') tabs.push({ label: String(args[1]), input: { textDiffs: args[2] } }); } },
-    workspace: { getConfiguration: () => ({ get: () => settings.mode }), registerTextDocumentContentProvider: () => ({ dispose: () => undefined }) },
+    workspace: { getConfiguration: () => ({ get: (key: string) => key === 'compare.openDiffsBeside' ? settings.beside : settings.mode }), registerTextDocumentContentProvider: () => ({ dispose: () => undefined }) },
     Uri: { file: (value: string) => uri('file', value), joinPath: (base: Uri, ...parts: string[]) => uri(base.scheme ?? 'file', [base.path, ...parts].join('/')), from: ({ scheme, path: value }: { scheme: string; path: string }) => uri(scheme, value) },
-    ViewColumn: { Active: -1 }, env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }
+    ViewColumn: { Active: -1, Beside: -2 }, env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }
   };
   const files = (scope: string, from: string | undefined, to: string | undefined, entries: { status: string; path: string; originalPath?: string }[], binary: string[] = []) =>
     ({ scope, from, to, files: entries, stats: entries.map(entry => ({ path: entry.path, ...(entry.originalPath ? { originalPath: entry.originalPath } : {}), added: binary.includes(entry.path) ? null : 1, removed: binary.includes(entry.path) ? null : 0 })), omitted: false });
@@ -74,7 +74,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   };
   const exports = loadWithVscode(path.resolve(__dirname, '../../src/webviews/compare/compare-panel.js'), vscode);
   const blobs = loadWithVscode(path.resolve(__dirname, '../../src/documents/blob-provider.js'), vscode);
-  const Panels = exports.ComparePanels as new (context: unknown, deps: unknown, blobs: unknown) => { openRefs(id: string, left: string, right: string): Promise<void>; openWorktree(id: string, ref: string): Promise<void>; getFromBranch: unknown; activePanelCount: number; dispose(): void };
+  const Panels = exports.ComparePanels as new (context: unknown, deps: unknown, blobs: unknown) => { openRefs(id: string, left: string, right: string): Promise<void>; openWorktree(id: string, ref: string, folder?: string): Promise<void>; getFromBranch: unknown; activePanelCount: number; dispose(): void };
   const Blobs = blobs.BlobProvider as new (history: unknown) => unknown;
   const surface = new Panels({ extensionUri: uri('file', '/extension') }, deps, new Blobs(history));
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -413,5 +413,63 @@ test('Get from Branch from a native menu names the selection the row carried', a
     const { panel: target, context } = h.menus.resolve({ webview: 'gitPro.compare', webviewSection: 'file', session: panel.session, revision, index: 2, indexes: '2,0' }, ['gitPro.compare'], 'file');
     await target.handle!('getFromBranch', context);
     assert.deepEqual((JSON.parse(JSON.stringify(requests)) as { files: { path: string }[] }[])[0]!.files.map(file => file.path), ['README.md', 'src/app.ts']);
+  } finally { await h.cleanup(); }
+});
+
+test('A folder comparison lists only the files inside the folder, keeps its own tab and refuses paths outside the repository', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openWorktree('repo', 'feature', 'src'); const panel = h.panels[0]!;
+    assert.equal(panel.title, 'Compare: feature ↔ Working Tree · src');
+    const state = panel.state as unknown as { folder?: string; files: { total: number; items: { path: string }[] } };
+    assert.equal(state.folder, 'src'); assert.deepEqual(state.files.items.map(item => item.path), ['src/app.ts']); assert.equal(state.files.total, 1, 'the count is the folder\'s');
+    await h.surface.openWorktree('repo', 'feature', 'src'); assert.equal(h.panels.length, 1, 'the same folder reveals its tab');
+    await h.surface.openWorktree('repo', 'feature'); assert.equal(h.panels.length, 2, 'the whole working tree is another comparison');
+    assert.equal(h.panels[1]!.title, 'Compare: feature ↔ Working Tree'); assert.equal((h.panels[1]!.state.files as unknown as { total: number }).total, 3);
+    const requests: { files: { path: string }[] }[] = []; (h.surface as { getFromBranch: unknown }).getFromBranch = async (request: { files: { path: string }[] }) => { requests.push(request); return true; };
+    await panel.send({ type: 'getFromBranch', revision: panel.state.revision, indexes: [0] }); assert.deepEqual(JSON.parse(JSON.stringify(requests)).map((request: { files: { path: string }[] }) => request.files.map(file => file.path)), [['src/app.ts']], "Get from Branch acts on the folder's files");
+    for (const bad of ['src/', '../outside', '/etc', 'C:/x', 'a\\b', '.git', 'a/.git/hooks', '']) await assert.rejects(h.surface.openWorktree('repo', 'feature', bad), /Invalid history path|Choose a folder/, bad);
+    assert.equal(h.panels.length, 2, 'a refused folder opens no tab');
+  } finally { await h.cleanup(); }
+});
+
+test('Diffs open beside the tab as a preview without taking focus, unless the setting is off', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    await panel.send({ type: 'diff', revision, index: 0 });
+    assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: -2, preview: true, preserveFocus: true }], 'the list stays in view and the next click replaces the diff');
+    await panel.send({ type: 'localDiff', revision, index: 0 });
+    assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: -2, preview: true, preserveFocus: true }]);
+    await panel.send({ type: 'openFile', revision, index: 0 }); assert.deepEqual(h.executed.at(-1), ['vscode.open', h.executed.at(-1)![1]], 'opening the file itself is an explicit move to the editor');
+    h.settings.beside = false;
+    await panel.send({ type: 'diff', revision, index: 0 }); assert.equal(h.executed.at(-1)![4], undefined, 'off: the diff opens in the tab\'s own group');
+  } finally { await h.cleanup(); }
+});
+
+test('The file filter narrows the list by name and change type, keeps each file\'s own index, and Open All Changes and paging follow it', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, files = () => panel.state.files as unknown as { total: number; unfiltered?: number; binary: number; items: { index: number; path: string }[] };
+    assert.equal(files().total, 3); assert.equal(files().unfiltered, undefined, 'no filter, nothing to compare the total with');
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: 'readme', statuses: '' });
+    assert.deepEqual(files().items.map(item => [item.index, item.path]), [[2, 'README.md']], 'matched by name, whatever the case; the index is still the file\'s place in the captured list');
+    assert.equal(files().total, 1); assert.equal(files().unfiltered, 3); assert.deepEqual((panel.state as unknown as { filter: unknown }).filter, { text: 'readme', statuses: '' });
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: 'old', statuses: '' });
+    assert.deepEqual(files().items.map(item => item.path), ['README.md'], 'a renamed file also matches by its old path');
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: '', statuses: 'A' });
+    assert.deepEqual(files().items.map(item => [item.index, item.path]), [[1, 'logo.png']]); assert.equal(files().binary, 1, 'the binary count is the shown files\'');
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: '', statuses: 'MR' });
+    assert.deepEqual(files().items.map(item => item.path), ['src/app.ts', 'README.md']);
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: 'zzz', statuses: '' }); assert.equal(files().total, 0); assert.equal(files().unfiltered, 3);
+    // Actions name the captured index, so a file opened from a filtered list is the file that was shown.
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: 'readme', statuses: '' });
+    await panel.send({ type: 'diff', revision: panel.state.revision, index: 2 }); assert.equal((h.executed.at(-1)![1] as Uri).content, `${BASE}:old.md`);
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    const opened = h.executed.at(-1)!; assert.equal(opened[0], 'vscode.changes'); assert.match(String(opened[1]), /Filtered Changes$/); assert.equal((opened[2] as unknown[]).length, 1, 'only the file that matches');
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: 'zzz', statuses: '' });
+    await panel.send({ type: 'openAll', revision: panel.state.revision }); assert.match(String(panel.last('error')?.message), /No files match the filter/);
+    await panel.send({ type: 'filesPage', revision: panel.state.revision, offset: 200 }); assert.match(String(panel.last('error')?.message), /available file page/, 'paging is over the shown files');
+    await panel.send({ type: 'filter', revision: panel.state.revision, text: '', statuses: '' }); assert.equal(files().total, 3); assert.equal(files().unfiltered, undefined);
   } finally { await h.cleanup(); }
 });

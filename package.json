@@ -43,7 +43,14 @@
     "diff",
     "branch",
     "cherry-pick",
-    "scm"
+    "scm",
+    "interactive rebase",
+    "file history",
+    "branch compare",
+    "merge editor",
+    "git graph",
+    "git blame",
+    "git tools"
   ],
   "main": "./dist/extension.js",
   "extensionKind": [
@@ -780,7 +787,7 @@
           "id": "gitPro.commitView",
           "name": "%view.gitPro.commitView.name%",
           "type": "webview",
-          "initialSize": 120
+          "initialSize": 150
         },
         {
           "id": "gitPro.changes",
@@ -1181,7 +1188,7 @@
       "explorer/context": [
         {
           "command": "gitPro.compareWithRef",
-          "when": "resourceScheme == file && gitPro.hasRepositories && !explorerResourceIsFolder",
+          "when": "resourceScheme == file && gitPro.hasRepositories",
           "group": "3_compare"
         }
       ],
@@ -1887,6 +1894,12 @@
           "default": "fork",
           "scope": "resource",
           "description": "%setting.gitPro.compare.defaultFilesMode.description%"
+        },
+        "gitPro.compare.openDiffsBeside": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "%setting.gitPro.compare.openDiffsBeside.description%"
         },
         "gitPro.cli.readTimeout": {
           "type": "integer",

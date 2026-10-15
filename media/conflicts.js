@@ -318,5 +318,7 @@
   // The matching keyups are held back too: an Alt release the workbench sees alone would move focus to the menu bar.
   document.addEventListener('keyup',event=>{if(!swallow)return;event.stopPropagation();if(event.key==='Alt'||!event.altKey)swallow=false;});
   document.addEventListener('pointerdown',event=>{if(menu&&!menu.contains(event.target))closeMenu(false);});
+  // A dropdown of ours is anchored to its button: it goes away when the panel loses focus, is resized or scrolls, instead of floating where it was.
+  window.addEventListener('blur',()=>closeMenu(false));window.addEventListener('resize',()=>closeMenu(false));document.addEventListener('scroll',()=>closeMenu(false),true);
   render();send({type:'ready'});
 })();

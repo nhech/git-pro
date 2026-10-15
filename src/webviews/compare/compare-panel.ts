@@ -48,7 +48,7 @@ export async function openChangesTab(title: string, resources: readonly ChangesR
 interface Side { readonly ref: string; readonly label: string; readonly oid: string; readonly current: boolean }
 interface FilesView { readonly files: CompareFiles; readonly commit?: HistoryCommit }
 interface Loaded { readonly fork?: MergeBase; readonly leftOnly?: SideCommits; readonly rightOnly?: SideCommits; readonly branchFiles: CompareFiles; readonly view: FilesView; readonly offset: number }
-const panelKey = (repositoryId: string, mode: 'commits' | 'worktree', left: string, right: string | undefined) => JSON.stringify([repositoryId, mode, left, right ?? null]);
+const panelKey = (repositoryId: string, mode: 'commits' | 'worktree', left: string, right: string | undefined, folder?: string) => JSON.stringify([repositoryId, mode, left, right ?? null, ...(folder ? [folder] : [])]);
 const sameFiles = (a: CompareFiles, b: CompareFiles) => a.omitted === b.omitted && a.note === b.note && JSON.stringify([a.files, a.stats]) === JSON.stringify([b.files, b.stats]);
 /** A path whose working side is not a regular file of this repository (a submodule, a symlink, a nested repository or Git metadata). */
 class NoWorkingSide extends Error {}
@@ -66,8 +66,10 @@ class ComparePanel {
   private gone: readonly string[] = []; private expired = false;
   private refs = new Map<string, string[]>();
   private filesMode: CompareFilesMode;
+  /** Which changed files the list shows (a name fragment and change types); the captured list itself never changes, so every index still names the same file. */
+  private filter = { text: '', statuses: '' };
   private readonly menu: { dispose(): void } | undefined;
-  constructor(private readonly owner: ComparePanels, readonly repositoryId: string, readonly root: string, readonly mode: 'commits' | 'worktree', private left: Side, private right: Side | undefined) {
+  constructor(private readonly owner: ComparePanels, readonly repositoryId: string, readonly root: string, readonly mode: 'commits' | 'worktree', private left: Side, private right: Side | undefined, readonly folder?: string) {
     const configured = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(root)).get('compare.defaultFilesMode');
     this.filesMode = configured === 'tips' ? 'tips' : 'fork';
     const media = vscode.Uri.joinPath(owner.context.extensionUri, 'media');
@@ -81,7 +83,14 @@ class ComparePanel {
     // Stand-in dependencies in tests carry no surfaces, and a tab without the router simply has no native menu.
     this.menu = owner.deps.surfaces?.menus.register('gitPro.compare', this.session, { repositoryId, knowsCommit: oid => this.knowsCommit(oid), handle: (action, context) => this.menuAction(action, context) });
   }
-  get key(): string { return panelKey(this.repositoryId, this.mode, this.left.oid, this.right?.oid); }
+  get key(): string { return panelKey(this.repositoryId, this.mode, this.left.oid, this.right?.oid, this.folder); }
+  /** A folder comparison lists only the files inside it (a rename counts when either path is inside). */
+  private inFolder(files: CompareFiles): CompareFiles {
+    const folder = this.folder; if (!folder) return files;
+    const within = (value: string | undefined) => value !== undefined && (value === folder || value.startsWith(`${folder}/`));
+    const kept = files.files.filter(file => within(file.path) || within(file.originalPath)), paths = new Set(kept.map(file => file.path));
+    return Object.freeze({ ...files, files: Object.freeze(kept), stats: Object.freeze(files.stats.filter(stat => paths.has(stat.path))) });
+  }
   get isDisposed(): boolean { return this.disposed; }
   reveal(): void { this.panel.reveal(); }
   load(): Promise<void> { return this.run(async signal => { const loaded = await this.compute(this.left, this.right, signal); if (this.disposed) return false; this.loaded = loaded; this.loadError = undefined; void this.loadRefs(); return true; }); }
@@ -92,27 +101,28 @@ class ComparePanel {
     this.timer = setTimeout(() => { this.timer = undefined; void this.background(); }, delay);
   }
   private title(): string {
-    const right = this.right ? this.right.label : 'Working Tree';
-    return redact(this.swapped ? `Compare: ${right} ↔ ${this.left.label}` : `Compare: ${this.left.label} ↔ ${right}`);
+    const right = this.right ? this.right.label : 'Working Tree', where = this.folder ? ` · ${this.folder}` : '';
+    return redact(this.swapped ? `Compare: ${right} ↔ ${this.left.label}${where}` : `Compare: ${this.left.label} ↔ ${right}${where}`);
   }
   private post(value: Record<string, unknown>): Promise<boolean> { return this.disposed ? Promise.resolve(false) : Promise.resolve(this.panel.webview.postMessage({ ...value, session: this.session })); }
   private state(): Record<string, unknown> {
     const side = (value: Side) => ({ name: redact(value.label), oid: value.oid, current: value.current }), head = this.owner.head(this.repositoryId);
-    const base = { type: 'state', revision: this.revision, mode: this.mode, left: side(this.left), ...(this.right ? { right: side(this.right) } : {}), swapped: this.swapped, ...(head ? { head: redact(head) } : {}), filesMode: this.filesMode, moved: this.moved.map(redact), gone: this.gone.map(redact), ...(this.expired ? { expired: true } : {}) };
+    const base = { type: 'state', revision: this.revision, mode: this.mode, left: side(this.left), ...(this.right ? { right: side(this.right) } : {}), swapped: this.swapped, ...(head ? { head: redact(head) } : {}), ...(this.folder ? { folder: redact(this.folder) } : {}), filesMode: this.filesMode, moved: this.moved.map(redact), gone: this.gone.map(redact), filter: this.filter, ...(this.expired ? { expired: true } : {}) };
     const loaded = this.loaded;
     if (!loaded) return { ...base, loading: !this.loadError, ...(this.loadError ? { error: this.loadError } : {}) };
     const commit = (value: HistoryCommit) => ({ oid: value.oid, subject: redact(value.subject.slice(0, 500)), author: redact(value.author.slice(0, 200)), timestamp: value.timestamp, refs: (this.refs.get(value.oid) ?? []).map(name => redact(name.slice(0, 200))) });
     const page = (value: SideCommits) => ({ count: value.count, offset: value.offset, commits: value.commits.map(commit) });
     const files = loaded.view.files, worktree = files.scope === 'worktree';
-    const items = files.files.slice(loaded.offset, loaded.offset + FILE_PAGE).map((file, position) => {
+    const shown = this.visible(files);
+    const items = shown.slice(loaded.offset, loaded.offset + FILE_PAGE).map(({ file, index }) => {
       const stat = statFor(files, file), letter = file.status.charAt(0);
-      return { index: loaded.offset + position, status: letter, path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
+      return { index, status: letter, path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
         ...(worktree ? { presence: letter === 'A' ? 'worktree' : letter === 'D' ? 'branch' : 'both' } : {}) };
     });
     return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple, ...(loaded.fork.shallow ? { shallow: true } : {}) } } : {}),
       ...(loaded.leftOnly && loaded.rightOnly ? { sides: { leftOnly: page(loaded.leftOnly), rightOnly: page(loaded.rightOnly) } } : {}),
       files: { scope: files.scope, ...(loaded.view.commit ? { commit: { oid: loaded.view.commit.oid, subject: redact(loaded.view.commit.subject.slice(0, 500)) } } : {}), ...(files.from ? { from: files.from } : {}), ...(files.to ? { to: files.to } : {}),
-        total: files.files.length, offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: files.files.filter(file => statFor(files, file)?.added === null).length, items } };
+        total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
   }
   /** One request at a time per tab. A task that returns false changed nothing the webview shows, so the revision stays and no state is posted. */
   private async run(task: (signal: AbortSignal) => Promise<boolean>): Promise<void> {
@@ -187,8 +197,9 @@ class ComparePanel {
         const files = await history.comparisonFiles(id, this.left.oid, this.right.oid, action.mode, signal, loaded.fork); if (this.disposed) return false;
         this.filesMode = action.mode; this.loaded = { ...loaded, branchFiles: files, view: { files }, offset: 0 }; return true;
       }
+      case 'filter': this.filter = { text: action.text, statuses: action.statuses }; this.loaded = { ...loaded, offset: 0 }; return true;
       case 'filesPage': {
-        const total = loaded.view.files.files.length;
+        const total = this.visible(loaded.view.files).length;
         if (action.offset > 0 && action.offset >= total) throw new Error('Choose an available file page.');
         this.loaded = { ...loaded, offset: action.offset }; return true;
       }
@@ -203,11 +214,17 @@ class ComparePanel {
       }
     }
   }
+  /** The files the list shows, each with its index in the captured list: actions name that index, never a position in the filtered list. */
+  private visible(files: CompareFiles): { file: ChangedFile; index: number }[] {
+    const { text, statuses } = this.filter, needle = text.toLowerCase(), all = files.files.map((file, index) => ({ file, index }));
+    if (!needle && !statuses) return all;
+    return all.filter(({ file }) => (!statuses || statuses.includes(file.status.charAt(0))) && (!needle || file.path.toLowerCase().includes(needle) || (file.originalPath?.toLowerCase().includes(needle) ?? false)));
+  }
   private sideCommits(loaded: Loaded): readonly HistoryCommit[] { return [...(loaded.leftOnly?.commits ?? []), ...(loaded.rightOnly?.commits ?? [])]; }
   private file(loaded: Loaded, index: number): ChangedFile { const file = loaded.view.files.files[index]; if (!file) throw new Error('Select a file from the current comparison.'); return file; }
   private async compute(left: Side, right: Side | undefined, signal: AbortSignal): Promise<Loaded> {
     const history = this.owner.deps.history;
-    if (!right) { const files = await history.worktreeFiles(this.repositoryId, left.oid, signal); return { branchFiles: files, view: { files }, offset: 0 }; }
+    if (!right) { const files = this.inFolder(await history.worktreeFiles(this.repositoryId, left.oid, signal)); return { branchFiles: files, view: { files }, offset: 0 }; }
     const result = await history.compareRefs(this.repositoryId, left.oid, right.oid, this.filesMode, signal);
     return { fork: result.fork, leftOnly: result.leftOnly, rightOnly: result.rightOnly, branchFiles: result.files, view: { files: result.files }, offset: 0 };
   }
@@ -234,14 +251,14 @@ class ComparePanel {
     if (!this.repositoryOpen) { await expire(); return; }
     try {
       const resolved = await Promise.all(sides.map(side => history.resolveRef(this.repositoryId, side.ref).then(oid => oid !== side.oid ? 'moved' : 'same', () => 'gone')));
-      const files = this.mode === 'worktree' ? await history.worktreeFiles(this.repositoryId, this.left.oid) : undefined;
+      const files = this.mode === 'worktree' ? this.inFolder(await history.worktreeFiles(this.repositoryId, this.left.oid)) : undefined;
       if (this.disposed) return;
       if (generation !== this.generation || this.busy || !this.loaded) { this.stale = true; return; }
       if (!this.repositoryOpen) { await expire(); return; }
       const named = (kind: string) => sides.flatMap((side, index) => resolved[index] === kind ? [side.label] : []), moved = named('moved'), gone = named('gone');
       let changed = this.expired || moved.join('\n') !== this.moved.join('\n') || gone.join('\n') !== this.gone.join('\n'); this.moved = moved; this.gone = gone; this.expired = false;
       // The working tree is live: its file list follows edits, while branch comparisons keep their pins and only say that a ref moved.
-      if (files && !sameFiles(files, this.loaded.branchFiles)) { this.loaded = { branchFiles: files, view: { files }, offset: this.loaded.offset < files.files.length ? this.loaded.offset : 0 }; this.revision++; changed = true; }
+      if (files && !sameFiles(files, this.loaded.branchFiles)) { this.loaded = { branchFiles: files, view: { files }, offset: this.loaded.offset < this.visible(files).length ? this.loaded.offset : 0 }; this.revision++; changed = true; }
       if (changed) await this.post(this.state());
     } catch {
       this.stale = false;
@@ -266,6 +283,10 @@ class ComparePanel {
       : files.scope === 'tips' ? [`${this.left.label} ${short(files.from)}`, `${this.right?.label ?? ''} ${short(files.to)}`] : [`${this.left.label} ${short(files.from)}`, 'Working Tree'];
     return { from: absentFrom ? undefined : files.from, to: absentTo ? undefined : files.to, labels };
   }
+  /** Diffs open beside the tab with focus left in it, so the list stays in view and the next click replaces the diff (a preview editor). */
+  private diffOptions(): vscode.TextDocumentShowOptions | undefined {
+    return vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.root)).get<boolean>('compare.openDiffsBeside', true) === false ? undefined : { viewColumn: vscode.ViewColumn.Beside, preview: true, preserveFocus: true };
+  }
   private async open(kind: 'diff' | 'localDiff' | 'openFile', loaded: Loaded, file: ChangedFile, signal: AbortSignal): Promise<void> {
     const history = this.owner.deps.history, revisions = this.owner.deps.revisions, id = this.repositoryId, name = path.posix.basename(file.path), before = file.originalPath ?? file.path;
     if (kind === 'openFile') { const uri = await this.workingFile(file.path); if (!uri) throw new Error(`${name} does not exist in the working tree.`); await vscode.commands.executeCommand('vscode.open', uri); return; }
@@ -279,17 +300,19 @@ class ComparePanel {
       if (!working && !worktree) throw new Error(`${name} does not exist in the working tree.`);
       const snapshot = revisions.add(content, blobPath), local = working ?? revisions.add(Buffer.alloc(0), file.path);
       const [left, right, leftLabel, rightLabel] = worktree && this.swapped ? [local, snapshot, 'Working Tree', label] : [snapshot, local, label, 'Working Tree'];
-      await vscode.commands.executeCommand('vscode.diff', left, right, redact(`${name} (${leftLabel} ↔ ${rightLabel})`)); return;
+      await vscode.commands.executeCommand('vscode.diff', left, right, redact(`${name} (${leftLabel} ↔ ${rightLabel})`), this.diffOptions()); return;
     }
     const [left, right] = await Promise.all([history.revision(id, from, before, signal), history.revision(id, to, file.path, signal)]);
     if (this.disposed || signal.aborted) return;
-    await vscode.commands.executeCommand('vscode.diff', revisions.add(left, before), revisions.add(right, file.path), redact(`${name} (${labels[0]} ↔ ${labels[1]})`));
+    await vscode.commands.executeCommand('vscode.diff', revisions.add(left, before), revisions.add(right, file.path), redact(`${name} (${labels[0]} ↔ ${labels[1]})`), this.diffOptions());
   }
   private async openAll(loaded: Loaded): Promise<void> {
     const files = loaded.view.files;
     if (files.omitted) throw new Error(files.note === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so Git Pro cannot list or open them here. Use a terminal for this comparison.' : 'Too many changed files to list here. Open files one at a time or use native Git.');
-    const text = files.files.filter(file => statFor(files, file)?.added !== null), chosen = text.slice(0, ALL_CHANGES_LIMIT);
-    if (!chosen.length) throw new Error(files.files.length ? 'Only binary files changed; there is no text diff to open.' : 'No differences.');
+    // Open All Changes opens what the list shows: with a filter, only the files that match it.
+    const shown = this.visible(files).map(({ file }) => file), filtered = shown.length !== files.files.length;
+    const text = shown.filter(file => statFor(files, file)?.added !== null), chosen = text.slice(0, ALL_CHANGES_LIMIT);
+    if (!chosen.length) throw new Error(shown.length ? 'Only binary files changed; there is no text diff to open.' : files.files.length ? 'No files match the filter.' : 'No differences.');
     const worktree = files.scope === 'worktree', blobs = this.owner.blobs, resources: ChangesResource[] = [];
     let skipped = 0;
     for (let start = 0; start < chosen.length; start += 32) for (const resource of await Promise.all(chosen.slice(start, start + 32).map(async (file): Promise<ChangesResource | undefined> => {
@@ -303,7 +326,7 @@ class ComparePanel {
     }))) if (resource) resources.push(resource);
     if (this.disposed) return;
     if (!resources.length) throw new Error(leftOut(skipped));
-    const view = loaded.view.commit ? `${short(loaded.view.commit.oid)} ${loaded.view.commit.subject.slice(0, 80)}` : 'All Changes';
+    const view = loaded.view.commit ? `${short(loaded.view.commit.oid)} ${loaded.view.commit.subject.slice(0, 80)}` : filtered ? 'Filtered Changes' : 'All Changes';
     await openChangesTab(redact(`${this.title()} · ${view}`), resources);
     const notices = [...(text.length > chosen.length ? [`Opened the first ${ALL_CHANGES_LIMIT} of ${text.length.toLocaleString()} text files.`] : []), ...(skipped ? [leftOut(skipped)] : [])];
     if (notices.length) await this.post({ type: 'notice', message: notices.join(' ') });
@@ -313,8 +336,8 @@ class ComparePanel {
     const handler = this.owner.getFromBranch; if (!handler) throw new Error('Get from Branch is not available in this build.');
     const files = indexes.map(index => this.file(loaded, index)).map(file => Object.freeze({ status: file.status, path: file.path, ...(file.originalPath ? { originalPath: file.originalPath } : {}) }));
     if (!await handler(Object.freeze({ repositoryId: this.repositoryId, root: this.root, ref: Object.freeze({ name: this.left.ref, oid: this.left.oid }), files: Object.freeze(files) })) || this.disposed) return false;
-    const refreshed = await this.owner.deps.history.worktreeFiles(this.repositoryId, this.left.oid, signal); if (this.disposed) return false;
-    this.loaded = { branchFiles: refreshed, view: { files: refreshed }, offset: loaded.offset < refreshed.files.length ? loaded.offset : 0 }; return true;
+    const refreshed = this.inFolder(await this.owner.deps.history.worktreeFiles(this.repositoryId, this.left.oid, signal)); if (this.disposed) return false;
+    this.loaded = { branchFiles: refreshed, view: { files: refreshed }, offset: loaded.offset < this.visible(refreshed).length ? loaded.offset : 0 }; return true;
   }
   /** The real working file as an editable side: same repository, inside the root, a regular file and not Git metadata. Undefined when it does not exist. */
   private async workingFile(relative: string): Promise<vscode.Uri | undefined> {
@@ -361,9 +384,10 @@ export class ComparePanels implements CompareSurface, vscode.Disposable {
     const repo = this.repository(repositoryId), [left, right] = await Promise.all([this.deps.history.resolveRef(repositoryId, leftRef), this.deps.history.resolveRef(repositoryId, rightRef)]);
     await this.show(panelKey(repositoryId, 'commits', left, right), () => new ComparePanel(this, repositoryId, repo.root, 'commits', this.side(repositoryId, leftRef, left), this.side(repositoryId, rightRef, right)));
   }
-  async openWorktree(repositoryId: string, ref: string): Promise<void> {
+  async openWorktree(repositoryId: string, ref: string, folder?: string): Promise<void> {
     const repo = this.repository(repositoryId), oid = await this.deps.history.resolveRef(repositoryId, ref);
-    await this.show(panelKey(repositoryId, 'worktree', oid, undefined), () => new ComparePanel(this, repositoryId, repo.root, 'worktree', this.side(repositoryId, ref, oid), undefined));
+    if (folder !== undefined) { historyPath(folder); if (folder.endsWith('/') || folder.includes('\\') || folder.includes('\0') || folder.split('/').includes('.git')) throw new Error('Choose a folder inside the repository.'); }
+    await this.show(panelKey(repositoryId, 'worktree', oid, undefined, folder), () => new ComparePanel(this, repositoryId, repo.root, 'worktree', this.side(repositoryId, ref, oid), undefined, folder));
   }
   private async show(key: string, create: () => ComparePanel): Promise<void> {
     const existing = this.panels.get(key);

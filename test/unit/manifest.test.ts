@@ -103,7 +103,7 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   assert.ok(shown('editor/title','gitPro.conflicts.merge',inEditor)&&!shown('editor/title','gitPro.conflicts.merge',inMerge)&&!shown('editor/title','gitPro.conflicts.merge',{...inEditor,resource:'file:///repo/clean.ts'}));
   assert.ok(shown('view/title','gitPro.conflicts.open',{view:'gitPro.changes','gitPro.hasConflicts':true})&&!shown('view/title','gitPro.conflicts.open',{view:'gitPro.changes','gitPro.hasConflicts':false}));
   const file={resourceScheme:'file','gitPro.hasRepositories':true,explorerResourceIsFolder:false};
-  assert.ok(shown('explorer/context','gitPro.compareWithRef',file)&&!shown('explorer/context','gitPro.compareWithRef',{...file,explorerResourceIsFolder:true})&&shown('editor/title/context','gitPro.compareWithRef',file));
+  assert.ok(shown('explorer/context','gitPro.compareWithRef',file)&&shown('explorer/context','gitPro.compareWithRef',{...file,explorerResourceIsFolder:true})&&shown('editor/title/context','gitPro.compareWithRef',file));
   const settings=manifest.contributes.configuration.properties as Record<string,{type:string;enum?:string[];default:unknown;scope:string;description:string}>;
   assert.deepEqual([settings['gitPro.conflicts.autoOpen']?.enum,settings['gitPro.conflicts.autoOpen']?.default],[['gitPro','always','never'],'gitPro']);
   assert.deepEqual([settings['gitPro.conflicts.groupByDirectory']?.type,settings['gitPro.conflicts.groupByDirectory']?.default],['boolean',false]);

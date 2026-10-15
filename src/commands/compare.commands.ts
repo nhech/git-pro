@@ -14,7 +14,7 @@ import { getFromBranch } from './get-from-branch';
 
 export type BranchEntry = Extract<BranchNode, { kind: 'branch' }>;
 type CompareDeps = Pick<FeatureDeps, 'registry' | 'policy' | 'executor' | 'git' | 'advanced' | 'tools' | 'history' | 'revisions'>;
-interface RefChoice { readonly ref: string; readonly name: string; readonly kind: 'local' | 'remote' | 'tag'; readonly current: boolean }
+interface RefChoice { readonly ref: string; readonly name: string; readonly kind: 'local' | 'remote' | 'tag' | 'revision'; readonly current: boolean }
 
 /** A Branches view node as VS Code hands it back to a command: only its shape is trusted, and its repository must still be open. */
 export function branchEntry(deps: Pick<FeatureDeps, 'registry'>, value: unknown): BranchEntry | undefined {
@@ -33,7 +33,7 @@ export function currentRef(deps: Pick<FeatureDeps, 'registry'>, id: string): { r
 const isCurrent = (deps: Pick<FeatureDeps, 'registry'>, entry: BranchEntry) => !entry.branch.remote && entry.branch.name === deps.registry.store.get(entry.repositoryId)?.head;
 function activeId(deps: Pick<FeatureDeps, 'registry'>): string { const id = deps.registry.active?.id; if (!id) throw new Error('Select a repository first.'); return id; }
 
-/** Branches first (the current one on top when it is offered), then up to 500 tags; the same sources as History refs. */
+/** Branches first (the current one on top when it is offered), then up to 500 tags; the same sources as History refs. The last entry takes any revision the Compare tab can pin: a commit ID, `HEAD~3`, a branch or a tag. */
 async function pickRef(deps: CompareDeps, id: string, title: string, includeCurrent: boolean, exclude?: string): Promise<RefChoice | undefined> {
   const [branches, tags] = await Promise.all([deps.git.branchSearchSnapshot(id), deps.tools.tags(id)]);
   if (branches.length > 10000) throw new Error('More than 10000 branches. Enter exact refs in History & Compare.');
@@ -42,14 +42,20 @@ async function pickRef(deps: CompareDeps, id: string, title: string, includeCurr
     ...tags.slice(0, 500).map(tag => ({ ref: `refs/tags/${tag.name}`, name: tag.name, kind: 'tag' as const, current: false }))]
     .filter(choice => (includeCurrent || !choice.current) && choice.ref !== exclude).sort((a, b) => Number(b.current) - Number(a.current));
   if (!choices.length) throw new Error(includeCurrent && !exclude ? 'This repository has no branches or tags yet.' : 'There is no other branch or tag to compare with.');
-  const items = choices.map(choice => {
+  const items: { label: string; description?: string; iconPath?: vscode.ThemeIcon; alwaysShow?: boolean; choice?: RefChoice; custom?: true }[] = choices.map(choice => {
     const visual = choice.kind === 'tag' ? undefined : branchVisual({ remote: choice.kind === 'remote', current: choice.current });
     return { label: redact(choice.name), description: choice.current ? 'Current branch' : choice.kind === 'remote' ? 'Remote branch' : choice.kind === 'tag' ? 'Tag' : 'Local branch',
       iconPath: visual ? new vscode.ThemeIcon(visual.icon, new vscode.ThemeColor(visual.color)) : new vscode.ThemeIcon('tag'), choice };
   });
+  items.push({ label: 'Enter a revision…', description: 'A commit ID, HEAD~3, or any other branch or tag name', iconPath: new vscode.ThemeIcon('edit'), alwaysShow: true, custom: true });
   const picked = await vscode.window.showQuickPick(items, { title, matchOnDescription: true, placeHolder: tags.length > 500 ? 'Branches and the first 500 tags' : 'Branches and tags' });
   if (picked && !deps.registry.list().some(repo => repo.id === id)) throw new Error('Repository is no longer open.');
-  return picked?.choice;
+  if (!picked?.custom) return picked?.choice;
+  const typed = (await vscode.window.showInputBox({ title, prompt: 'A commit ID, HEAD~3, or a branch or tag name', ignoreFocusOut: true }))?.trim();
+  if (!typed) return undefined;
+  // The Compare tab pins what resolves to a commit; anything else is said here, before a tab opens.
+  await deps.history.resolveRef(id, typed).catch(() => { throw new Error(redact(`${typed.slice(0, 80)} does not name a commit in this repository.`)); });
+  return { ref: typed, name: typed, kind: 'revision', current: false };
 }
 
 /** Same review text as Advanced Actions (advanced.commands.ts), with the branch named beside its pinned OID. */
@@ -107,8 +113,13 @@ export class CompareCommands {
     const target = value instanceof vscode.Uri ? value : vscode.window.activeTextEditor?.document.uri;
     if (!target || target.scheme !== 'file') throw new Error('Open a file in a repository.');
     const repo = await this.deps.registry.resolveFile(target.fsPath); if (!repo) throw new Error('File is outside an open repository.');
-    const relative = path.relative(repo.root, await canonicalFilePath(target.fsPath)).replace(/\\/g, '/'), absolute = await this.deps.policy.authorizeFile(repo.root, relative);
-    if ((await lstat(absolute).catch(() => undefined))?.isDirectory()) throw new Error('Choose a file. Comparing folders with a branch or tag is not available yet.');
+    const relative = path.relative(repo.root, await canonicalFilePath(target.fsPath)).replace(/\\/g, '/');
+    // A folder (the repository root included) is compared as a whole: the branch or tag against the working tree, limited to the files inside it.
+    const absolute = relative === '' ? repo.root : await this.deps.policy.authorizeFile(repo.root, relative);
+    if (relative === '' || (await lstat(absolute).catch(() => undefined))?.isDirectory()) {
+      const name = relative === '' ? path.basename(repo.root) : relative, choice = await pickRef(this.deps, repo.id, `Compare ${redact(name)} with Branch or Tag`, true); if (!choice) return;
+      await this.surface.openWorktree(repo.id, choice.ref, relative || undefined); return;
+    }
     const file = path.basename(relative), choice = await pickRef(this.deps, repo.id, `Compare ${redact(file)} with Branch or Tag`, true); if (!choice) return;
     const oid = await this.deps.advanced.resolve(repo.id, choice.ref);
     if (!decode((await this.deps.executor.read(repo.root, { kind: 'tree', oid, path: relative }, { maxOutputBytes: 64 * 1024 })).stdout)) {

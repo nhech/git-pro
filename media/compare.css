@@ -165,7 +165,14 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(
 .files-label{margin-right:4px;font-size:12px;color:var(--gp-muted)}
 .radio{height:22px;padding:0 8px;border:1px solid transparent;border-radius:var(--gp-radius-sm);background:transparent;color:var(--gp-fg);font:12px/20px var(--gp-font);cursor:pointer}
 .radio:hover:not(:disabled){background:var(--gp-toolbar-hover)}
-.radio[aria-checked=true]{background:var(--vscode-inputOption-activeBackground,var(--vscode-list-inactiveSelectionBackground));border-color:var(--vscode-inputOption-activeBorder,transparent);color:var(--vscode-inputOption-activeForeground,var(--gp-fg))}
+.files-filter{display:flex;align-items:center;gap:6px;padding:0 8px 4px 12px;background:var(--vscode-editor-background)}
+.files-filter[hidden]{display:none}
+.files-filter input{flex:1 1 120px;min-width:80px;height:22px;padding:0 6px;border:1px solid var(--vscode-input-border,transparent);border-radius:var(--gp-radius-sm);background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:12px/20px var(--gp-font)}
+.files-filter input::placeholder{color:var(--vscode-input-placeholderForeground)}
+.files-filter input:focus{outline:var(--gp-focus);outline-offset:-1px}
+#filter-status{display:flex;gap:2px;flex:0 0 auto}
+#filter-status .radio{min-width:22px;padding:0 6px;text-align:center}
+.radio[aria-checked=true],.radio[aria-pressed=true]{background:var(--vscode-inputOption-activeBackground,var(--vscode-list-inactiveSelectionBackground));border-color:var(--vscode-inputOption-activeBorder,transparent);color:var(--vscode-inputOption-activeForeground,var(--gp-fg))}
 .radio:disabled{opacity:.6;cursor:default}
 #layout{margin-left:auto}
 #files-heading{padding:0 12px 2px}

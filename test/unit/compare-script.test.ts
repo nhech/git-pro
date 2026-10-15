@@ -24,10 +24,12 @@ class Element {
   find(predicate: (node: Element) => boolean): Element | undefined { return this.all().find(predicate); }
   key(value: string) { this.fire('keydown', { key: value }); }
 }
-const ids = ['title', 'summary', 'moved', 'moved-text', 'moved-refresh', 'status', 'workspace', 'commits', 'files', 'files-mode', 'layout', 'files-heading', 'legend', 'file-rows', 'files-empty', 'files-pager', 'files-footer', 'worktree-actions', 'get-from-branch', 'selection-hint', 'swap', 'refresh', 'open-all'];
+const ids = ['title', 'summary', 'moved', 'moved-text', 'moved-refresh', 'status', 'workspace', 'commits', 'files', 'files-mode', 'layout', 'files-heading', 'legend', 'file-rows', 'files-empty', 'files-pager', 'files-footer', 'worktree-actions', 'get-from-branch', 'selection-hint', 'swap', 'refresh', 'open-all', 'files-filter', 'filter-text', 'filter-status'];
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const commit = (value: number, subject = `Commit ${value}`) => ({ oid: oid(value), subject, author: 'Fixture', timestamp: 1700000000, refs: [] as string[] });
 
+/** Timers the script under test starts (the filter's pause), run by hand. */
+const timers: (() => void)[] = [];
 const context = (element: Element) => JSON.parse(element.getAttribute('data-vscode-context') ?? 'null') as Record<string, unknown>;
 
 function harness(saved?: unknown) {
@@ -39,7 +41,7 @@ function harness(saved?: unknown) {
   const window = { innerWidth: 800, innerHeight: 600, addEventListener: (type: string, listener: Listener) => windowListeners.set(type, listener) };
   // Values built in the VM realm are copied to plain objects so strict deep equality compares content, not realms.
   const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-  runInNewContext(readFileSync('media/compare.js', 'utf8'), { document, window, acquireVsCodeApi: () => ({ postMessage: (value: Record<string, unknown>) => sent.push(copy(value)), getState: () => saved, setState: (value: unknown) => states.push(copy(value)) }) });
+  runInNewContext(readFileSync('media/compare.js', 'utf8'), { document, window, setTimeout: (callback: () => void) => { timers.push(callback); return timers.length; }, clearTimeout: () => undefined, acquireVsCodeApi: () => ({ postMessage: (value: Record<string, unknown>) => sent.push(copy(value)), getState: () => saved, setState: (value: unknown) => states.push(copy(value)) }) });
   const post = (data: Record<string, unknown>) => windowListeners.get('message')!({ data: { session: 'session-1', ...data } });
   const get = (id: string) => elements.get(id)!;
   return { elements, get, body, sent, created, states, post, windowListeners };
@@ -181,6 +183,9 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
   rows[0]!.fire('contextmenu'); assert.equal(h.get('selection-hint').textContent, '1 file selected', 'as in the Explorer, a right-click outside the selection selects just that row');
   assert.equal(context(rows[0]!).indexes, '0'); assert.equal(context(rows[1]!).indexes, '1'); assert.equal(context(rows[2]!).indexes, '2');
   rows[1]!.focus(); rows[1]!.key(' '); assert.equal(rows[1]!.getAttribute('aria-selected'), 'true', 'Space toggles a row into the selection'); assert.equal(context(rows[0]!).indexes, '0,1', 'and the menu names it too');
+  rows[1]!.focus(); const selectAll = { prevented: false }; rows[1]!.fire('keydown', { key: 'a', ctrlKey: true, preventDefault: () => { selectAll.prevented = true; } });
+  assert.equal(selectAll.prevented, true); assert.equal(h.get('selection-hint').textContent, '3 files selected', 'Ctrl+A selects every file of the list'); assert.deepEqual(rows.map(row => row.getAttribute('aria-selected')), ['true', 'true', 'true']);
+  assert.equal(context(rows[2]!).indexes, '0,1,2', 'and every row names the whole selection for the menu');
   h.post({ ...state, revision: 3 }); assert.equal(h.get('get-from-branch').disabled, true, 'A new revision clears the selection: its indexes belong to the old list');
   h.post({ ...state, revision: 3, swapped: true }); assert.equal(h.get('title').textContent, 'The working tree on main compared with files in feature');
   h.post({ ...state, revision: 4, files: { ...state.files, total: 0, items: [] } }); assert.equal(h.get('files-empty').textContent, 'No differences between feature and the working tree.');
@@ -208,4 +213,34 @@ test('a diff opened over the tab keeps the Get from Branch selection and the foc
   assert.equal(changed.get('get-from-branch').disabled, true, 'another revision is another list: its indexes do not carry over');
   const foreign = harness({ ...saved, session: 'session-0' }); foreign.post(state);
   assert.equal(foreign.get('get-from-branch').disabled, true, 'state from another panel session is ignored');
+});
+
+test('The file filter sends a trimmed name fragment after a pause and the change types at once, shows the host\'s answer and never fights the typing', () => {
+  timers.length = 0;
+  {
+    const h = harness({ flat: true }), input = h.get('filter-text'), chips = h.get('filter-status').children;
+    assert.equal(h.get('files-filter').hidden, true, 'nothing to filter before the files arrive');
+    h.post(commitsState()); assert.equal(h.get('files-filter').hidden, false);
+    assert.deepEqual(chips.map(chip => [chip.textContent, chip.getAttribute('aria-label'), chip.getAttribute('aria-pressed')]), [['A', 'Added files', 'false'], ['M', 'Modified files', 'false'], ['D', 'Deleted files', 'false'], ['R', 'Renamed files', 'false']]);
+    (input as unknown as { value: string }).value = '  app '; input.fire('input'); input.fire('input'); assert.equal(h.sent.filter(m => m.type === 'filter').length, 0, 'typing waits for a pause');
+    timers.at(-1)!(); assert.deepEqual(h.sent.at(-1), { type: 'filter', revision: 4, text: 'app', statuses: '', session: 'session-1' });
+    chips[1]!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'filter', revision: 4, text: 'app', statuses: 'M', session: 'session-1' }, 'a change type applies at once, with the text');
+    // The host answers with the files that match: the heading says how many of how many.
+    h.post(commitsState({ revision: 5, filter: { text: 'app', statuses: 'M' }, files: { scope: 'fork', from: oid(3), to: oid(1), total: 1, unfiltered: 3, offset: 0, omitted: false, binary: 0, items: [{ index: 0, status: 'M', path: 'src/app.ts', added: 3, removed: 1, binary: false }] } }));
+    assert.match(h.get('files-heading').textContent, /Changes in feature since the fork point · 1 of 3/); assert.equal(chips[1]!.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(h.get('file-rows').children.map(row => row.dataset.focusKey), ['file:0'], 'the row keeps the index it has in the captured list');
+    // Typing in progress is not overwritten by an answer to an earlier request.
+    Element.active = input; (input as unknown as { value: string }).value = 'app.t'; h.post(commitsState({ revision: 6, filter: { text: 'app', statuses: 'M' }, files: { scope: 'fork', from: oid(3), to: oid(1), total: 1, unfiltered: 3, offset: 0, omitted: false, binary: 0, items: [{ index: 0, status: 'M', path: 'src/app.ts', added: 3, removed: 1, binary: false }] } }));
+    assert.equal((input as unknown as { value: string }).value, 'app.t');
+    // Busy blocks a request, which goes out when the tab is free again.
+    h.post({ type: 'busy', busy: true }); const before = h.sent.length; timers.length = 0; input.fire('input'); timers.at(-1)!(); assert.equal(h.sent.length, before);
+    h.post({ type: 'busy', busy: false }); assert.deepEqual(h.sent.at(-1), { type: 'filter', revision: 6, text: 'app.t', statuses: 'M', session: 'session-1' });
+    // Escape clears the text.
+    Element.active = input; const escape = { prevented: false }; input.fire('keydown', { key: 'Escape', preventDefault: () => { escape.prevented = true; } });
+    assert.equal(escape.prevented, true); assert.equal((input as unknown as { value: string }).value, ''); assert.equal(h.sent.at(-1)?.text, '');
+    // A filter that matches nothing says so beside the (kept) filter row.
+    h.post(commitsState({ revision: 7, filter: { text: 'zzz', statuses: '' }, files: { scope: 'fork', from: oid(3), to: oid(1), total: 0, unfiltered: 3, offset: 0, omitted: false, binary: 0, items: [] } }));
+    assert.equal(h.get('files-empty').textContent, 'No files match the filter.'); assert.equal(h.get('files-filter').hidden, false);
+    h.post(commitsState({ revision: 8, files: { scope: 'fork', from: oid(3), to: oid(1), total: 0, offset: 0, omitted: false, binary: 0, items: [] } })); assert.equal(h.get('files-filter').hidden, true, 'no files at all: nothing to filter');
+  }
 });
