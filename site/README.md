@@ -4,7 +4,7 @@ Static source for <https://git-pro.longtd.me>. No framework, no npm dependencies
 
 | Path | Purpose |
 |---|---|
-| `site/index.html` | The single landing page. Uses the `{{MARKETPLACE_URL}}` and `{{VERSION}}` placeholders. |
+| `site/index.html` | The single landing page. Uses the `{{MARKETPLACE_URL}}`, `{{VERSION}}`, `{{SETTINGS_COUNT}}`, `{{RELEASE_DATE}}`, `{{RELEASE_DATE_ISO}}`, `{{GIT_MINIMUM}}` and `{{VSCODE_MINIMUM}}` placeholders. |
 | `site/404.html` | Not-found page. Uses root-relative URLs because nginx serves it for missing paths at any depth. |
 | `site/deploy/` | Production origin: `Dockerfile`, `nginx.conf` and `compose.yml` for the nginx container behind the Cloudflare Tunnel. Source-only, never copied into `site-dist/`. |
 | `site/styles.css` | Design tokens (dark for every visitor by default; light only after choosing it with the toggle, which is stored), layout and motion. |
@@ -24,7 +24,7 @@ It prints a JSON summary and exits with code 1 on any failure.
 
 ## Change the Marketplace link or version
 
-The Marketplace URL lives in one constant, `MARKETPLACE_URL`, at the top of `scripts/build-site.cjs`. The version comes from `package.json`. Edit those, not the HTML.
+The Marketplace URL lives in one constant, `MARKETPLACE_URL`, at the top of `scripts/build-site.cjs`. The version and the VS Code minimum come from `package.json`, the release date from the `## <version> — YYYY-MM-DD` heading of `CHANGELOG.md` (the build fails if the current version has none), and the Git minimum from `src/git/git-version.ts`. Edit those, not the HTML.
 
 The Marketplace listing is not live yet, so the install steps carry short "not live yet" notes wrapped in `<!-- unlisted -->` ... `<!-- /unlisted -->` in `site/index.html`. When the listing goes live, set `MARKETPLACE_LISTED` to `true` in `scripts/build-site.cjs` and rebuild: the build drops those blocks. Check that the Marketplace URL opens the listing first.
 

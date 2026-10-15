@@ -99,6 +99,7 @@
           <svg class="icon icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.75v2M12 19.25v2M2.75 12h2M19.25 12h2M5.46 5.46l1.41 1.41M17.13 17.13l1.41 1.41M5.46 18.54l1.41-1.41M17.13 6.87l1.41-1.41"/></svg>
           <svg class="icon icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M19.25 14.6A7.75 7.75 0 0 1 9.4 4.75a7.75 7.75 0 1 0 9.85 9.85z"/></svg>
         </button>
+        <a class="btn btn-primary btn-header" href="{{MARKETPLACE_URL}}">Install<span class="sr-only"> Git Pro from the VS Code Marketplace</span></a>
       </div>
     </div>
   </header>
@@ -123,10 +124,21 @@
               View on GitHub
             </a>
           </div>
+          <div class="hero-install">
+            <p class="hero-install-label" id="hero-install-label">Or in VS&nbsp;Code, press <span class="nowrap"><kbd>Ctrl</kbd>+<kbd>P</kbd></span> <span class="nowrap">(<kbd>⌘</kbd><kbd>P</kbd> on macOS)</span>, paste this and press Enter:</p>
+            <div class="code-block" role="group" aria-labelledby="hero-install-label">
+              <pre><code>ext install longtd.git-pro</code></pre>
+              <button class="copy-btn" type="button" data-copy hidden><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="8.25" y="8.25" width="11.5" height="11.5" rx="2"/><path d="M15.75 8.25v-2.5a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h2.5"/></svg><span class="copy-label">Copy</span><span class="sr-only"> install command</span></button>
+            </div>
+          </div>
           <ul class="meta-row" role="list" aria-label="Release details">
             <li>Version {{VERSION}}</li>
+            <li><time datetime="{{RELEASE_DATE_ISO}}">Released {{RELEASE_DATE}}</time></li>
             <li>MIT</li>
-            <li>VS&nbsp;Code 1.100+</li>
+            <li>VS&nbsp;Code {{VSCODE_MINIMUM}}+</li>
+            <li>Git {{GIT_MINIMUM}}+</li>
+            <li>Windows, macOS, Linux</li>
+            <li><a href="https://github.com/nhech/git-pro/blob/main/CHANGELOG.md">Release notes</a></li>
           </ul>
         </div>
 
@@ -238,10 +250,6 @@
               <h4>Your Git setup</h4>
               <p>Uses your Git identity, credential helpers, SSH agent and signing. A signing failure keeps your draft.</p>
             </li>
-            <li>
-              <h4>No telemetry code</h4>
-              <p>The extension contains no telemetry or analytics code, and operation logs always redact credentials.</p>
-            </li>
           </ul>
         </section>
       </div>
@@ -314,7 +322,45 @@
       </div>
     </section>
 
-    <section id="get-started" class="section section-alt" aria-labelledby="get-started-title">
+    <section id="trust" class="section section-alt" aria-labelledby="trust-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">Under the hood</p>
+          <h2 id="trust-title">What Git Pro does with your repository</h2>
+          <p class="section-lead">A Git extension runs with the same permissions as VS&nbsp;Code. These are the choices Git Pro makes with that access, each one checked against the source.</p>
+        </header>
+
+        <div class="feature-grid trust-grid">
+          <article class="card trust reveal">
+            <h3>No telemetry, no network of its own</h3>
+            <p>The extension contains no telemetry or analytics code and no HTTP client. Fetch, pull, push and clone run through Git when you ask, and auto-fetch stays off until you turn it on.</p>
+          </article>
+          <article class="card trust reveal" style="--i: 1">
+            <h3>Trusted workspaces only</h3>
+            <p>Git Pro stays inactive in untrusted and virtual workspaces, and refuses to read Git configuration or run Git until the folder is trusted.</p>
+          </article>
+          <article class="card trust reveal" style="--i: 2">
+            <h3>Git, without a shell</h3>
+            <p>Git is started directly with an argument list, never through a shell, using your Git identity, credential helpers, SSH agent and signing setup.</p>
+          </article>
+          <article class="card trust reveal">
+            <h3>Quiet logs</h3>
+            <p>The output log records which operation ran and how long it took, never file contents, commit messages, arguments or remote URLs, and credentials are always redacted.</p>
+          </article>
+          <article class="card trust reveal" style="--i: 1">
+            <h3>Locked-down panels</h3>
+            <p>Each webview panel has a Content Security Policy that blocks network access and allows only Git Pro's own nonce-marked script.</p>
+          </article>
+          <article class="card trust reveal" style="--i: 2">
+            <h3>Tested on three systems</h3>
+            <p>Every push runs unit and integration tests against real Git repositories on Windows, macOS and Linux, and extension-host tests on VS&nbsp;Code 1.100.0 and the current stable release.</p>
+          </article>
+        </div>
+        <p class="trust-foot reveal">MIT licensed, with <a href="https://github.com/nhech/git-pro/blob/main/THIRD_PARTY_NOTICES.txt">third-party notices</a> included. Read the <a href="https://github.com/nhech/git-pro">source</a> to check any of the above.</p>
+      </div>
+    </section>
+
+    <section id="get-started" class="section" aria-labelledby="get-started-title">
       <div class="container">
         <header class="section-head reveal">
           <p class="eyebrow">Get started</p>
@@ -424,7 +470,7 @@
       </div>
     </section>
 
-    <section id="faq" class="section" aria-labelledby="faq-title">
+    <section id="faq" class="section section-alt" aria-labelledby="faq-title">
       <div class="container container-narrow">
         <header class="section-head reveal">
           <p class="eyebrow">FAQ</p>
@@ -492,6 +538,36 @@
       </div>
     </section>
 
+    <section id="roadmap" class="section" aria-labelledby="roadmap-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">Roadmap</p>
+          <h2 id="roadmap-title">What has shipped, and what is still open</h2>
+          <p class="section-lead">Current through version {{VERSION}} ({{RELEASE_DATE}}). This is a list of what exists and of limits we know about, not a promise or a delivery date; plans change.</p>
+        </header>
+
+        <div class="roadmap-grid">
+          <article class="card roadmap-card reveal">
+            <h3>Shipped</h3>
+            <ul class="ticks" role="list">
+              <li><strong>0.2.2</strong> · Compare with Another Branch… from any branch row, Fetch and Refresh in the Branches view, a Git version check, and the fixes from a full audit</li>
+              <li><strong>0.1.0</strong> · Changes and commit, Branches, History and File History, Compare and Get from Branch, the Conflicts tab, interactive rebase planner, stashes, tags, remotes and worktrees</li>
+            </ul>
+            <p class="note"><a href="https://github.com/nhech/git-pro/blob/main/CHANGELOG.md">Full changelog</a></p>
+          </article>
+          <article class="card roadmap-card reveal" style="--i: 1">
+            <h3>Known limits, not yet lifted</h3>
+            <ul class="ticks" role="list">
+              <li>Comparing a folder with a branch or tag</li>
+              <li>Remote WSL and Dev Containers have not completed release validation</li>
+              <li>Interactive rebase covers linear ranges of 1–200 commits; merges in the range need native Git</li>
+            </ul>
+            <p class="note">The <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">compatibility page</a> lists every limit. Missing something? <a href="https://github.com/nhech/git-pro/issues/new/choose">Open an issue</a>.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="cta-band" aria-labelledby="cta-title">
       <div class="container">
         <div class="cta-card reveal">
@@ -530,6 +606,8 @@
         <nav class="footer-col" aria-labelledby="footer-project">
           <h2 id="footer-project" class="footer-heading">Project</h2>
           <ul>
+            <li><a href="#trust">Under the hood</a></li>
+            <li><a href="#roadmap">Roadmap</a></li>
             <li><a href="https://github.com/nhech/git-pro">GitHub</a></li>
             <li><a href="https://github.com/nhech/git-pro/issues">Issues</a></li>
             <li><a href="https://github.com/nhech/git-pro/blob/main/CHANGELOG.md">Changelog</a></li>

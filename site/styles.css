@@ -396,6 +396,27 @@ main:focus {
   color: var(--text);
 }
 
+/* The same primary button as the hero, sized for the header; 44px keeps it an easy touch target. */
+.btn-header {
+  min-height: 44px;
+  padding: 0.4rem 1rem;
+  font-size: 0.9375rem;
+}
+
+@media (max-width: 399px) {
+  /* GitHub stays one tap away in the hero and the footer; the Install button keeps its place. */
+  .header-link {
+    display: none;
+  }
+}
+
+@media (max-width: 339px) {
+  /* Narrower than any current phone: the brand and the menu button need the room, and the theme follows the dark default. */
+  .header-actions .theme-toggle {
+    display: none;
+  }
+}
+
 @media (max-width: 479px) {
   .header-link-label {
     position: absolute;
@@ -659,7 +680,7 @@ html:not(.js) .theme-toggle {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--space-1) var(--space-3);
+  gap: var(--space-2);
   margin: var(--space-5) 0 0;
   padding: 0;
   list-style: none;
@@ -668,11 +689,13 @@ html:not(.js) .theme-toggle {
   font-size: 0.8125rem;
 }
 
-.meta-row li + li::before {
-  content: "·";
-  content: "·" / "";
-  margin-right: var(--space-3);
-  color: var(--text-subtle);
+/* Chips rather than dot separators: a wrapped line never starts or ends with a stray dot. */
+.meta-row li {
+  padding: 0.15rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  line-height: 1.5;
 }
 
 .hero-shot {
@@ -890,11 +913,7 @@ html:not(.js) .theme-toggle {
 }
 
 @media (min-width: 640px) {
-  .principles-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (min-width: 1200px) {
-  .principles-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .principles-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 .principles-list li {
@@ -1652,6 +1671,82 @@ html:has(.lightbox[open]) {
     opacity: 0;
     transform: translateY(18px);
   }
+}
+
+/* ---------- Hero install, release line, trust and roadmap ---------- */
+.hero-install {
+  max-width: 28rem;
+  margin: var(--space-6) auto 0;
+}
+
+.hero-install-label {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.hero-install .code-block {
+  text-align: left;
+}
+
+.meta-row a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.meta-row a:hover {
+  color: var(--text);
+}
+
+.trust {
+  padding: var(--space-5);
+}
+
+.trust h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--step-0);
+  letter-spacing: -0.01em;
+}
+
+.trust p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  line-height: 1.6;
+}
+
+.trust-foot {
+  margin: var(--space-6) 0 0;
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  text-align: center;
+}
+
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+@media (min-width: 960px) {
+  .roadmap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+}
+
+.roadmap-card {
+  padding: var(--space-5);
+}
+
+.roadmap-card h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--step-1);
+  letter-spacing: -0.01em;
+}
+
+.roadmap-card .ticks strong {
+  color: var(--text);
 }
 
 @keyframes fade-in {

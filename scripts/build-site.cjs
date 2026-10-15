@@ -19,8 +19,21 @@ const source = path.join(root, 'site');
 const output = path.join(root, 'site-dist');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const version = manifest.version;
+// The release line states only what the repository itself says: the date is the CHANGELOG heading of this version, the Git floor is the one the extension enforces,
+// and the VS Code floor is the manifest's `engines`. A version without a dated CHANGELOG entry fails the build instead of shipping a made-up date.
+const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+const released = new RegExp(`^## ${version.replace(/\./g, '\\.')} — (\\d{4})-(\\d{2})-(\\d{2})\\s*$`, 'm').exec(changelog);
+const gitFloor = /minimumGit\s*=\s*Object\.freeze\(\{\s*major:\s*(\d+),\s*minor:\s*(\d+)\s*\}\)/.exec(fs.readFileSync(path.join(root, 'src', 'git', 'git-version.ts'), 'utf8'));
+const vscodeFloor = /^\^?(\d+\.\d+)/.exec(manifest.engines.vscode);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+if (!released) throw new Error(`CHANGELOG.md has no "## ${version} — YYYY-MM-DD" heading, so the release date cannot be stated.`);
+if (!gitFloor || !vscodeFloor) throw new Error('The Git or VS Code minimum could not be read from the sources.');
 // Counted from the manifest, so the page never states a stale number of settings.
-const placeholders = { MARKETPLACE_URL, VERSION: version, SETTINGS_COUNT: String(Object.keys(manifest.contributes.configuration.properties).length) };
+const placeholders = {
+  MARKETPLACE_URL, VERSION: version, SETTINGS_COUNT: String(Object.keys(manifest.contributes.configuration.properties).length),
+  RELEASE_DATE: `${Number(released[3])} ${MONTHS[Number(released[2]) - 1]} ${released[1]}`, RELEASE_DATE_ISO: `${released[1]}-${released[2]}-${released[3]}`,
+  GIT_MINIMUM: `${gitFloor[1]}.${gitFloor[2]}`, VSCODE_MINIMUM: vscodeFloor[1]
+};
 const notDeployed = new Set(['og', 'deploy', 'README.md']); // top-level entries of site/ that stay source-only
 const screenshots = ['changes-and-commit', 'file-actions', 'history'];
 const templated = new Set(['.html', '.xml', '.txt', '.webmanifest']);
@@ -135,7 +148,7 @@ function imageSize(file) {
 // ---------- Build ----------
 function build() {
   for (const [name, value] of Object.entries(placeholders)) {
-    if (!/^[\w.:/?=-]+$/.test(value)) throw new Error(`Placeholder ${name} contains characters that would need escaping: ${value}`);
+    if (!/^[\w.:/?= -]+$/.test(value)) throw new Error(`Placeholder ${name} contains characters that would need escaping: ${value}`);
   }
   if (path.basename(output) !== 'site-dist' || path.dirname(output) !== root) throw new Error('Unexpected output directory.');
   fs.rmSync(output, { recursive: true, force: true });
