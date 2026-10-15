@@ -24,7 +24,7 @@ export async function run(): Promise<void> {
   const folder=vscode.workspace.workspaceFolders?.[0];assert.ok(folder);
   const root=await canonicalFilePath(folder.uri.fsPath),parent=path.dirname(root);
   assert.ok(containsPath(await realpath(tmpdir()),parent)&&path.basename(parent).startsWith('git-pro-host-')&&path.basename(root)==='workspace','Restart stays inside the harness-owned repository.');
-  const fixture=vscode.extensions.getExtension<FixtureContext>('git-pro-fixture.restart-journal'),extension=vscode.extensions.getExtension('nhech.git-pro');assert.ok(fixture&&extension);await extension.activate();
+  const fixture=vscode.extensions.getExtension<FixtureContext>('git-pro-fixture.restart-journal'),extension=vscode.extensions.getExtension('longtd.git-pro');assert.ok(fixture&&extension);await extension.activate();
   const context=await fixture.activate();assert.ok(containsPath(parent,await canonicalFilePath(context.storage)),'Memento storage stays inside the temporary profile.');
   await mkdir(context.storage,{recursive:true});const storage=await realpath(context.storage);assert.ok(containsPath(parent,storage));
   const runGit=(args:string[])=>{const result=spawnSync(gitExecutable,args,{cwd:root,env:process.env,encoding:'utf8',windowsHide:true,shell:false});assert.equal(result.status,0,result.stderr);return result.stdout;};

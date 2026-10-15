@@ -5,7 +5,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 
 // The VS Code Marketplace listing. Change it here only: pages use the {{MARKETPLACE_URL}} placeholder.
-const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=nhech.git-pro';
+const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=longtd.git-pro';
 // Set to true once the listing is live: the build then drops every <!-- unlisted -->...<!-- /unlisted -->
 // block (the "not live yet" notes). While false, only the markers are removed and the notes stay.
 const MARKETPLACE_LISTED = false;

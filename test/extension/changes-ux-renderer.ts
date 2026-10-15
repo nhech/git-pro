@@ -132,7 +132,7 @@ async function probe(extension:vscode.Extension<unknown>,themeClass:string):Prom
 }
 
 export async function run():Promise<void>{
-  const extension=vscode.extensions.getExtension('nhech.git-pro');assert.ok(extension);await extension.activate();
+  const extension=vscode.extensions.getExtension('longtd.git-pro');assert.ok(extension);await extension.activate();
   const config=vscode.workspace.getConfiguration('workbench'),previousTheme=config.inspect<string>('colorTheme')?.globalValue,previousClose=config.inspect<boolean>('editor.closeEmptyGroups')?.globalValue,results:Record<string,unknown>[]=[];
   try{
     await config.update('editor.closeEmptyGroups',false,vscode.ConfigurationTarget.Global);

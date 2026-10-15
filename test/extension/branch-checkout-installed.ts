@@ -20,7 +20,7 @@ export async function run(): Promise<void> {
   assert.equal(path.dirname(path.dirname(root)), temp);
   assert.match(path.basename(path.dirname(root)), /^git-pro-host-/);
   assert.equal(path.basename(root), 'workspace');
-  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('nhech.git-pro'); assert.ok(extension);
+  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro'); assert.ok(extension);
   const api = await extension.activate(); assert.ok(api); assert.ok(api.activeRepository());
   const available = await vscode.commands.getCommands(false);
   for (const command of ['gitPro.branchActions', 'gitPro.refresh', 'workbench.action.acceptSelectedQuickOpenItem', 'workbench.action.closeQuickOpen']) assert.ok(available.includes(command), command);

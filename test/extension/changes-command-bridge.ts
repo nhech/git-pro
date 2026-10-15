@@ -43,7 +43,7 @@ async function until(predicate:()=>boolean,label:string):Promise<void>{for(let n
 
 export async function run():Promise<void>{
   assert.equal(process.platform,'linux');const originalFolders=vscode.workspace.workspaceFolders;assert.equal(originalFolders?.length,1);assert.ok(vscode.workspace.workspaceFile);
-  const extension=vscode.extensions.getExtension<ExtensionDiagnostics>('nhech.git-pro');assert.ok(extension);const api=await extension.activate();assert.ok(api);
+  const extension=vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro');assert.ok(extension);const api=await extension.activate();assert.ok(api);
   const originalId=api.activeRepository();assert.ok(originalId);const builtin=vscode.extensions.getExtension<GitExtension>('vscode.git');assert.ok(builtin);const gitApi=(await builtin.activate()).getAPI(1);
   const f=await advancedFixture(path.join(extension.extensionPath,'media/helpers/preserve-editor.cjs'),true);
   const parent=await realpath(tmpdir()),root=await realpath(await mkdtemp(path.join(parent,'git-pro-command-bridge-'))),script=vscode.Uri.file(path.join(root,'probe.js'));

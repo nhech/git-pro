@@ -97,7 +97,7 @@ async function probe(extension: vscode.Extension<unknown>, kind: 'composer'|'pla
 
 /** Owned installed panels; synthetic input and observed host layout/themes, no Git routing. */
 export async function run(): Promise<void> {
-  const extension=vscode.extensions.getExtension('nhech.git-pro');assert.ok(extension);await extension.activate();
+  const extension=vscode.extensions.getExtension('longtd.git-pro');assert.ok(extension);await extension.activate();
   const configuration=vscode.workspace.getConfiguration('workbench'),previousTheme=configuration.inspect<string>('colorTheme')?.globalValue,previousClose=configuration.inspect<boolean>('editor.closeEmptyGroups')?.globalValue;
   const results:Record<string,unknown>[]=[];
   try {

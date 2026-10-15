@@ -143,7 +143,7 @@ export async function run(): Promise<void> {
     } finally { f.cleanup(); }
   }
 
-  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('nhech.git-pro'); assert.ok(extension);
+  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro'); assert.ok(extension);
   const api = await extension.activate(); assert.ok(api.activeRepository());
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; assert.ok(root); assert.ok(root.includes('git-pro-host-'));
   const before = await snapshot(root), original: unknown[] = [];

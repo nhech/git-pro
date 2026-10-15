@@ -55,7 +55,7 @@ async function until(predicate:()=>boolean,label:string):Promise<void>{
 
 export async function run():Promise<void>{
   assert.equal(process.platform,'linux','This owned sidebar fixture uses Linux literal filenames.');
-  const extension=vscode.extensions.getExtension('nhech.git-pro');assert.ok(extension);await extension.activate();
+  const extension=vscode.extensions.getExtension('longtd.git-pro');assert.ok(extension);await extension.activate();
   const f=await advancedFixture(path.join(extension.extensionPath,'media/helpers/preserve-editor.cjs'),true);
   const parent=await realpath(tmpdir()),root=await realpath(await mkdtemp(path.join(parent,'git-pro-sidebar-'))),script=vscode.Uri.file(path.join(root,'probe.js'));
   const provider=new ChangesProvider(f.registry),panel=new ChangesPanel({extensionUri:extension.extensionUri} as vscode.ExtensionContext,f.registry,provider);

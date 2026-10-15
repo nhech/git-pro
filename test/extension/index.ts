@@ -40,7 +40,7 @@ export async function run(): Promise<void> {
   finally { if (timeout) clearTimeout(timeout); }
 }
 async function runHostChecks(): Promise<void> {
-  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('nhech.git-pro');
+  const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro');
   assert.ok(extension, 'Git Pro extension is installed in the test host');
   const api = await extension.activate();
   assert.ok(api, 'Foundation activation returned diagnostics');
