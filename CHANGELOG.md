@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 — 2026-10-15
+
+Right-click menus are now VS Code's own, and Compare is quicker to work in.
+
+- **Native right-click menus** in History, Compare, Conflicts and the interactive rebase planner. A commit offers Checkout (Detached), Create Branch, Create Tag, Cherry Pick, Revert, Interactive Rebase from Here, Compare with Current, Compare with Working Tree and Copy Commit Hash or Message; a conflicted file offers Merge…, Accept Yours, Accept Theirs, Mark Resolved, Open File and the three compares; each rebase step offers its actions and Move Up or Down. Each choice goes through the same preview and confirmation as before. The Compare and More Actions drop-downs in the Conflicts tab stay, because a native menu cannot open from a button, and now close when the panel loses focus, resizes or scrolls.
+- **Branches, Repositories and Repository Tools** no longer open a list when you click an item: a click only selects, as in the built-in views. Right-click a branch for Checkout, Rename, Set or Unset Upstream, Copy Branch Name, Delete and Force Delete next to the compare, merge and rebase choices; right-click a stash, tag, remote or worktree for its actions, and a group for Create, Add or Prune; right-click a repository for History, Fetch, Pull, Push, Repository Tools, Copy Path and Reveal. The inline button beside an item still opens the old list.
+- **Compare opens diffs beside the tab.** Click a file and its diff appears next to the list, which stays in view; the next click replaces it. Turn this off with the new setting `gitPro.compare.openDiffsBeside`.
+- **Filter the changed files** by part of a name and by Added, Modified, Deleted or Renamed. Counts, paging and Open All Changes follow what is shown.
+- **Compare a folder** with a branch, tag or revision: Compare with Branch or Tag… now works on a folder in the Explorer, and lists only the files inside it.
+- **Enter a revision…** at the end of every Compare list takes a commit ID or an expression such as `HEAD~3`.
+- Ctrl+A (⌘A) selects every file in a working-tree comparison.
+- Fixes: the Changes view said "Working tree clean" twice; History showed `refs/heads/…` paths in the filter summary and on commit rows instead of branch and tag names; the Commit pane cut off its staging hint.
+- The Marketplace page has a new description and more search keywords, and the README screenshots are no longer packed into the extension: the package is 332 KB instead of 798 KB, and the README links to them at the commit the package was built from.
+
 ## 0.2.2 — 2026-10-15
 
 - Right-click any branch in the Branches view, including the checked-out branch and remote branches, and choose **Compare with Another Branch…** to compare it with a branch or tag picked from a list; the checked-out branch is shown on the right. The same action is in Branch Actions and in the Command Palette.

@@ -2,7 +2,7 @@
   "name": "git-pro",
   "displayName": "Git Pro",
   "description": "%extension.description%",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "longtd",
   "private": true,
   "license": "MIT",
