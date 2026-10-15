@@ -24,8 +24,11 @@ export async function resolveGitExecutable(reported: string, workspaceRoots: rea
   if (reported !== 'git' && !(process.platform === 'win32' && reported.toLowerCase() === 'git.exe')) throw unavailable();
   const value = environment.PATH ?? environment.Path ?? environment.path;
   if (!value || value.length > 65536 || /[\0\r\n]/.test(value)) throw unavailable();
-  const directories = value.split(path.delimiter);
-  if (directories.length > 256 || directories.some(directory => !path.isAbsolute(directory))) throw unavailable();
+  const entries = value.split(path.delimiter);
+  if (entries.length > 256) throw unavailable();
+  // An empty or relative entry (a trailing ':' or ./node_modules/.bin) would resolve against the current directory, so it is never searched; skipping it
+  // keeps the search safe without failing the whole PATH, which is common on Linux where the built-in Git API reports a bare `git`.
+  const directories = entries.filter(directory => path.isAbsolute(directory));
   const roots = (await Promise.all(workspaceRoots.map(async root => [path.resolve(root), await realpath(root)]))).flat();
   for (const directory of directories) {
     const located = path.join(directory, process.platform === 'win32' ? 'git.exe' : 'git');

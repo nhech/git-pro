@@ -14,17 +14,17 @@ export interface CompareSurface {
 /** Exported by WP4 as `createCompareSurface` from src/webviews/compare/compare-panel.ts; WP5's `registerCompare` calls it, sets `deps.surfaces.compare` and owns the disposal. It also registers the `git-pro-blob:` provider. */
 export type CreateCompareSurface = (context: vscode.ExtensionContext, deps: FeatureDeps) => CompareSurface & vscode.Disposable;
 export interface PinnedRef { readonly name: string; readonly oid: string }
-/** `merge-base --all`: the first base and whether there were more; `oid` null for unrelated histories. */
-export interface MergeBase { readonly oid: string | null; readonly multiple: boolean }
+/** `merge-base --all`: the first base and whether there were more; `oid` null for unrelated histories, or, with `shallow`, in a shallow clone whose boundary may hide the base. */
+export interface MergeBase { readonly oid: string | null; readonly multiple: boolean; readonly shallow?: true }
 export interface CompareFiles {
   readonly scope: 'fork' | 'tips' | 'commit' | 'worktree';
   /** OID the files are diffed from (merge base, left tip, commit parent or branch) and to; `to` is undefined for the working tree. */
   readonly from: string | undefined; readonly to: string | undefined;
   readonly files: readonly ChangedFile[]; readonly stats: readonly FileStat[];
-  /** The listing hit the output limit: commits still show, files say "Too many changed files to list here." */
+  /** The listing hit the output limit, or (note `nonUtf8Path`) named a path that is not UTF-8: commits still show, files are not listed. */
   readonly omitted: boolean;
-  /** Since-fork fell back or chose: several merge bases (first used), or none (tip to tip). */
-  readonly note?: 'multipleMergeBases' | 'noCommonAncestor';
+  /** Since-fork fell back or chose: several merge bases (first used), none (tip to tip), or none found in a shallow clone (tip to tip); or why the files are omitted. */
+  readonly note?: 'multipleMergeBases' | 'noCommonAncestor' | 'shallowHistory' | 'nonUtf8Path';
 }
 export interface SideCommits { readonly count: number; readonly offset: number; readonly commits: readonly HistoryCommit[] }
 export interface RefComparison {

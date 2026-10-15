@@ -2,7 +2,7 @@
   "name": "git-pro",
   "displayName": "Git Pro",
   "description": "%extension.description%",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "longtd",
   "private": true,
   "license": "MIT",
@@ -58,11 +58,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Git Pro requires trust before reading Git configuration or running Git."
+      "description": "%capabilities.untrustedWorkspaces.description%"
     },
     "virtualWorkspaces": {
       "supported": false,
-      "description": "Git Pro requires a filesystem and Git executable."
+      "description": "%capabilities.virtualWorkspaces.description%"
     }
   },
   "contributes": {
@@ -358,6 +358,11 @@
         "icon": "$(git-compare)"
       },
       {
+        "command": "gitPro.compareWithBranch",
+        "title": "%command.gitPro.compareWithBranch.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "gitPro.compareWithRef",
         "title": "%command.gitPro.compareWithRef.title%",
         "category": "%command.category%",
@@ -418,7 +423,7 @@
     "viewsWelcome": [
       {
         "view": "gitPro.repositories",
-        "contents": "Open a trusted folder containing a Git repository. Git Pro uses the built-in Git extension.\n[Refresh](command:gitPro.refresh)\n[Initialize Repository](command:gitPro.init) · [Clone Repository](command:gitPro.clone)",
+        "contents": "%viewsWelcome.repositories.contents%",
         "when": "!gitPro.hasRepositories"
       }
     ],
@@ -462,7 +467,17 @@
         {
           "command": "gitPro.branches",
           "when": "view == gitPro.branchesView",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitPro.fetch",
+          "when": "view == gitPro.branchesView && gitPro.hasRepositories",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitPro.refresh",
+          "when": "view == gitPro.branchesView && gitPro.hasRepositories",
+          "group": "navigation@3"
         },
         {
           "command": "gitPro.history",
@@ -520,6 +535,11 @@
           "command": "gitPro.compareBranches",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./ && listDoubleSelection",
           "group": "compare@3"
+        },
+        {
+          "command": "gitPro.compareWithBranch",
+          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./ && !listMultiSelection",
+          "group": "compare@4"
         },
         {
           "command": "gitPro.mergeIntoCurrent",
@@ -581,6 +601,22 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "gitPro.openFile",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.stageFolder",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.unstageFolder",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.discardFolder",
+          "when": "false"
+        },
         {
           "command": "gitPro.conflicts.acceptYours",
           "when": "false"
@@ -827,7 +863,7 @@
     "test:integration": "npm run test:compile && node --test --test-concurrency=2 .test-build/test/integration/*.test.js",
     "test:extension": "npm run build && npm run test:compile && node scripts/test-extension.cjs",
     "check": "npm run typecheck && npm run lint && npm run build && npm run test:unit && npm run test:integration",
-    "vscode:prepublish": "npm run typecheck && npm run build",
+    "vscode:prepublish": "npm run typecheck && node esbuild.mjs --release",
     "test:stress": "npm run test:compile && node --test .test-build/test/stress/*.test.js",
     "package": "node scripts/package-private.cjs && node scripts/verify-package.cjs",
     "package:public-candidate": "npm run check && node scripts/package-public-candidate.cjs",
@@ -846,6 +882,8 @@
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.71.0"
-  }
+    "typescript-eslint": "8.71.0",
+    "yauzl": "3.4.0"
+  },
+  "qna": "https://github.com/nhech/git-pro/issues/new/choose"
 }

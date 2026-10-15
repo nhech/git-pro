@@ -150,19 +150,23 @@ export class AdvancedCommands {
     const meaning={yours:operation==='rebasing'?'commit being replayed':'checked-out file version',
       theirs:operation==='rebasing'?'upstream plus commits already replayed':operation==='cherry-picking'?'commit being cherry-picked':operation==='reverting'?'inverse patch: content before the reverted commit':operation==='merging'?'branch or commit being merged':'other side; for stash conflicts, the stashed version'};
     const exists=(side:'yours'|'theirs')=>preview.entries.some(entry=>entry.stage===sides[side].stage),mapping=(side:'yours'|'theirs')=>`${side==='yours'?'Yours':'Theirs'} = ${meaning[side]} → git --${sides[side].flag}`;
+    // N13 and one-sided rows, as the Conflicts tab gates them: staging a binary file or the one side Git left would silently keep Git's choice, so ConflictsService
+    // refuses Mark Resolved there and Accept stages the chosen side itself.
+    const markable=preview.text!==undefined&&exists('yours')&&exists('theirs');
     const accept=(side:'yours'|'theirs')=>{const name=side==='yours'?'Yours':'Theirs',present=exists(side);
       // Arrows follow the merge editor's pane order (owner decision Q1): Yours on the left, Theirs on the right.
-      return {label:`Accept ${name}${present?'':' (delete file)'}`,icon:present?side==='yours'?'arrow-left':'arrow-right':'trash',description:present?`Use ${meaning[side]}; review before staging`:`${name} has no file: resolve as deletion`,action:side};};
+      return {label:`Accept ${name}${present?'':' (delete file)'}`,icon:present?side==='yours'?'arrow-left':'arrow-right':'trash',description:present?markable?`Use ${meaning[side]}; review before staging`:`Use ${meaning[side]} and stage it`:`${name} has no file: resolve as deletion`,action:side};};
     const items=[
       {label:'Open native Merge Editor / file',icon:'split-horizontal',description:'Review the conflict and edit the result',action:'editor'},
       {label:'Compare Base ↔ Yours',icon:'diff',description:mapping('yours'),action:'baseYours'},
       {label:'Compare Base ↔ Theirs',icon:'diff',description:mapping('theirs'),action:'baseTheirs'},
       accept('yours'),accept('theirs'),
       // acceptBothText keeps Git's ours lines first, which during a rebase are Theirs.
-      ...(preview.text!==undefined?[{label:'Accept Both text hunks',icon:'git-merge',description:`Combine ${sides.yours.flag==='ours'?'Yours then Theirs':'Theirs then Yours'} hunks; review before staging`,action:'both'}]:[]),
-      {label:'Mark Resolved',icon:'check',description:canContinue?'Stage the reviewed working file; then Continue the operation':'Stage the reviewed working file; then review staged changes',action:'mark'}
+      ...(markable?[{label:'Accept Both text hunks',icon:'git-merge',description:`Combine ${sides.yours.flag==='ours'?'Yours then Theirs':'Theirs then Yours'} hunks; review before staging`,action:'both'},
+        {label:'Mark Resolved',icon:'check',description:canContinue?'Stage the reviewed working file; then Continue the operation':'Stage the reviewed working file; then review staged changes',action:'mark'}]:[])
     ].map(item=>({...item,plainLabel:item.label,label:`$(${item.icon}) ${item.label}`}));
-    const selected=await vscode.window.showQuickPick(items,{title:`Git Pro: Resolve ${redact(file)}${operation==='idle'?'':` (${operation})`}`,placeHolder:canContinue?'Choose a side → review the file → Mark Resolved → Continue':'Choose a side → review the file → Mark Resolved → review staged changes',matchOnDescription:true});if(!selected)return;
+    const next=canContinue?'Continue':'review staged changes';
+    const selected=await vscode.window.showQuickPick(items,{title:`Git Pro: Resolve ${redact(file)}${operation==='idle'?'':` (${operation})`}`,placeHolder:markable?`Choose a side → review the file → Mark Resolved → ${next}`:`Choose a side; Accept stages it → ${next}`,matchOnDescription:true});if(!selected)return;
     await this.advanced.git.authorizePath(id,file);
     if(selected.action==='editor'){
       // Git Pro's bridge labels the panes Yours | Result | Theirs and owns its own fallbacks: a second opener here could put two merge editors on one Result.
@@ -179,11 +183,12 @@ export class AdvancedCommands {
     const target=[{absolute:uri.fsPath,path:file}];await refuseUnsaved(target);
     const choice=side?sides[side].flag==='ours'?'current':'incoming':selected.action as 'both'|'mark';let allowMarkers=false;
     if(choice==='mark'&&preview.markers){allowMarkers=await vscode.window.showWarningMessage('Conflict markers remain. Stage this file anyway?',{modal:true,detail:'Markers can become part of the commit. Review the result carefully.'},'Stage with markers')==='Stage with markers';if(!allowMarkers)return;}
-    else if(await vscode.window.showWarningMessage(`${selected.plainLabel}?`,{modal:true,detail:redact(`${repo.root}\n${file}\n${selected.description}${side?`\n${mapping(side)}`:''}\nSide acceptance changes the working file; Mark Resolved stages the result.`)},'Apply')!=='Apply')return;
+    else if(await vscode.window.showWarningMessage(`${selected.plainLabel}?`,{modal:true,detail:redact(`${repo.root}\n${file}\n${selected.description}${side?`\n${mapping(side)}`:''}\n${markable?'Side acceptance changes the working file; Mark Resolved stages the result.':'Accept replaces the working file with that side and stages it: binary and one-sided conflicts have no Mark Resolved.'}`)},'Apply')!=='Apply')return;
     // The modal can stay open while an editor changes; check again right before Git writes.
     await refuseUnsaved(target);
     await this.conflicts.resolve(preview,choice,allowMarkers);
     if(side&&!exists(side))await vscode.window.showInformationMessage('Conflict resolved as deletion. Review staged changes before continuing.');
+    else if(side&&!markable)await vscode.window.showInformationMessage(`Conflict resolved with ${side==='yours'?'Yours':'Theirs'}. Review staged changes before continuing.`);
     else if(choice!=='mark')await vscode.commands.executeCommand('vscode.open',uri);
   }
 }

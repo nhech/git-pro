@@ -4,12 +4,13 @@ import * as path from 'node:path';
 import { lstat } from 'node:fs/promises';
 import type { FeatureDeps } from '../../conflicts/surfaces';
 import type { CompareFiles, CompareFilesMode, CompareSurface, CreateCompareSurface, MergeBase, PinnedRef, SideCommits } from './compare-contract';
-import type { ChangedFile, FileStat, HistoryCommit } from '../../git/history/history-parser';
+import { NonUtf8Error, type ChangedFile, type FileStat, type HistoryCommit } from '../../git/history/history-parser';
 import { BlobProvider } from '../../documents/blob-provider';
 import { parseCompareAction, type CompareAction } from './compare-protocol';
 import { compareHtml } from './compare-html';
 import { redact } from '../../security/redaction';
 import { historyPath } from '../../git/history/history-builders';
+import { refuseGitMetadata } from '../../security/paths';
 
 /** What the Compare tab reads from the feature dependencies; a narrow type keeps the panel testable with stand-ins. */
 export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools'>;
@@ -47,7 +48,11 @@ interface Side { readonly ref: string; readonly label: string; readonly oid: str
 interface FilesView { readonly files: CompareFiles; readonly commit?: HistoryCommit }
 interface Loaded { readonly fork?: MergeBase; readonly leftOnly?: SideCommits; readonly rightOnly?: SideCommits; readonly branchFiles: CompareFiles; readonly view: FilesView; readonly offset: number }
 const panelKey = (repositoryId: string, mode: 'commits' | 'worktree', left: string, right: string | undefined) => JSON.stringify([repositoryId, mode, left, right ?? null]);
-const sameFiles = (a: CompareFiles, b: CompareFiles) => a.omitted === b.omitted && JSON.stringify([a.files, a.stats]) === JSON.stringify([b.files, b.stats]);
+const sameFiles = (a: CompareFiles, b: CompareFiles) => a.omitted === b.omitted && a.note === b.note && JSON.stringify([a.files, a.stats]) === JSON.stringify([b.files, b.stats]);
+/** A path whose working side is not a regular file of this repository (a submodule, a symlink, a nested repository or Git metadata). */
+class NoWorkingSide extends Error {}
+const leftOut = (count: number) => count === 1 ? 'Left out 1 file that has no regular working file (a symlink, submodule, nested repository or Git metadata); use native Git for it.'
+  : `Left out ${count.toLocaleString()} files that have no regular working file (symlinks, submodules, nested repositories or Git metadata); use native Git for them.`;
 
 class ComparePanel {
   readonly panel: vscode.WebviewPanel;
@@ -56,6 +61,8 @@ class ComparePanel {
   private revision = 0; private generation = 0; private busy = false; private disposed = false; private stale = false; private swapped = false;
   private controller: AbortController | undefined; private timer: ReturnType<typeof setTimeout> | undefined;
   private loaded: Loaded | undefined; private loadError: string | undefined; private moved: readonly string[] = [];
+  /** Refs that no longer resolve, and whether the repository was closed: neither is a moved ref, and Refresh cannot re-pin them. */
+  private gone: readonly string[] = []; private expired = false;
   private refs = new Map<string, string[]>();
   private filesMode: CompareFilesMode;
   constructor(private readonly owner: ComparePanels, readonly repositoryId: string, readonly root: string, readonly mode: 'commits' | 'worktree', private left: Side, private right: Side | undefined) {
@@ -87,7 +94,7 @@ class ComparePanel {
   private post(value: Record<string, unknown>): Promise<boolean> { return this.disposed ? Promise.resolve(false) : Promise.resolve(this.panel.webview.postMessage({ ...value, session: this.session })); }
   private state(): Record<string, unknown> {
     const side = (value: Side) => ({ name: redact(value.label), oid: value.oid, current: value.current }), head = this.owner.head(this.repositoryId);
-    const base = { type: 'state', revision: this.revision, mode: this.mode, left: side(this.left), ...(this.right ? { right: side(this.right) } : {}), swapped: this.swapped, ...(head ? { head: redact(head) } : {}), filesMode: this.filesMode, moved: this.moved.map(redact) };
+    const base = { type: 'state', revision: this.revision, mode: this.mode, left: side(this.left), ...(this.right ? { right: side(this.right) } : {}), swapped: this.swapped, ...(head ? { head: redact(head) } : {}), filesMode: this.filesMode, moved: this.moved.map(redact), gone: this.gone.map(redact), ...(this.expired ? { expired: true } : {}) };
     const loaded = this.loaded;
     if (!loaded) return { ...base, loading: !this.loadError, ...(this.loadError ? { error: this.loadError } : {}) };
     const commit = (value: HistoryCommit) => ({ oid: value.oid, subject: redact(value.subject.slice(0, 500)), author: redact(value.author.slice(0, 200)), timestamp: value.timestamp, refs: (this.refs.get(value.oid) ?? []).map(name => redact(name.slice(0, 200))) });
@@ -98,7 +105,7 @@ class ComparePanel {
       return { index: loaded.offset + position, status: letter, path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
         ...(worktree ? { presence: letter === 'A' ? 'worktree' : letter === 'D' ? 'branch' : 'both' } : {}) };
     });
-    return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple } } : {}),
+    return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple, ...(loaded.fork.shallow ? { shallow: true } : {}) } } : {}),
       ...(loaded.leftOnly && loaded.rightOnly ? { sides: { leftOnly: page(loaded.leftOnly), rightOnly: page(loaded.rightOnly) } } : {}),
       files: { scope: files.scope, ...(loaded.view.commit ? { commit: { oid: loaded.view.commit.oid, subject: redact(loaded.view.commit.subject.slice(0, 500)) } } : {}), ...(files.from ? { from: files.from } : {}), ...(files.to ? { to: files.to } : {}),
         total: files.files.length, offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: files.files.filter(file => statFor(files, file)?.added === null).length, items } };
@@ -153,7 +160,7 @@ class ComparePanel {
       case 'selectCommit': {
         if (!this.sideCommits(loaded).some(commit => commit.oid === action.oid)) throw new Error('Select a commit from the loaded lists.');
         const details = await history.details(id, action.oid, 0, signal); if (this.disposed) return false;
-        const files: CompareFiles = Object.freeze({ scope: 'commit', from: details.parent, to: details.commit.oid, files: Object.freeze(details.files), stats: Object.freeze(details.stats), omitted: 'filesOmitted' in details });
+        const files: CompareFiles = Object.freeze({ scope: 'commit', from: details.parent, to: details.commit.oid, files: Object.freeze(details.files), stats: Object.freeze(details.stats), omitted: 'filesOmitted' in details, ...(details.filesNote ? { note: details.filesNote } : {}) });
         // The comparison and its pages stay; "All changes" returns to them.
         this.loaded = { ...loaded, view: { files, commit: details.commit }, offset: 0 }; return true;
       }
@@ -190,28 +197,39 @@ class ComparePanel {
   private async refresh(signal: AbortSignal): Promise<boolean> {
     const resolve = async (side: Side): Promise<Side> => {
       if (isOid(side.ref)) return side;
-      const oid = await this.owner.deps.history.resolveRef(this.repositoryId, side.ref, signal).catch(() => { throw new Error(`${side.label} no longer resolves to a commit; the comparison keeps its pinned commits.`); });
+      // A closed repository fails every read; that is its own message, not a ref that stopped resolving.
+      const oid = await this.owner.deps.history.resolveRef(this.repositoryId, side.ref, signal).catch((error: unknown) => { if (!this.repositoryOpen) throw error; throw new Error(`${side.label} no longer resolves to a commit; the comparison keeps its pinned commits.`); });
       return this.owner.side(this.repositoryId, side.ref, oid);
     };
     const left = await resolve(this.left), right = this.right ? await resolve(this.right) : undefined, loaded = await this.compute(left, right, signal);
     if (this.disposed) return false;
-    const previous = this.key; this.left = left; this.right = right; this.loaded = loaded; this.loadError = undefined; this.moved = [];
+    const previous = this.key; this.left = left; this.right = right; this.loaded = loaded; this.loadError = undefined; this.moved = []; this.gone = []; this.expired = false;
     this.owner.rekey(this, previous); this.panel.title = this.title(); void this.loadRefs(); return true;
   }
+  private get repositoryOpen(): boolean { return this.owner.deps.registry.list().some(item => item.id === this.repositoryId); }
   private async background(): Promise<void> {
     if (this.disposed) return;
     if (!this.panel.visible || this.busy || !this.loaded) { this.stale = true; return; }
     this.stale = false; const generation = this.generation, history = this.owner.deps.history, sides = [this.left, ...(this.right ? [this.right] : [])].filter(side => !isOid(side.ref));
+    // Closed (registry.sync without it): nothing can be read or re-pinned until it opens again, which is no reason to say a ref moved. The pins and files stay.
+    const expire = async () => { if (this.expired) return; this.expired = true; this.moved = []; this.gone = []; await this.post(this.state()); };
+    if (!this.repositoryOpen) { await expire(); return; }
     try {
-      const moved = (await Promise.all(sides.map(side => history.resolveRef(this.repositoryId, side.ref).then(oid => oid !== side.oid, () => true)))).flatMap((changed, index) => changed ? [sides[index]!.label] : []);
+      const resolved = await Promise.all(sides.map(side => history.resolveRef(this.repositoryId, side.ref).then(oid => oid !== side.oid ? 'moved' : 'same', () => 'gone')));
       const files = this.mode === 'worktree' ? await history.worktreeFiles(this.repositoryId, this.left.oid) : undefined;
       if (this.disposed) return;
       if (generation !== this.generation || this.busy || !this.loaded) { this.stale = true; return; }
-      let changed = moved.join('\n') !== this.moved.join('\n'); this.moved = moved;
+      if (!this.repositoryOpen) { await expire(); return; }
+      const named = (kind: string) => sides.flatMap((side, index) => resolved[index] === kind ? [side.label] : []), moved = named('moved'), gone = named('gone');
+      let changed = this.expired || moved.join('\n') !== this.moved.join('\n') || gone.join('\n') !== this.gone.join('\n'); this.moved = moved; this.gone = gone; this.expired = false;
       // The working tree is live: its file list follows edits, while branch comparisons keep their pins and only say that a ref moved.
       if (files && !sameFiles(files, this.loaded.branchFiles)) { this.loaded = { branchFiles: files, view: { files }, offset: this.loaded.offset < files.files.length ? this.loaded.offset : 0 }; this.revision++; changed = true; }
       if (changed) await this.post(this.state());
-    } catch { this.stale = false; /* A failed background check leaves the comparison as it is; Refresh reports the error. */ }
+    } catch {
+      this.stale = false;
+      // A failed background check leaves the comparison as it is; Refresh reports the error. Only a repository closed meanwhile is said here.
+      if (!this.disposed && !this.repositoryOpen) await expire();
+    }
   }
   private async loadRefs(): Promise<void> {
     try {
@@ -251,21 +269,26 @@ class ComparePanel {
   }
   private async openAll(loaded: Loaded): Promise<void> {
     const files = loaded.view.files;
-    if (files.omitted) throw new Error('Too many changed files to list here. Open files one at a time or use native Git.');
+    if (files.omitted) throw new Error(files.note === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so Git Pro cannot list or open them here. Use a terminal for this comparison.' : 'Too many changed files to list here. Open files one at a time or use native Git.');
     const text = files.files.filter(file => statFor(files, file)?.added !== null), chosen = text.slice(0, ALL_CHANGES_LIMIT);
     if (!chosen.length) throw new Error(files.files.length ? 'Only binary files changed; there is no text diff to open.' : 'No differences.');
     const worktree = files.scope === 'worktree', blobs = this.owner.blobs, resources: ChangesResource[] = [];
-    for (let start = 0; start < chosen.length; start += 32) resources.push(...await Promise.all(chosen.slice(start, start + 32).map(async (file): Promise<ChangesResource> => {
+    let skipped = 0;
+    for (let start = 0; start < chosen.length; start += 32) for (const resource of await Promise.all(chosen.slice(start, start + 32).map(async (file): Promise<ChangesResource | undefined> => {
       const { from, to } = this.sides(loaded, file), label = vscode.Uri.file(path.join(this.root, ...file.path.split('/')));
       const left = from ? blobs.add(this.repositoryId, from, file.originalPath ?? file.path) : undefined;
       if (!worktree) return [label, left, to ? blobs.add(this.repositoryId, to, file.path) : undefined];
-      const working = file.status === 'D' ? undefined : await this.workingFile(file.path);
+      // One submodule or symlink row has no editable side; it is left out, so the other files still open.
+      const working = file.status === 'D' ? undefined : await this.workingFile(file.path).catch((error: unknown) => { if (!(error instanceof NoWorkingSide)) throw error; skipped++; return null; });
+      if (working === null) return undefined;
       return this.swapped ? [label, working, left] : [label, left, working];
-    })));
+    }))) if (resource) resources.push(resource);
     if (this.disposed) return;
+    if (!resources.length) throw new Error(leftOut(skipped));
     const view = loaded.view.commit ? `${short(loaded.view.commit.oid)} ${loaded.view.commit.subject.slice(0, 80)}` : 'All Changes';
     await openChangesTab(redact(`${this.title()} · ${view}`), resources);
-    if (text.length > chosen.length) await this.post({ type: 'notice', message: `Opened the first ${ALL_CHANGES_LIMIT} of ${text.length.toLocaleString()} text files.` });
+    const notices = [...(text.length > chosen.length ? [`Opened the first ${ALL_CHANGES_LIMIT} of ${text.length.toLocaleString()} text files.`] : []), ...(skipped ? [leftOut(skipped)] : [])];
+    if (notices.length) await this.post({ type: 'notice', message: notices.join(' ') });
   }
   private async getFromBranch(loaded: Loaded, indexes: readonly number[], signal: AbortSignal): Promise<boolean> {
     if (this.mode !== 'worktree' || loaded.view.files.scope !== 'worktree') throw new Error('Get from Branch is available when comparing a branch with the working tree.');
@@ -278,12 +301,14 @@ class ComparePanel {
   /** The real working file as an editable side: same repository, inside the root, a regular file and not Git metadata. Undefined when it does not exist. */
   private async workingFile(relative: string): Promise<vscode.Uri | undefined> {
     historyPath(relative);
-    if (relative.split('/').some(part => /^\.git(?:[ .:]|$)/i.test(part))) throw new Error('Git metadata cannot be opened from Compare.');
     const absolute = await this.owner.deps.policy.authorizeFile(this.root, relative);
+    // By name and by where it really leads: a branch can carry `link/config` where the working tree has a tracked symlink (or a Windows 8.3 name GIT~1) into .git.
+    const repo = this.owner.deps.registry.list().find(item => item.id === this.repositoryId); if (!repo) throw new Error('Repository is no longer open.');
+    await refuseGitMetadata(repo, relative, absolute).catch((error: unknown) => { throw new NoWorkingSide(error instanceof Error ? error.message : String(error)); });
     const info = await lstat(absolute).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return undefined; throw error; });
     if (!info) return undefined;
-    if (!info.isFile() || info.isSymbolicLink()) throw new Error('Only regular files open from Compare; use native Git for symlinks and submodules.');
-    if ((await this.owner.deps.registry.resolveFile(absolute))?.id !== this.repositoryId) throw new Error('This file belongs to another repository.');
+    if (!info.isFile() || info.isSymbolicLink()) throw new NoWorkingSide('Only regular files open from Compare; use native Git for symlinks and submodules.');
+    if ((await this.owner.deps.registry.resolveFile(absolute))?.id !== this.repositoryId) throw new NoWorkingSide('This file belongs to another repository.');
     return vscode.Uri.file(absolute);
   }
   dispose(closed = false): void {
@@ -344,6 +369,10 @@ export class ComparePanels implements CompareSurface, vscode.Disposable {
 
 /** WP5's registerCompare calls this, sets deps.surfaces.compare and pushes the result to context.subscriptions. It also registers the `git-pro-blob:` provider. */
 export const createCompareSurface = ((context, deps) => {
-  const blobs = new BlobProvider(deps.history);
+  // Open All Changes cannot tell a side that is not UTF-8 without reading every file first, so such a side opens as a read-only notice instead of failing.
+  const blobs = new BlobProvider({ revision: (id, oid, file, signal) => deps.history.revision(id, oid, file, signal).catch((error: unknown) => {
+    if (!(error instanceof NonUtf8Error)) throw error;
+    return Buffer.from(`This version of ${path.posix.basename(file)} is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n`);
+  }) });
   return new ComparePanels(context, deps, blobs, [vscode.workspace.registerTextDocumentContentProvider(BlobProvider.scheme, blobs), blobs]);
 }) satisfies CreateCompareSurface;

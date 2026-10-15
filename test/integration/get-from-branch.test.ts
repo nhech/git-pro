@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { GitService } from '../../src/git/git.service';
 import type { DailyBackend } from '../../src/git/daily-backend';
@@ -65,6 +65,25 @@ test('Get from Branch refuses an untracked or ignored file that `git diff <branc
     await f.write('.gitignore', 'gone.txt\n'); f.rawGit(['add', '.gitignore']); f.rawGit(['commit', '-qm', 'ignore']);
     await assert.rejects(f.git.restoreFromSource(await f.git.preview(f.id, ['gone.txt']), f.side), /gone\.txt is not tracked by Git/, 'an ignored file is not in the status either');
     assert.equal(await f.read('gone.txt'), 'PRECIOUS untracked\n');
+  } finally { await f.close(); }
+});
+
+test('Get from Branch refuses an intent-to-add file: `ls-files` lists it, but Git stored none of its content', async () => {
+  const f = await getFromBranchFixture();
+  try {
+    // ita.txt is not in side, so restoring it from side deletes it; `git add -N` left only an empty placeholder entry in the index.
+    await f.write('ita.txt', 'PRECIOUS intent to add\n'); f.rawGit(['add', '-N', 'ita.txt']);
+    assert.match(f.rawGit(['ls-files', '--stage', '--', 'ita.txt']), /\tita\.txt/, 'the index lists the path like a tracked file');
+    await assert.rejects(f.git.restoreFromSource(await f.git.preview(f.id, ['ita.txt', 'keep.txt']), f.side), /ita\.txt is only marked for adding \(git add -N\)\. Get from Branch would overwrite or delete it, and Git keeps no copy to restore it from\./);
+    assert.equal(await f.read('ita.txt'), 'PRECIOUS intent to add\n'); assert.equal(await f.read('keep.txt'), 'changed\n', 'nothing in the batch ran');
+    // Moved on disk and re-added with -N: status pairs the intent-to-add path with the deleted one as a working-tree rename.
+    f.rawGit(['rm', '-q', '--cached', 'ita.txt']); await f.write('long.txt', 'a long enough line\nto be detected\nas a rename by status\n'); f.rawGit(['add', 'long.txt']); f.rawGit(['commit', '-qm', 'long']);
+    await rm(path.join(f.root, 'long.txt')); await f.write('moved.txt', 'a long enough line\nto be detected\nas a rename by status\n'); f.rawGit(['add', '-N', 'moved.txt']);
+    assert.match(f.rawGit(['status', '--porcelain=v2', '--', 'moved.txt', 'long.txt']), /^2 \.R /m);
+    await assert.rejects(f.git.restoreFromSource(await f.git.preview(f.id, ['long.txt', 'moved.txt']), f.side), /moved\.txt is only marked for adding/);
+    assert.equal(await f.exists('moved.txt'), true);
+    f.rawGit(['add', 'moved.txt']); await f.git.restoreFromSource(await f.git.preview(f.id, ['moved.txt']), f.side);
+    assert.equal(await f.exists('moved.txt'), false, 'once staged, Git holds the content and the restore runs');
   } finally { await f.close(); }
 });
 

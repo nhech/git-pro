@@ -13,7 +13,7 @@ import { canonicalFilePath } from '../security/paths';
 import type { Logger } from '../utils/logging';
 import { recoveryFor } from '../utils/recovery';
 import { changedPathsInFolder } from '../views/changes/folder-selection';
-import type { ChangeGroup } from '../git/git-parser';
+import { hasChanges, type ChangeGroup } from '../git/git-parser';
 import { branchVisual } from '../views/tree-visuals';
 import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfterFailure, type Surfaces } from '../conflicts/surfaces';
 
@@ -88,8 +88,12 @@ export class DailyCommands implements vscode.Disposable {
     if (action === 'stage') await this.git.stage(id, paths);
     else if (action === 'unstage') await this.git.unstage(id, paths);
     else {
-      const preview = await this.git.preview(id, paths);
-      if (await vscode.window.showWarningMessage(`Discard unstaged changes in ${paths.length} files? Staged content is kept.\n${redact(paths.join('\n'))}`, { modal: true }, 'Discard') === 'Discard') await this.git.discard(preview);
+      // A file added with `git add -N` has no content in Git, so a restore would empty it: leave those out, and say so.
+      const { targets, skipped } = await this.git.discardable(id, paths);
+      const placeholders = skipped.length ? `\n\nLeft out, because they were added with "git add -N" and Git keeps no copy of their content:\n${redact(skipped.join('\n'))}` : '';
+      if (!targets.length) throw new Error(`${redact(skipped[0]!)} was added with "git add -N", so Git has no copy of its content and Discard would empty it. Stage it first, or delete it yourself.`);
+      const preview = await this.git.preview(id, targets);
+      if (await vscode.window.showWarningMessage(`Discard unstaged changes in ${targets.length} files? Staged content is kept.\n${redact(targets.join('\n'))}${placeholders}`, { modal: true }, 'Discard') === 'Discard') await this.git.discard(preview);
     }
   }
   async diff(arg: unknown, withHead: boolean): Promise<void> {
@@ -107,7 +111,7 @@ export class DailyCommands implements vscode.Disposable {
     if (options.amend && await vscode.window.showWarningMessage(`Amend ${preview.head?.slice(0, 12)}? This rewrites the last commit.`, { modal: true }, 'Amend') !== 'Amend') return false;
     if (options.noVerify && await vscode.window.showWarningMessage('Skip Git hooks for this commit?', { modal: true }, 'Skip Hooks') !== 'Skip Hooks') return false;
     const config = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.git.repository(id).root));
-    if (config.get<boolean>('commit.confirmBeforeCommit', false) && await vscode.window.showInformationMessage(`Commit ${preview.status.changes.filter(change => change.group === 'staged').length} staged files?`, { modal: true }, 'Commit') !== 'Commit') return false;
+    if (config.get<boolean>('commit.confirmBeforeCommit', false) && await vscode.window.showInformationMessage(`Commit ${preview.status.changes.filter(change => change.group === 'staged').length + (preview.status.omitted?.filter(change => change.group === 'staged').length ?? 0)} staged files?`, { modal: true }, 'Commit') !== 'Commit') return false;
     const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Git Pro: Commit staged changes', cancellable: false }, () => this.git.commit(preview, message, options, push));
     if (result.pushError) await vscode.window.showWarningMessage(`Commit ${result.oid.slice(0, 8)} created; push failed. ${redact(result.pushError)}`, 'Push').then(async choice => { if (choice) { try { await this.push(id); } catch (error) { await this.error(error); } } });
     else await vscode.window.showInformationMessage(`Commit ${result.oid.slice(0, 8)} created${result.pushed ? ' and pushed' : ''}.`);
@@ -139,7 +143,7 @@ export class DailyCommands implements vscode.Disposable {
       const status = this.git.registry.store.get(id);
       if ((status?.ahead ?? 0) > 0 && (status?.behind ?? 0) > 0 && status?.operation === 'idle') {
         const reviewed = await this.git.preview(id);
-        if (reviewed.head !== preview.head || reviewed.status.head !== preview.status.head || reviewed.status.upstream !== preview.status.upstream || reviewed.status.changes.length || !(reviewed.status.ahead && reviewed.status.behind)) throw new DailyError('stale', 'Local branch changed. Review pull again.');
+        if (reviewed.head !== preview.head || reviewed.status.head !== preview.status.head || reviewed.status.upstream !== preview.status.upstream || hasChanges(reviewed.status) || !(reviewed.status.ahead && reviewed.status.behind)) throw new DailyError('stale', 'Local branch changed. Review pull again.');
         const choice = await vscode.window.showWarningMessage(`Branches diverged. Local +${reviewed.status.ahead}, remote +${reviewed.status.behind}. Rebase rewrites local commits; Merge preserves them.`, { modal: true }, 'Rebase', 'Merge', 'Review Branches');
         if (choice === 'Rebase' || choice === 'Merge') await this.git.pull(id, choice === 'Rebase' ? 'rebase' : 'merge', reviewed);
         else if (choice === 'Review Branches') await vscode.commands.executeCommand('gitPro.branches');
@@ -214,15 +218,16 @@ export class DailyCommands implements vscode.Disposable {
     const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined)) as BranchNode | undefined;
     if (!node || node.kind !== 'branch') return this.branches();
     const { branch, repositoryId: id } = node;
-    type Action = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
+    type Action = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Compare with Another Branch…' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
     type Item = vscode.QuickPickItem & { action?: Action };
     const item = (action: Action, description: string, icon: string): Item => ({ label: action, action, description, iconPath: new vscode.ThemeIcon(icon) });
     const copy = item('Copy Name', 'Copy the full branch name', 'copy'), head = this.git.registry.store.get(id)?.head;
-    // WebStorm's branch popup: the checked-out branch cannot be compared with, merged into or rebased onto itself.
+    // WebStorm's branch popup: the checked-out branch cannot be compared with, merged into or rebased onto itself, but it can be compared with another branch.
     const current = !branch.remote && branch.name === head, into = head && head !== '(detached)' ? redact(head) : 'HEAD';
-    const integrate: Item[] = current ? [] : [
+    const another = item('Compare with Another Branch…', 'Choose a branch or tag to compare this branch with', 'git-compare');
+    const integrate: Item[] = current ? [{ label: 'Compare', kind: vscode.QuickPickItemKind.Separator }, another, { label: 'Branch', kind: vscode.QuickPickItemKind.Separator }] : [
       { label: 'Compare and integrate', kind: vscode.QuickPickItemKind.Separator },
-      item('Compare with Current', `Commits and files that differ from ${into}`, 'git-compare'), item('Show Diff with Working Tree', 'Files that differ from your working tree', 'diff'),
+      item('Compare with Current', `Commits and files that differ from ${into}`, 'git-compare'), item('Show Diff with Working Tree', 'Files that differ from your working tree', 'diff'), another,
       item('Merge into Current…', `Merge this branch into ${into}`, 'git-merge'), item('Rebase Current onto This…', `Replay ${into} commits on top of this branch`, 'arrow-up'),
       { label: 'Branch', kind: vscode.QuickPickItemKind.Separator },
     ];
@@ -235,7 +240,7 @@ export class DailyCommands implements vscode.Disposable {
     const choice = (await vscode.window.showQuickPick(actions, { title: redact(branch.name) }))?.action;
     if (!choice) return;
     // These run through their own trusted commands, so a merge or rebase that stops on conflicts opens Conflicts like any other Git Pro mutation.
-    const routed: Partial<Record<Action, string>> = { 'Compare with Current': 'gitPro.compareWithCurrent', 'Show Diff with Working Tree': 'gitPro.diffWithWorkingTree', 'Merge into Current…': 'gitPro.mergeIntoCurrent', 'Rebase Current onto This…': 'gitPro.rebaseCurrentOnto' };
+    const routed: Partial<Record<Action, string>> = { 'Compare with Current': 'gitPro.compareWithCurrent', 'Show Diff with Working Tree': 'gitPro.diffWithWorkingTree', 'Compare with Another Branch…': 'gitPro.compareWithBranch', 'Merge into Current…': 'gitPro.mergeIntoCurrent', 'Rebase Current onto This…': 'gitPro.rebaseCurrentOnto' };
     const routedCommand = routed[choice];
     if (routedCommand) { await vscode.commands.executeCommand(routedCommand, node); return; }
     if (choice === 'Copy Name') { await vscode.env.clipboard.writeText(branch.name); return; }

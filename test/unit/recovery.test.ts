@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { recoveryFor } from '../../src/utils/recovery';
-import { GitFailure, classifyGitDiagnostic, type FailureKind } from '../../src/git/git-error-parser';
+import { GitFailure, classifyGitDiagnostic, noteStoppedLock, parseGitError, partiallyApplied, type FailureKind } from '../../src/git/git-error-parser';
 test('failure recovery is redacted and never retries a mutation or removes a lock',()=>{
   const kinds:FailureKind[]=['auth','signing','conflict','cancelled','timeout','repository','locked','output-limit','unknown'];
   for(const kind of kinds){const result=recoveryFor(new GitFailure(kind,'https://user:PRIVATE_SENTINEL@example.test/repo?%74oken=TOKEN_SENTINEL'));
@@ -51,4 +54,38 @@ test('a conflict failure offers Resolve Conflicts…, which only opens the Confl
     const guard=recoveryFor(new Error(text));assert.ok(guard.message.endsWith(text),'Git Pro guard text is not replaced by the generic Git summary');assert.doesNotMatch(guard.message,/Git reported/);assert.equal(guard.command,'gitPro.conflicts.open');
   }
   assert.equal(recoveryFor(new Error('Conflict in https://user:PRIVATE_SENTINEL@example.test/x')).message.includes('PRIVATE_SENTINEL'),false);
+});
+test('only Git\'s own conflict wording is a conflict: hook output, branch names and paths that mention conflicts stay plain Git failures',()=>{
+  for(const text of ['eslint: src/conflicts/panel.ts:3 no-unused-vars',"Preparing worktree (new branch 'fix-merge-conflict-ui')\nfatal: a branch named 'fix-merge-conflict-ui' already exists",
+    "Check for merge conflicts....Failed\nsrc/a.ts:3: Merge conflict string '<<<<<<< ' found",'note: CONFLICT (content) mentioned mid-line','2 unmerged migrations in db/conflict-resolution/','Could not apply 1a2b3c4... hook failed']){
+    assert.equal(classifyGitDiagnostic(text),'unknown',text);
+    for(const error of [parseGitError(text,1),Object.assign(new Error('Failed to execute git'),{stderr:text,exitCode:1})]){
+      const result=recoveryFor(error);assert.equal(result.label,'Show Output',text);assert.equal(result.command,'gitPro.showOutput');assert.doesNotMatch(result.message,/conflicts/);assert.ok(result.diagnostic.includes(text.split('\n')[0]!),'the real error stays in the diagnostic Show Output reveals');
+    }
+  }
+  for(const text of ['CONFLICT (content): Merge conflict in a.txt','Automatic merge failed; fix conflicts and then commit the result.','Rebasing (1/1)\rerror: could not apply 1a2b3c4... feature','error: could not revert 1a2b3c4... main',
+    'error: Committing is not possible because you have unmerged files.\nfatal: Exiting because of an unresolved conflict.',"error: path 'src/a b.txt' is unmerged",'a.txt: needs merge\r\nerror: you need to resolve your current index first',
+    'You must edit all merge conflicts and then\nmark them as resolved using git add',"Applied patch to 'a.txt' with conflicts.",'hint: after resolving the conflicts, mark the corrected paths'])
+    assert.equal(classifyGitDiagnostic(text),'conflict',text);
+});
+test('a lock left by a Git process that Git Pro stopped is named with what to do instead of "another operation"; Git Pro never removes it',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'git-pro-lock-')),lock=path.join(dir,'index.lock'),remove=/Check that no Git process is still running, then delete that file yourself\. Git Pro will not remove lock files\./;
+  try{
+    for(const kind of ['timeout','cancelled','output-limit'] as const){
+      const result=recoveryFor(new GitFailure(kind,'stopped',null,undefined,lock));
+      assert.match(result.message,/\nGit Pro stopped the Git process, and it left the lock file /,kind);assert.ok(result.message.includes(lock));assert.match(result.message,remove);
+    }
+    assert.match(recoveryFor(new GitFailure('timeout','stopped',null,undefined,lock)).message,/state may have changed/);assert.equal(recoveryFor(new GitFailure('timeout','stopped',null,undefined,lock)).command,'gitPro.refresh');
+    assert.doesNotMatch(recoveryFor(new GitFailure('timeout','stopped')).message,/lock file/);
+    assert.equal((partiallyApplied(new GitFailure('timeout','stopped',null,undefined,lock),1,2) as GitFailure).lockFile,lock);
+    await writeFile(lock,'');
+    const stderr=`fatal: Unable to create '${lock.replace(/\\/g,'/')}': File exists.\n\nAnother git process seems to be running in this repository, e.g.\nan editor opened by 'git commit'.`;
+    const errors=()=>[parseGitError(stderr,128),Object.assign(new Error('Failed to execute git'),{stderr,exitCode:128})];
+    for(const error of errors())assert.match(recoveryFor(error).message,/^Git is busy with another operation\.\nFinish the other Git operation\./,'a lock Git Pro did not leave');
+    noteStoppedLock(lock);
+    for(const error of errors()){const message=recoveryFor(error).message;assert.ok(message.startsWith(`A Git process that Git Pro stopped earlier left the lock file ${lock}.\n`),message);assert.match(message,remove);assert.doesNotMatch(message,/another operation/);}
+    // Removed by the user, then taken by another process: a different file, so Git's own reading again.
+    await rm(lock);await new Promise(resolve=>setTimeout(resolve,20));await writeFile(lock,'other');
+    for(const error of errors())assert.match(recoveryFor(error).message,/^Git is busy with another operation\./);
+  }finally{await rm(dir,{recursive:true,force:true});}
 });

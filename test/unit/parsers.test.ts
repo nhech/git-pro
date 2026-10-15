@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
-import { parseStatus } from '../../src/git/git-parser';
+import { createHash } from 'node:crypto';
+import { parseStatus, sameStatus, stagedFingerprint } from '../../src/git/git-parser';
 import { GitFailure, parseGitError, parseMutationError } from '../../src/git/git-error-parser';
 import { GitExecutor } from '../../src/git/git-executor';
 import { PathPolicy } from '../../src/security/paths';
@@ -31,7 +32,34 @@ test('truncated or malformed records rejected, not incomplete success', () => {
   for (const input of ['? bad', '1 bad\0', '# branch.ab invalid\0', `2 R. N... 100644 100644 100644 ${oid} ${oid} R100 new\0`]) {
     assert.throws(() => parseStatus(Buffer.from(input)));
   }
-  assert.throws(() => parseStatus(Buffer.from([0x3f, 0x20, 0xff, 0x00])), /encoded data/);
+  assert.deepEqual(parseStatus(Buffer.from([0x3f, 0x20, 0xff, 0x00])).omitted, [{ group: 'untracked', status: '?' }], 'a name that is not UTF-8 is set aside, never aliased');
+  assert.throws(() => parseStatus(Buffer.concat([Buffer.from('# branch.head f'), Buffer.from([0xe9, 0x00])])), /branch that is not valid UTF-8/);
+});
+test('one file name that is not UTF-8 omits only its own entries; every other path stays exact', () => {
+  const latin1 = (text: string) => Buffer.from(text, 'latin1'), utf8 = (text: string) => Buffer.from(text, 'utf8');
+  const input = Buffer.concat([utf8(`# branch.oid ${oid}\0# branch.head main\0? 新 file.txt\0`), latin1('? f\xe9.txt\0'), utf8(`1 .M N... 100644 100644 100644 ${oid} ${oid} a.txt\0`),
+    latin1(`1 MM N... 100644 100644 100644 ${oid} ${oid} caf\xe9.txt\0`), latin1(`2 R. N... 100644 100644 100644 ${oid} ${oid} R100 renamed.txt\0old\xe9.txt\0`),
+    latin1(`u UU N... 100644 100644 100644 100644 ${oid} ${oid} ${oid} conflict\xe9.txt\0! ignored\xe9\0`), utf8(`2 R. N... 100644 100644 100644 ${oid} ${oid} R100 new name\0old name\0`)]);
+  const status = parseStatus(input);
+  assert.equal(status.head, 'main'); assert.equal(status.oid, oid);
+  assert.deepEqual(status.changes, [{ path: '新 file.txt', group: 'untracked', status: '?' }, { path: 'a.txt', status: 'M', group: 'working' }, { path: 'new name', status: 'R', group: 'staged', originalPath: 'old name' }]);
+  assert.deepEqual(status.omitted, [{ group: 'untracked', status: '?' }, { status: 'M', group: 'staged' }, { status: 'M', group: 'working' }, { status: 'R', group: 'staged' }, { status: 'UU', group: 'conflicts' }]);
+  assert.ok(Object.isFrozen(status.omitted) && Object.isFrozen(status.omitted![0]));
+  const valid = parseStatus(utf8(`# branch.oid ${oid}\0# branch.head main\0? a.txt\0`));
+  assert.equal('omitted' in valid, false, 'a status without such names keeps its exact shape');
+  assert.equal(sameStatus(status, { ...status, omitted: status.omitted!.slice(1) }), false); assert.equal(sameStatus(status, { ...status, omitted: [...status.omitted!].reverse() }), true);
+  const rest = { head: status.head, oid: status.oid, upstream: status.upstream, ahead: status.ahead, behind: status.behind, changes: status.changes };
+  assert.equal(sameStatus(status, rest), false, 'an omitted change is still a change');
+});
+test('the staged fingerprint hashes every staged entry by its exact bytes, including names that are not UTF-8', () => {
+  const record = (name: Buffer, xy = 'M.') => Buffer.concat([Buffer.from(`1 ${xy} N... 100644 100644 100644 ${oid} ${oid} `), name, Buffer.from([0])]);
+  const valid = Buffer.concat([record(Buffer.from('a.txt')), Buffer.from(`2 R. N... 100644 100644 100644 ${oid} ${oid} R100 新\0old\0`)]);
+  const before = `${['1', 'M', '100644', '100644', oid, oid, 'a.txt'].join('\0')}\n${['2', 'R', '100644', '100644', oid, oid, 'R100', '新', 'old'].join('\0')}\n`;
+  assert.equal(stagedFingerprint(valid), createHash('sha256').update(before).digest('hex'), 'valid UTF-8 input hashes as before');
+  const latin = Buffer.from([0x66, 0xe9]), lookalike = Buffer.from('fé', 'utf8');
+  const prints = [stagedFingerprint(valid), stagedFingerprint(Buffer.concat([valid, record(latin)])), stagedFingerprint(Buffer.concat([valid, record(lookalike)])), stagedFingerprint(Buffer.concat([valid, record(latin, '.M')]))];
+  assert.equal(new Set(prints.slice(0, 3)).size, 3, 'a staged name that is not UTF-8 changes the fingerprint and never collides with its UTF-8 look-alike');
+  assert.equal(prints[3], prints[0], 'a working-tree-only change still does not');
 });
 test('error classification uses safe redacted messages', () => {
   assert.equal(parseGitError('fatal: not a git repository', 128).kind, 'repository');

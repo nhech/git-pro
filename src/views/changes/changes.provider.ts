@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { FileChange, ChangeGroup } from '../../git/git-parser';
 import type { RepositoryRegistry } from '../../repositories/repository-registry';
 import { redact } from '../../security/redaction';
+import { unlistedChanges } from './unlisted';
 import { changeFileVisual, changeGroupVisual, changeStatusLabel } from '../tree-visuals';
 export type ChangeNode = { kind: 'group'; group: ChangeGroup } | {kind:'folder';repositoryId:string;group:ChangeGroup;prefix:string} | { kind: 'file'; repositoryId: string; change: FileChange } | { kind: 'message'; message: string };
 type Node = ChangeNode;
@@ -56,7 +57,7 @@ export class ChangesProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     const changes = this.registry.store.get(repo.id)?.changes;
     if (!changes) return [{ kind: 'message', message: 'Loading repository status…' }];
     if (!node) return changes.length ? (['conflicts', 'staged', 'working', 'untracked'] as const)
-      .filter(group => changes.some(change => change.group === group)).map(group => ({ kind: 'group', group })) : [{ kind: 'message', message: 'Working tree clean' }];
+      .filter(group => changes.some(change => change.group === group)).map(group => ({ kind: 'group', group })) : [{ kind: 'message', message: this.registry.store.get(repo.id)?.omitted?.length ? unlistedChanges : 'Working tree clean' }];
     if(node.kind!=='group'&&node.kind!=='folder')return[];
     const prefix=node.kind==='folder'?node.prefix:'';
     if(this.grouping(repo)!=='folder')return changes.filter(change=>change.group===node.group&&change.path.startsWith(prefix)).map(change=>({kind:'file',repositoryId:repo.id,change}));

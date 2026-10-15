@@ -206,7 +206,7 @@
       if (body) { const message = text(details, 'pre', body); message.className = 'details-message'; }
       if (value.messageOmitted) text(details, 'p', 'The full message is too large to show here. Use native Git to read it.').className = 'refs-note';
       if (value.commit.parents.length > 1) { const label = text(details, 'label', 'Compare merge parent'); const control = document.createElement('select'); control.dataset.focusKey = 'details-parent'; value.commit.parents.forEach((oid, index) => { const option = text(control, 'option', `${index + 1}: ${oid.slice(0, 8)}`); option.value = String(index); }); control.value = String(item.parentIndex); control.addEventListener('change', () => { if (!busy) send({ type: 'select', oid: value.commit.oid, parent: Number(control.value) }); }); label.append(control); }
-      if (value.filesOmitted) { text(details, 'h3', 'Changed files'); text(details, 'p', 'Too many changed files to list here. Use native Git to review this commit.').className = 'refs-note'; }
+      if (value.filesOmitted) { text(details, 'h3', 'Changed files'); text(details, 'p', value.filesNote === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so the file list is unavailable here. Use native Git to review this commit.' : 'Too many changed files to list here. Use native Git to review this commit.').className = 'refs-note'; }
       else text(details, 'h3', `Changed files · ${value.files.length}`); showFiles(value.files, value.stats, `details:${value.commit.oid}:${value.parent || ''}`);
     }
     if (item.type === 'refs' && refsSlot && refsSlot.oid === item.oid && refsSlot.container.isConnected) showRefs(refsSlot.container, item.refs, item.refsError);

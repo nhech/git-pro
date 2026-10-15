@@ -3,17 +3,21 @@ import { GitExecutor } from '../git-executor';
 import { GitFailure } from '../git-error-parser';
 import type { ReadCommand } from '../command-builders';
 import { buildHistoryRead, historyPath, type HistoryFilters } from './history-builders';
-import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, parseMergeBase, decode, type HistoryCommit } from './history-parser';
+import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, parseMergeBase, decode, NonUtf8Error, type HistoryCommit } from './history-parser';
 import type { CompareFiles, CompareFilesMode, CompareService, MergeBase, RefComparison } from '../../webviews/compare/compare-contract';
 import { initialFileCursor, advanceFileCursor, parseLineageHistory, parseHistoryEdges, type FileCursor } from './file-lineage';
 import { parseBlame } from './blame-parser';
 import { parseStatus } from '../git-parser';
 import { validateOid } from '../../security/refs';
 import { ReadScheduler } from '../../utils/read-scheduler';
-import { PathPolicy, canonicalFilePath, containsPath } from '../../security/paths';
+import { PathPolicy, canonicalFilePath, refuseGitMetadata } from '../../security/paths';
 import { boundedFile } from '../../utils/bounded-file';
 import { lstat } from 'node:fs/promises';
+import { isUtf8 } from 'node:buffer';
+import * as path from 'node:path';
 
+/** Name-status (and numstat) output whose paths are all UTF-8. */
+const utf8Listing = (files: Buffer, stats: Buffer | undefined): boolean => isUtf8(files) && (!stats || isUtf8(stats));
 export interface PinnedHistory { repositoryId: string; tips: readonly string[]; filters: Readonly<HistoryFilters>;refs?:readonly {name:string;oid:string}[] }
 export interface HistoryPage { commits: readonly HistoryCommit[]; offset: number; hasMore: boolean; nextOffset: number }
 export class HistoryService implements CompareService {
@@ -128,13 +132,15 @@ export class HistoryService implements CompareService {
     const bounded = (command: ReadCommand) => this.read(id, command, signal).catch((error: unknown) => {
       if (error instanceof GitFailure && error.kind === 'output-limit') return undefined; throw error;
     });
-    const [message, files, stats] = await Promise.all([
+    const [message, listed, stats] = await Promise.all([
       bounded({ kind: 'commitMessage', oid }),
       bounded({ kind: 'changedFiles', to: oid, ...(from ? { from } : {}) }),
       bounded({ kind: 'numstat', to: oid, ...(from ? { from } : {}) })
     ]);
+    // A path that is not UTF-8 withholds the list like an oversized one, and says why; the commit itself still shows.
+    const unreadable = Boolean(listed && !utf8Listing(listed, stats)), files = unreadable ? undefined : listed;
     return { commit, parent: from, message: message ? decode(message) : commit.subject, files: files ? parseChangedFiles(files) : [], stats: files && stats ? parseNumstat(stats) : [],
-      ...(message ? {} : { messageOmitted: true }), ...(files ? {} : { filesOmitted: true }) };
+      ...(message ? {} : { messageOmitted: true }), ...(files ? {} : { filesOmitted: true }), ...(unreadable ? { filesNote: 'nonUtf8Path' as const } : {}) };
   }
   /** Separate from details: `for-each-ref --contains` walks history per ref and can outlast the read timeout in large repositories. */
   async containingRefs(id: string, oid: string, signal?: AbortSignal): Promise<string[]> {
@@ -170,20 +176,26 @@ export class HistoryService implements CompareService {
   /** A branch, tag or exact OID, pinned to its commit; ranges and other revision syntax stay rejected by the `ref` recipe. */
   async resolveRef(id:string,ref:string,signal?:AbortSignal):Promise<string>{return validateOid(decode(await this.read(id,{kind:'ref',ref},signal)).trim());}
   async mergeBase(id:string,left:string,right:string,signal?:AbortSignal):Promise<MergeBase>{
-    validateOid(left);validateOid(right);return Object.freeze(parseMergeBase(await this.read(id,{kind:'mergeBase',left,right},signal)));
+    validateOid(left);validateOid(right);const base=parseMergeBase(await this.read(id,{kind:'mergeBase',left,right},signal));
+    // `merge-base` stops at a shallow clone's boundary as quietly as at unrelated roots, so no base there is not proof of unrelated histories.
+    return Object.freeze(base.oid||!await this.shallow(id)?base:{...base,shallow:true as const});
   }
+  /** Git keeps the boundary of a shallow clone in `shallow` in the common directory, shared by every worktree. */
+  private shallow(id:string):Promise<boolean>{return lstat(path.join(this.repository(id).commonDir,'shallow')).then(()=>true,()=>false);}
   /** Changed files and line counts between two pinned trees (or a tree and the working tree); a listing past the output bound keeps the comparison and says so. */
   private async listedFiles(id:string,scope:CompareFiles['scope'],from:string,to:string|undefined,signal?:AbortSignal,note?:CompareFiles['note']):Promise<CompareFiles>{
     const bounded=(command:ReadCommand)=>this.read(id,command,signal).catch((error:unknown)=>{if(error instanceof GitFailure&&error.kind==='output-limit')return undefined;throw error;});
     const [files,stats]=await Promise.all(to===undefined?[bounded({kind:'worktreeDiff',oid:from}),bounded({kind:'worktreeNumstat',oid:from})]:[bounded({kind:'changedFiles',from,to}),bounded({kind:'numstat',from,to})]);
+    // With -z Git prints path bytes as they are. One that is not UTF-8 cannot be shown or named back to Git without aliasing it, so the list is withheld and the commits still load.
+    if(files&&!utf8Listing(files,stats))return Object.freeze({scope,from,to,files:Object.freeze([]),stats:Object.freeze([]),omitted:true,note:'nonUtf8Path'});
     return Object.freeze({scope,from,to,files:Object.freeze(files?parseChangedFiles(files):[]),stats:Object.freeze(files&&stats?parseNumstat(stats):[]),omitted:!files,...(note?{note}:{})});
   }
   /** Since fork: what `left` changed after it forked from `right` (first merge base when there are several); unrelated histories fall back to tip to tip. */
   async comparisonFiles(id:string,left:string,right:string,mode:CompareFilesMode,signal?:AbortSignal,fork?:MergeBase):Promise<CompareFiles>{
     validateOid(left);validateOid(right);if(mode!=='fork'&&mode!=='tips')throw new Error('Choose Since fork or Tip to tip.');
-    if(mode==='tips')return this.listedFiles(id,'tips',left,right,signal);
+    if(mode==='tips')return this.listedFiles(id,'tips',left,right,signal,fork?.shallow?'shallowHistory':undefined);
     const base=fork??await this.mergeBase(id,left,right,signal);
-    if(!base.oid)return this.listedFiles(id,'tips',left,right,signal,'noCommonAncestor');
+    if(!base.oid)return this.listedFiles(id,'tips',left,right,signal,base.shallow?'shallowHistory':'noCommonAncestor');
     return this.listedFiles(id,'fork',base.oid,left,signal,base.multiple?'multipleMergeBases':undefined);
   }
   async worktreeFiles(id:string,oid:string,signal?:AbortSignal):Promise<CompareFiles>{validateOid(oid);return this.listedFiles(id,'worktree',oid,undefined,signal);}
@@ -213,12 +225,12 @@ export class HistoryService implements CompareService {
     if (!Number.isSafeInteger(size) || size < 0 || size > 5 * 1024 * 1024) throw new Error('Revision exceeds the 5 MiB text diff limit.');
     const content = await this.read(id, { kind: 'blob', oid: blob }, signal);
     if (content.includes(0)) throw new Error('Binary revision cannot be opened as text.');
-    decode(content); return content;
+    if (!isUtf8(content)) throw new NonUtf8Error('Text diff is unavailable: this revision is not UTF-8 text. Use native Git for this file.');
+    return content;
   }
   async workingRevision(id:string,file:string,signal?:AbortSignal):Promise<Buffer>{
     historyPath(file);const repo=this.repository(id),absolute=await this.policy.authorizeFile(repo.root,file);
-    const canonical=await canonicalFilePath(absolute);
-    if(file.split(/[\\/]/).some(part=>/^\.git(?:[ .:]|$)/i.test(part))||containsPath(repo.gitDir,canonical)||containsPath(repo.commonDir,canonical))throw new Error('Git metadata cannot be compared as a working file.');
+    const canonical=await refuseGitMetadata(repo,file,absolute);
     if((await this.registry.resolveFile(absolute))?.id!==id)throw new Error('Working file belongs to another repository.');
     if(signal?.aborted)throw new Error('Working revision cancelled.');
     const info=await lstat(absolute).catch(error=>{if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;});
@@ -227,7 +239,8 @@ export class HistoryService implements CompareService {
     const content=await boundedFile(absolute);
     if(await canonicalFilePath(absolute)!==canonical||(await lstat(absolute)).isSymbolicLink())throw new Error('Working file changed ownership during comparison.');
     if(signal?.aborted||this.repository(id)!==repo)throw new Error('Working revision expired.');this.policy.checkTrust();
-    if(content.includes(0))throw new Error('Binary working revision cannot be opened as text.');decode(content);return content;
+    if(content.includes(0))throw new Error('Binary working revision cannot be opened as text.');
+    if(!isUtf8(content))throw new NonUtf8Error('Text diff is unavailable: the working file is not UTF-8 text. Use native Git for this file.');return content;
   }
   dispose(): void { this.fileQueries=new WeakMap();this.scheduler.dispose(); }
 }

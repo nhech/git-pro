@@ -1,6 +1,6 @@
 # Getting started
 
-Requires VS Code 1.100.0 or newer, Git and the built-in Git extension. Open a trusted filesystem workspace. Browser and virtual workspaces are unsupported.
+Requires VS Code 1.100.0 or newer, Git 2.32 or newer and the built-in Git extension. Open a trusted filesystem workspace. Browser and virtual workspaces are unsupported.
 
 1. Install **Git Pro** from the Extensions view, or run **Extensions: Install from VSIX...** for a downloaded package. Reload VS Code if requested.
 2. Open your repository folder and review workspace trust before enabling Git operations.

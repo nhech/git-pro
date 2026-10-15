@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { lstat, readlink } from 'node:fs/promises';
 import * as path from 'node:path';
 import { GitService } from '../git.service';
-import { parseStatus, type StatusSnapshot } from '../git-parser';
-import { detectConflictOperation, type GitOperation } from '../../state/operation-state';
+import { hasChanges, parseStatus, type StatusSnapshot } from '../git-parser';
+import { detectConflictOperation, gitPseudoRefs, type GitOperation, type PseudoRefs } from '../../state/operation-state';
+import { hasStashMarkers } from '../conflicts/operation-context';
 import { OperationCoordinator } from '../../state/operation-coordinator';
 import { validateOid } from '../../security/refs';
 import { buildAdvancedMutation, type AdvancedMutation } from './advanced-builders';
@@ -37,7 +38,10 @@ export class AdvancedService {
   constructor(readonly git: GitService, private readonly coordinator: OperationCoordinator) {}
   private async inspect(repo: RepositoryDescriptor): Promise<OperationSnapshot> {
     const statusBuffer = (await this.git.executor.read(repo.root,{kind:'status'})).stdout;
-    const parsed = parseStatus(statusBuffer), status = Object.freeze({...parsed,changes:Object.freeze(parsed.changes.map(change=>Object.freeze(change)))}), operation = await detectConflictOperation(repo.gitDir,()=>status.changes.some(change=>change.group==='conflicts'));
+    const parsed = parseStatus(statusBuffer), status = Object.freeze({...parsed,changes:Object.freeze(parsed.changes.map(change=>Object.freeze(change)))});
+    // A reftable repository keeps REBASE_HEAD, CHERRY_PICK_HEAD and REVERT_HEAD out of the files hashed below: the values Git gave are hashed instead.
+    const asked=new Map<string,string|undefined>(),git=gitPseudoRefs(this.git.executor,repo.root),refs:PseudoRefs=async name=>{const value=await git(name);asked.set(name,value);return value;};
+    const operation = await detectConflictOperation(repo.gitDir,()=>status.changes.some(change=>change.group==='conflicts'),{refs,stashMarkers:()=>hasStashMarkers(file=>this.git.authorizePath(repo.id,file),status)});
     const digest = createHash('sha256');
     const append=(tag:string,data:Buffer)=>digest.update(`${Buffer.byteLength(tag)}:${tag}:${data.length}:`).update(data);
     append('status',statusBuffer);
@@ -66,6 +70,7 @@ export class AdvancedService {
       if (!info.isFile() || info.isSymbolicLink() || info.size>1024*1024) throw new Error('Unsupported operation metadata.');
       append(`metadata:${name}`,await boundedFile(file,1024*1024));
     }
+    for (const [name,value] of asked) append(`ref:${name}`,Buffer.from(value??'\0'));
     if (this.git.repository(repo.id)!==repo) throw new Error('Repository changed during operation preview.');
     const snapshot: OperationSnapshot = Object.freeze({repositoryId:repo.id,...(status.oid?{head:status.oid}:{}),operation,status,fingerprint:digest.digest('hex'),external:Object.freeze(external)});
     this.snapshots.add(snapshot); this.owners.set(snapshot,repo); return snapshot;
@@ -74,11 +79,15 @@ export class AdvancedService {
   async resolve(id: string, ref: string): Promise<string> { return validateOid(decode((await this.git.executor.read(this.git.repository(id).root,{kind:'ref',ref})).stdout).trim()); }
   async preview(id: string, command: AdvancedMutation): Promise<AdvancedPreview> {
     buildAdvancedMutation(command);
-    const captured = Object.freeze({...command,...('oids' in command?{oids:Object.freeze([...command.oids])}:{})}) as AdvancedMutation;
-    const snapshot = await this.snapshot(id);
+    const snapshot = await this.snapshot(id), head = snapshot.status.head!=='(detached)'?snapshot.status.head:undefined;
+    let given = command;
+    // A named merge says which branch it went into, as Git does: the one this snapshot has checked out, which execute re-checks before Git runs.
+    if (command.kind==='merge') given={kind:'merge',oid:command.oid,strategy:command.strategy,...(command.source!==undefined?{source:command.source}:{}),...(command.source!==undefined&&head?{into:head}:{})};
+    const captured = Object.freeze({...given,...('oids' in given?{oids:Object.freeze([...given.oids])}:{})}) as AdvancedMutation;
+    buildAdvancedMutation(captured);
     if (snapshot.operation!=='idle') throw new Error('Finish or abort the current Git operation first.');
     if (!snapshot.head) throw new Error('Create a first commit before advanced Git actions.');
-    if (command.kind!=='reset' && snapshot.status.changes.length) throw new Error('Commit or stash local changes before this operation.');
+    if (command.kind!=='reset' && hasChanges(snapshot.status)) throw new Error('Commit or stash local changes before this operation.');
     if (command.kind==='operationControl'||command.kind==='interactiveRebase'||command.kind==='amendStopped') throw new Error('Use the state-backed operation control or interactive planner.');
     if (command.kind==='cherryPick' || command.kind==='revert') {
       for (const oid of command.oids) {
@@ -127,7 +136,7 @@ export class AdvancedService {
       if (action==='continue' && snapshot.status.changes.some(change=>change.group==='conflicts')) throw new Error('Resolve and stage all conflicts before continuing.');
       this.snapshots.delete(snapshot);
       const editorJob=operation==='rebasing'&&action!=='abort'?await this.editorJobs?.resume(repo.id):undefined;
-      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action,...(message!==undefined?{message}:{})},{...(editorJob?{editorJob}:{})});}
+      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action,...(message!==undefined?{message}:{}),...(editorJob?.commentChar!==undefined?{commentChar:editorJob.commentChar}:{})},{...(editorJob?{editorJob}:{})});}
       finally{await this.editorJobs?.cleanup(repo.id);}
     },()=>this.git.registry.refresh(repo.id));
   }

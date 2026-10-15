@@ -71,6 +71,12 @@ function missingBugFields(sections) {
   return REQUIRED_BUG_FIELDS.filter(key => !(sections[HEADINGS[key]] || '').trim());
 }
 
+/** The text areas are guessed from: only what the reporter wrote, not the form's dropdown values (an SSH workspace is not a remote tool). */
+function areaText(sections, body) {
+  if (Object.keys(sections).length === 0) return body || '';
+  return ['steps', 'expected', 'actual', 'problem', 'proposal', 'question'].map(key => sections[HEADINGS[key]] || '').join('\n');
+}
+
 function areaLabels(title, body) {
   const text = `${title || ''}\n${body || ''}`;
   return AREAS.filter(([, pattern]) => pattern.test(text)).slice(0, 2).map(([label]) => label);
@@ -162,7 +168,7 @@ async function onIssueOpened({ github, context }) {
   const type = issueType(sections);
   const missing = type === 'bug' ? missingBugFields(sections) : [];
   const needsInfo = !isMaintainer(issue.author_association) && (!hasForm || missing.length > 0);
-  const labels = ['needs-triage', ...areaLabels(issue.title, issue.body), ...(needsInfo ? ['needs-info'] : [])];
+  const labels = ['needs-triage', ...areaLabels(issue.title, areaText(sections, issue.body)), ...(needsInfo ? ['needs-info'] : [])];
   const existing = await ensureLabels(github, context, labels);
   const typeLabel = type === 'bug' ? 'bug' : type === 'enhancement' ? 'enhancement' : type === 'question' ? 'question' : undefined;
   const add = [...labels, ...(typeLabel && existing.has(typeLabel) && !labelNames(issue).includes(typeLabel) ? [typeLabel] : [])];
@@ -205,7 +211,7 @@ async function runCommand({ github, context }, command) {
       await github.rest.issues.addLabels({ ...ref, labels: ['needs-info'] });
       await removeLabels(github, context, ['needs-triage']);
       const note = command.note ? `\n\n${command.note.replace(/@/g, '@​')}` : '';
-      await github.rest.issues.createComment({ ...ref, body: `${MARKER}\nMore information is needed to look into this. If there is no reply in 14 days, this issue will be closed automatically; it can be reopened when the details are available.${note}\n\n${FOOTER}` });
+      await github.rest.issues.createComment({ ...ref, body: `${MARKER}\nMore information is needed to look into this. If there is no reply in 21 days, this issue will be closed automatically; it can be reopened when the details are available.${note}\n\n${FOOTER}` });
       return;
     }
     case 'triaged': await removeLabels(github, context, ['needs-triage']); return;
@@ -249,4 +255,4 @@ async function run({ github, context }) {
   if (context.eventName === 'issue_comment' && context.payload.action === 'created') return onIssueComment({ github, context });
 }
 
-module.exports = { run, onIssueOpened, onIssueComment, onIssueClosed, parseForm, parseCommand, issueType, missingBugFields, areaLabels, welcomeComment, isMaintainer, HEADINGS, LABELS, MARKER };
+module.exports = { run, onIssueOpened, onIssueComment, onIssueClosed, parseForm, parseCommand, issueType, missingBugFields, areaLabels, areaText, welcomeComment, isMaintainer, HEADINGS, LABELS, MARKER };

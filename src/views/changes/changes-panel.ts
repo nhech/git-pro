@@ -7,6 +7,7 @@ import type { RepositorySnapshot } from '../../state/repository-store';
 import type { FileChange } from '../../git/git-parser';
 import type { ChangeNode, ChangesProvider } from './changes.provider';
 import { parseChangesAction } from './changes-protocol';
+import { unlistedChanges } from './unlisted';
 import { redact } from '../../security/redaction';
 import { createSurfaces, type Surfaces } from '../../conflicts/surfaces';
 import { operationBanner, type BannerActionId, type OperationBanner } from '../../conflicts/operation-text';
@@ -46,7 +47,7 @@ export class ChangesPanel implements vscode.WebviewViewProvider,vscode.Disposabl
     const css=view.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri,'media','changes.css'));
     const script=view.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri,'media','changes.js'));
     const icons=view.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri,'media','codicons','codicon.css'));
-    view.webview.html=`<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; font-src ${view.webview.cspSource}; script-src 'nonce-${nonce}' ${view.webview.cspSource};"><link rel="stylesheet" href="${icons}"><link rel="stylesheet" href="${css}"><title>Git Pro Changes</title></head><body data-session="${this.session}"><div id="operation" role="region" aria-label="Git operation" hidden><span id="operation-icon" class="codicon" aria-hidden="true"></span><span id="operation-text" aria-live="polite"></span><div id="operation-actions"></div></div><div id="notice" role="status" aria-live="polite"></div><div id="selection-actions" role="toolbar" aria-label="Selected change actions" hidden><span id="selection-count"></span><button data-action="stage">Stage</button><button data-action="unstage">Unstage</button><button data-action="discard">Discard…</button><button data-action="acceptYours" hidden>Accept Yours</button><button data-action="acceptTheirs" hidden>Accept Theirs</button></div><div id="rows" role="tree" aria-multiselectable="true" aria-label="Repository changes"></div><button id="more" type="button" hidden>Show more changes</button><script nonce="${nonce}" src="${script}"></script></body></html>`;
+    view.webview.html=`<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; font-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${icons}"><link rel="stylesheet" href="${css}"><title>Git Pro Changes</title></head><body data-session="${this.session}"><div id="operation" role="region" aria-label="Git operation" hidden><span id="operation-icon" class="codicon" aria-hidden="true"></span><span id="operation-text" aria-live="polite"></span><div id="operation-actions"></div></div><div id="notice" role="status" aria-live="polite"></div><div id="selection-actions" role="toolbar" aria-label="Selected change actions" hidden><span id="selection-count"></span><button data-action="stage">Stage</button><button data-action="unstage">Unstage</button><button data-action="discard">Discard…</button><button data-action="acceptYours" hidden>Accept Yours</button><button data-action="acceptTheirs" hidden>Accept Theirs</button></div><div id="rows" role="tree" aria-multiselectable="true" aria-label="Repository changes"></div><button id="more" type="button" hidden>Show more changes</button><script nonce="${nonce}" src="${script}"></script></body></html>`;
     const receive=view.webview.onDidReceiveMessage(value=>{void this.receive(value);});
     // Hidden views are not rebuilt: the renderer is recreated (and sends `ready`) when the view is shown again.
     const visibility=view.onDidChangeVisibility?.(()=>{if(this.view!==view)return;if(view.visible){void this.update();return;}this.lastState=undefined;this.rows.clear();this.currentSelection=[];this.banner=undefined;});
@@ -154,7 +155,7 @@ export class ChangesPanel implements vscode.WebviewViewProvider,vscode.Disposabl
     catch{if(this.lastState===inputs)this.lastState=undefined;}
   }
   private setBadge(view:vscode.WebviewView,repo:RepositoryDescriptor|undefined,snapshot:RepositorySnapshot|undefined,hasError:boolean):void{
-    const count=snapshot?.changes.length??0;view.badge=repo&&!hasError&&count>0?{value:count,tooltip:`${count} ${count===1?'change':'changes'}`} :undefined;
+    const count=(snapshot?.changes.length??0)+(snapshot?.omitted?.length??0);view.badge=repo&&!hasError&&count>0?{value:count,tooltip:`${count} ${count===1?'change':'changes'}`} :undefined;
   }
   /** §3.4 banner, worded from the operation summary when it is ready in time; otherwise plain wording now and a re-render once it arrives. */
   private async operationBanner(inputs:StateInputs,repo:RepositoryDescriptor,snapshot:RepositorySnapshot,conflicts:number):Promise<OperationBanner|undefined>{
@@ -193,7 +194,7 @@ export class ChangesPanel implements vscode.WebviewViewProvider,vscode.Disposabl
     for(const node of this.provider.getChildren())visit(node,0);
     const retained=this.currentSelection.map(item=>this.identity(item)).filter(key=>this.rows.has(key));this.currentSelection=retained.map(key=>this.rows.get(key)!);
     this.banner=banner&&{repositoryId:repo.id,value:banner};
-    return view.webview.postMessage({type:'state',session,repository:redact(path.basename(repo.root)),total:snapshot.changes.length,rows,operation:banner??null,message:snapshot.changes.length?'':'Working tree clean'});
+    return view.webview.postMessage({type:'state',session,repository:redact(path.basename(repo.root)),total:snapshot.changes.length,rows,operation:banner??null,message:snapshot.changes.length?'':snapshot.omitted?.length?unlistedChanges:'Working tree clean'});
   }
   dispose():void{for(const subscription of this.subscriptions)subscription.dispose();this.lastState=undefined;this.view=undefined;this.rows.clear();this.currentSelection=[];this.session='';this.busy=false;this.banner=undefined;}
 }

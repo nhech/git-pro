@@ -12,7 +12,7 @@ Screenshots use a demo repository in VS Code with dark and light themes. Layout 
 
 ### Review, stage and commit
 
-See staged, modified and untracked files at a glance. Type a message in the Commit box above Changes and press Ctrl+Enter or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history.
+See staged, modified and untracked files at a glance. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history.
 
 ![Git Pro Changes sidebar with right-aligned file status labels and the commit composer](docs/images/changes-and-commit.jpg)
 
@@ -30,11 +30,11 @@ Follow the commit graph, select a commit for details and changed files, or compa
 
 ## Get started
 
-Requires VS Code 1.100.0 or newer, Git and VS Code's built-in Git extension.
+Requires VS Code 1.100.0 or newer, Git 2.32 or newer and VS Code's built-in Git extension.
 
 1. Install **Git Pro** from the Extensions view, or run **Extensions: Install from VSIX...** for a downloaded package.
 2. Open a trusted repository folder, then select **Git Pro** in the Activity Bar.
-3. Review changes, stage the files you want, type a message in the Commit box and press Ctrl+Enter.
+3. Review changes, stage the files you want, type a message in the Commit box and press Ctrl+Enter (⌘Enter on macOS).
 
 Selecting a file does not stage it. The composer commits the current index, including partial staging performed in native Source Control.
 
@@ -47,7 +47,7 @@ Selecting a file does not stage it. The composer commits the current index, incl
 | History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History |
 | File review | Text hunk actions, saved-file commits and optional active-line blame and CodeLens |
 | Conflicts | Conflicts tab with Yours/Theirs by branch, bulk Accept Yours/Theirs, Merge… in VS Code's merge editor, Continue/Abort banner |
-| Branch compare | Compare with Current, two-branch and working-tree comparisons, commits on each side, Open All Changes, Get from Branch |
+| Branch compare | Compare with Current or any other branch or tag, two-branch and working-tree comparisons, commits on each side, Open All Changes, Get from Branch |
 | Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase |
 | Repository tools | Stashes, tags, remotes and worktrees |
 

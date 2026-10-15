@@ -34,4 +34,4 @@ Maintainers (owner, members and collaborators) control it with a comment whose f
 | `/reopen` | Reopen a closed issue. |
 | `/label a, b` and `/unlabel a` | Add or remove up to five labels that already exist. |
 
-The bot uses the repository's `GITHUB_TOKEN` with `issues: write` only. Issue text is treated as data: it is never expanded into a shell, and the workflow never checks out or runs code from a pull request.
+The bot uses the repository's `GITHUB_TOKEN` with `issues: write` (and `contents: read` to check out its script) only. Issue text is treated as data: it is never expanded into a shell, and the workflow never checks out or runs code from a pull request.

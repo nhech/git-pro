@@ -6,7 +6,8 @@ import { GitExecutor } from '../git/git-executor';
 import { parseStatus, sameStatus, type StatusSnapshot } from '../git/git-parser';
 import { PathPolicy, containsPath, canonicalFilePath } from '../security/paths';
 import { redact } from '../security/redaction';
-import { detectConflictOperation, type GitOperation } from '../state/operation-state';
+import { detectConflictOperation, gitPseudoRefs, type GitOperation } from '../state/operation-state';
+import { hasStashMarkers } from '../git/conflicts/operation-context';
 import { RepositoryStore } from '../state/repository-store';
 import { Emitter, type Disposable } from '../utils/events';
 import { Limiter } from '../utils/limiter';
@@ -183,7 +184,10 @@ export class RepositoryRegistry implements Disposable {
         // Owned read captures external checkout/status even when API events are delayed.
         const result = await this.executor.read(entry.descriptor.root, { kind: 'status' }, { signal: entry.controller.signal });
         // The operation that owns the conflicts, as AdvancedService and the Conflicts tab see it, so the status bar and banner name the same one.
-        const operation = await detectConflictOperation(entry.descriptor.gitDir, () => parseStatus(result.stdout).changes.some(change => change.group === 'conflicts'));
+        // A reftable repository keeps REBASE_HEAD and the other pseudo-refs in Git rather than in files, and a stash apply is told by its label in the conflicted files.
+        const parsed = parseStatus(result.stdout), { root, gitDir } = entry.descriptor;
+        const operation = await detectConflictOperation(gitDir, () => parsed.changes.some(change => change.group === 'conflicts'),
+          { refs: gitPseudoRefs(this.executor, root, entry.controller.signal), stashMarkers: () => hasStashMarkers(file => this.policy.authorizeFile(root, file), parsed) });
         if (this.entries.get(id) !== entry || this.disposed) return;
         changed = this.install(id, entry, result.stdout, operation);
         if (this.errors.delete(id)) changed = true;

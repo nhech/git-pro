@@ -10,9 +10,7 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: issue-bot-${{ github.event.issue.number }}
-  cancel-in-progress: false
+# No concurrency group: GitHub keeps one pending run per group and cancels the older ones, which would drop events. The handlers are idempotent.
 
 jobs:
   bot:

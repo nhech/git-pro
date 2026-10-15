@@ -20,7 +20,7 @@ body:
     id: vscode
     attributes:
       label: VS Code version
-      description: Help, then About.
+      description: Help, then About (on macOS: Code, then About Visual Studio Code).
       placeholder: "1.141.0"
     validations:
       required: true

@@ -2,12 +2,13 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { PathPolicy, canonicalFilePath, containsPath, type WorktreeDestinationGrant } from '../security/paths';
-import { realpath } from 'node:fs/promises';
+import { lstat, realpath, stat } from 'node:fs/promises';
 import { parseWorktrees } from './tools/tools-parser';
+import { atLeast, parseGitVersion, worktreeListZ, type GitVersion } from './git-version';
 import { boundedFile } from '../utils/bounded-file';
 import { historyEdgeInput } from './history/history-builders';
 import { buildReadCommand, buildMutationCommand, pathspecInput, type ReadCommand, type MutationCommand } from './command-builders';
-import { GitFailure, parseGitError, parseMutationError } from './git-error-parser';
+import { GitFailure, noteStoppedLock, parseGitError, parseMutationError } from './git-error-parser';
 import { silentLogger, type Logger } from '../utils/logging';
 import { editorCommand, type OwnedEditor, type EditorJob } from './advanced/owned-editor';
 
@@ -29,6 +30,36 @@ export function readEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   }
   return { ...env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' };
 }
+/** How long a stopped POSIX process group has after SIGTERM before SIGKILL. Git removes its lock files on SIGTERM; SIGKILL leaves index.lock behind. */
+const killGraceMs = 2_000;
+/** The index lock in `root`'s Git directory when it was written after `since`, so by the process Git Pro just stopped (or its hooks). */
+async function leftIndexLock(root: string, since: number): Promise<string | undefined> {
+  const dotGit = path.join(root, '.git'), info = await lstat(dotGit).catch(() => undefined);
+  let gitDir = info?.isDirectory() ? dotGit : undefined;
+  // A linked worktree or submodule: `.git` is a file naming its Git directory.
+  if (info?.isFile()) { const named = /^gitdir: (.+)$/m.exec((await boundedFile(dotGit, 65536)).toString('utf8'))?.[1]?.trim(); if (named) gitDir = path.resolve(root, named); }
+  if (!gitDir) return undefined;
+  const file = path.join(gitDir, 'index.lock'), lock = await stat(file).catch(() => undefined);
+  // Coarse file system clocks (FAT, some network shares) round modification times down by up to two seconds.
+  return lock?.isFile() && lock.mtimeMs >= since - 2_000 ? file : undefined;
+}
+interface MsysProcess { readonly pid: string; readonly ppid: string; readonly winpid: string }
+/** The MSYS2 process table (`ps` long format: PID PPID PGID WINPID …), or nothing when it cannot be read promptly. */
+function msysProcesses(bin: string): Promise<MsysProcess[]> {
+  return new Promise(resolve => {
+    const ps = spawn(path.join(bin, 'ps.exe'), [], { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'ignore'] }), chunks: Buffer[] = [];
+    const timer = setTimeout(() => ps.kill(), 2_000);
+    ps.stdout?.on('data', (chunk: Buffer) => chunks.push(chunk));
+    ps.on('error', () => { clearTimeout(timer); resolve([]); });
+    ps.on('close', code => {
+      clearTimeout(timer);
+      resolve(code !== 0 ? [] : Buffer.concat(chunks).toString('latin1').split(/\r?\n/).flatMap(line => {
+        const match = /^\D*(\d+)\s+(\d+)\s+\d+\s+(\d+)\s/.exec(line);
+        return match ? [{ pid: match[1]!, ppid: match[2]!, winpid: match[3]! }] : [];
+      }));
+    });
+  });
+}
 
 export class GitExecutor {
   private readonly active = new Set<AbortController>();
@@ -42,7 +73,15 @@ export class GitExecutor {
   async read(root: string, command: ReadCommand, options: ReadOptions = {}): Promise<ExecutionResult> {
     const configured=this.defaults(),network=['remoteRef','remoteTagRef','remotePrunePreview'].includes(command.kind);
     const input=command.kind==='historyEdges'?historyEdgeInput(command.edges):undefined;
-    return this.run(root, buildReadCommand(command), command.kind,{timeoutMs:network?configured.networkTimeoutMs:configured.readTimeoutMs,...options}, false,false,undefined,input);
+    // `worktree list -z` needs Git 2.36; older Git prints the same records newline-separated, which parseWorktrees reads too.
+    const args=command.kind==='worktrees'&&!await this.supportsWorktreeZ(root)?buildReadCommand(command).filter(argument=>argument!=='-z'):buildReadCommand(command);
+    return this.run(root, args, command.kind,{timeoutMs:network?configured.networkTimeoutMs:configured.readTimeoutMs,...options}, false,false,undefined,input);
+  }
+  private knownVersion: GitVersion | undefined;
+  /** Unknown versions count as modern: a failed `--version` must not turn a working Git into the legacy form. */
+  private async supportsWorktreeZ(root: string): Promise<boolean> {
+    this.knownVersion ??= await this.read(root, { kind: 'version' }, { timeoutMs: 10_000 }).then(result => parseGitVersion(result.stdout.toString('utf8')), () => undefined);
+    return this.knownVersion === undefined || atLeast(this.knownVersion, worktreeListZ);
   }
   /** Exact approved registered linked tree only; never exposes external mutations. */
   async inspectLinkedWorktree(ownerRoot:string,destination:string,grant:WorktreeDestinationGrant):Promise<{gitDir:string;status:Buffer}>{
@@ -98,6 +137,36 @@ export class GitExecutor {
     this.disposed = true;
     for (const controller of this.active) controller.abort();
   }
+  private msysBin: Promise<string | undefined> | undefined;
+  /**
+   * `taskkill /T /F` on the tree of the Git process one request started. Git for Windows runs hooks under MSYS2, whose exec starts the new program from a
+   * stub that then exits, so a hook's `sleep` is outside that Windows tree. MSYS still records its parent: descendants taskkill missed are killed by MSYS PID.
+   */
+  private killWindowsTree(child: ChildProcess, pid: number): void {
+    // Git for Windows: <root>\cmd\git.exe, <root>\bin\git.exe or <root>\mingw64\bin\git.exe beside <root>\usr\bin. MinGit has no MSYS tools.
+    this.msysBin ??= (async () => {
+      for (const bin of [path.resolve(path.dirname(this.executable), '..', 'usr', 'bin'), path.resolve(path.dirname(this.executable), '..', '..', 'usr', 'bin')])
+        if ((await Promise.all(['ps.exe', 'kill.exe'].map(name => stat(path.join(bin, name)).then(info => info.isFile(), () => false)))).every(Boolean)) return bin;
+      return undefined;
+    })();
+    // The MSYS table is read first: once taskkill stops the hook's shell, nothing links its orphaned children to this request.
+    this.msysBin.then(async bin => ({ bin, before: bin ? await msysProcesses(bin) : [] })).then(({ bin, before }) => {
+      const killer = spawn(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe'),
+        ['/pid', String(pid), '/t', '/f'], { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'ignore'] });
+      let output = '';
+      killer.stdout?.on('data', (chunk: Buffer) => { output += chunk.toString('latin1'); });
+      killer.on('error', () => child.kill());
+      killer.on('close', code => {
+        if (code !== 0) child.kill();
+        // Every PID taskkill reports belongs to the stopped tree, except this process as the parent of its root.
+        const tree = new Set((output.match(/\d+/g) ?? []).filter(id => id !== String(process.pid)));
+        const owned = new Set(before.filter(row => tree.has(row.winpid)).map(row => row.pid));
+        for (let grown = owned.size > 0; grown;) { grown = false; for (const row of before) if (!owned.has(row.pid) && owned.has(row.ppid)) { owned.add(row.pid); grown = true; } }
+        const missed = before.filter(row => owned.has(row.pid) && !tree.has(row.winpid)).map(row => row.pid);
+        if (bin && missed.length) spawn(path.join(bin, 'kill.exe'), ['-KILL', ...missed], { windowsHide: true, shell: false, stdio: 'ignore' }).on('error', () => { /* Best effort: the Windows tree is stopped. */ });
+      });
+    }).catch(() => child.kill());
+  }
   private execute(cwd: string, args: string[], label: string, controller: AbortController, options: ReadOptions, mutation: boolean, preserve: boolean,job?:EditorJob,input?:Buffer): Promise<ExecutionResult> {
     return new Promise((resolve, reject) => {
       const started = Date.now();
@@ -109,19 +178,19 @@ export class GitExecutor {
         detached: process.platform !== 'win32', env, stdio: [input?'pipe':'ignore', 'pipe', 'pipe'] });
       if(input){child.stdin?.on('error',()=>{/* Rejection/cancellation closes stdin; process outcome owns the error. */});child.stdin?.end(input);}
       const stdout: Buffer[] = [], stderr: Buffer[] = [];
-      let bytes = 0, failure: GitFailure | undefined, done = false;
+      let bytes = 0, failure: GitFailure | undefined, done = false, killed = false;
       const stop = (reason: GitFailure) => {
         if (done || failure) return;
         failure = reason;
+        const pid = child.pid;
+        if (!pid) return;
+        killed = true;
         // Kill only the tree rooted at the process created by this request.
-        if (process.platform === 'win32' && child.pid) {
-          const killer = spawn(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe'),
-            ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true, shell: false, stdio: 'ignore' });
-          killer.on('error', () => child.kill());
-          killer.on('exit', code => { if (code !== 0) child.kill(); });
-        } else {
-          try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); }
-          catch { child.kill('SIGKILL'); }
+        if (process.platform === 'win32') this.killWindowsTree(child, pid);
+        else {
+          const signal = (name: NodeJS.Signals) => { try { process.kill(-pid, name); } catch { child.kill(name); } };
+          // SIGTERM first: Git removes its lock files, and the hooks in its process group stop too. Whatever still runs after the grace period is killed.
+          signal('SIGTERM'); setTimeout(() => signal('SIGKILL'), killGraceMs).unref();
         }
       };
       const cancelled = () => stop(new GitFailure('cancelled', `Git ${mutation ? 'operation' : 'read'} cancelled; state may have changed. Refresh before retrying.`));
@@ -149,8 +218,18 @@ export class GitExecutor {
         const emptyOptionalRead = (label === 'branchUpstreamKeys' || label === 'branchConfig' || label === 'historyHead' || label === 'mergeBase') && code === 1 && !result.stdout.length && !result.stderr.length;
         failure ??= code === 0 || emptyOptionalRead ? undefined : mutation ? parseMutationError(label, result.stdout, result.stderr.toString('utf8'), code) : parseGitError(result.stderr.toString('utf8'), code);
         // Never log stdout, stderr, argv, messages or remote URLs.
-        if (failure) { this.logger.error(`${label.toUpperCase()} failed (${failure.kind}) ${result.durationMs}ms`); reject(failure); }
-        else {
+        if (failure) {
+          this.logger.error(`${label.toUpperCase()} failed (${failure.kind}) ${result.durationMs}ms`);
+          if (!killed || !mutation) { reject(failure); return; }
+          // A stopped mutation can leave the index lock behind (Windows can only force-kill). Name it, so neither this error nor the next action's
+          // "Unable to create index.lock" reads as another Git operation.
+          const stopped = failure;
+          void leftIndexLock(cwd, started).then(file => {
+            if (!file) return stopped;
+            noteStoppedLock(file);
+            return new GitFailure(stopped.kind, `${stopped.message}\nGit Pro stopped the Git process, which left ${file}.`, stopped.exitCode, stopped.partial, file);
+          }, () => stopped).then(reject);
+        } else {
           // Reads run constantly (status polling, tree views); only changes to the repository are worth an info line.
           const line = `${label.toUpperCase()} completed ${result.durationMs}ms`;
           if (mutation) this.logger.info(line); else this.logger.debug?.(line);

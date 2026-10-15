@@ -83,9 +83,15 @@
     if (!state?.left) return;
     if (state.mode === 'worktree') summary.textContent = `${state.left.name} ${short(state.left.oid)} · Tracked files, staged and unstaged · Untracked files are not compared`;
     else if (state.right && state.left.oid === state.right.oid) summary.textContent = `${state.left.name} and ${state.right.name} point to the same commit.`;
-    else if (state.right && state.sides) summary.textContent = [state.fork ? state.fork.oid ? `Fork point ${short(state.fork.oid)}${state.fork.multiple ? ' (one of several merge bases)' : ''}` : 'No common ancestor' : '',
+    else if (state.right && state.sides) summary.textContent = [state.fork ? state.fork.oid ? `Fork point ${short(state.fork.oid)}${state.fork.multiple ? ' (one of several merge bases)' : ''}` : state.fork.shallow ? 'Fork point unknown (shallow clone)' : 'No common ancestor' : '',
       `${state.left.name} +${state.sides.leftOnly.count.toLocaleString()}`, `${state.right.name} +${state.sides.rightOnly.count.toLocaleString()}`].filter(Boolean).join(' · ');
-    if (state.moved?.length) { moved.hidden = false; movedText.textContent = `${state.moved.join(', ')} ${state.moved.length === 1 ? 'has' : 'have'} moved since this comparison.`; }
+    // A moved ref can be re-pinned by Refresh; a ref that no longer resolves, or a closed repository, cannot.
+    const moves = Array.isArray(state.moved) ? state.moved : [], gone = Array.isArray(state.gone) ? state.gone : [];
+    const notes = state.expired ? ['This repository is no longer open in Git Pro, so this comparison cannot be refreshed. Open the repository again to continue.'] : [
+      ...(moves.length ? [`${moves.join(', ')} ${moves.length === 1 ? 'has' : 'have'} moved since this comparison.`] : []),
+      ...(gone.length ? [`${gone.join(', ')} no longer ${gone.length === 1 ? 'resolves to a commit' : 'resolve to commits'}; the comparison keeps its pinned commits.`] : [])];
+    if (notes.length) { moved.hidden = false; movedText.textContent = notes.join(' '); }
+    movedRefresh.hidden = Boolean(state.expired) || gone.length > 0 || !moves.length;
   };
 
   const listKeys = (event, rows, row, activate, contextMenu) => {
@@ -245,6 +251,7 @@
     heading.append(head);
     if (files.note === 'multipleMergeBases') heading.append(node('p', 'note', `Multiple merge bases; showing changes since ${short(files.from)}.`));
     if (files.note === 'noCommonAncestor') heading.append(node('p', 'note', 'No common ancestor; showing tip-to-tip file changes.'));
+    if (files.note === 'shallowHistory') heading.append(node('p', 'note', 'This repository is a shallow clone, so the common ancestor and the commit counts may be incomplete; showing tip-to-tip file changes.'));
     if (worktree) {
       legend.hidden = false;
       for (const [presence, text] of [['branch', `Only in ${state.left.name}`], ['worktree', 'Only in the working tree'], ['both', 'Changed in both']]) {
@@ -252,7 +259,7 @@
       }
     }
     tree.setAttribute('aria-multiselectable', String(worktree));
-    if (files.omitted) { empty('Too many changed files to list here.'); return; }
+    if (files.omitted) { empty(files.note === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so the file list is unavailable here; use a terminal for this comparison.' : 'Too many changed files to list here.'); return; }
     if (!files.total) { empty(worktree ? `No differences between ${state.left.name} and the working tree.` : 'No differences.'); return; }
     const entries = [];
     if (flat) for (const item of files.items) entries.push({ item, level: 1 });

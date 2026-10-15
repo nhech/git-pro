@@ -101,7 +101,7 @@ test('local branch actions describe scope, keep deletion last, and cancel or sep
 test('remote branch actions offer tracking checkout, compare and integrate, and copy; copy preserves the full raw name', async () => {
   const h = harness(), selected = branch('origin/feature/ux', true);
   await h.action(selected, 'Copy Name');
-  assert.deepEqual(Array.from(h.actionItems[0]!, item => item.action ?? item.label), ['Checkout Tracking Branch', 'Compare and integrate', 'Compare with Current', 'Show Diff with Working Tree', 'Merge into Current…', 'Rebase Current onto This…', 'Branch', 'Copy Name']);
+  assert.deepEqual(Array.from(h.actionItems[0]!, item => item.action ?? item.label), ['Checkout Tracking Branch', 'Compare and integrate', 'Compare with Current', 'Show Diff with Working Tree', 'Compare with Another Branch…', 'Merge into Current…', 'Rebase Current onto This…', 'Branch', 'Copy Name']);
   assert.ok(h.actionItems[0]!.filter(item => item.kind !== -1).every(item => item.description && item.iconPath));
   assert.deepEqual(h.copied, ['origin/feature/ux']); assert.deepEqual(h.operations, []); assert.deepEqual(h.warnings, []);
   await h.action(selected); assert.equal(h.copied.length, 1); assert.equal(h.stats().inputCount, 0); h.instance.dispose();
@@ -184,23 +184,25 @@ test('branch data precedes create, current is explicit, separator is inert, and 
   assert.equal(h.stats().inputCount, 1); assert.deepEqual(h.actionTitles, []); assert.deepEqual(h.errors, []); h.assertClosed(); h.instance.dispose();
 });
 
-const integrate = ['Compare with Current', 'Show Diff with Working Tree', 'Merge into Current…', 'Rebase Current onto This…'];
+const integrate = ['Compare with Current', 'Show Diff with Working Tree', 'Merge into Current…', 'Rebase Current onto This…'], another = 'Compare with Another Branch…';
 test('Branch Actions offers compare and integrate actions for other branches only and routes each through its trusted command', async () => {
   const h = harness(), feature = branch('feature/ux');
   await h.action(feature, 'Merge into Current…');
   const labels = Array.from(h.actionItems[0]!, item => item.action ?? item.label);
-  assert.deepEqual(labels.slice(0, 7), ['Checkout', 'Compare and integrate', ...integrate, 'Branch']); assert.equal(labels[7], 'Rename');
+  assert.deepEqual(labels.slice(0, 8), ['Checkout', 'Compare and integrate', 'Compare with Current', 'Show Diff with Working Tree', another, 'Merge into Current…', 'Rebase Current onto This…', 'Branch']); assert.equal(labels[8], 'Rename');
   assert.match(h.actionItems[0]!.find(item => item.action === 'Merge into Current…')!.description!, /into main$/);
   assert.match(h.actionItems[0]!.find(item => item.action === 'Rebase Current onto This…')!.description!, /^Replay main commits/);
   assert.deepEqual(h.executed, [['gitPro.mergeIntoCurrent', { kind: 'branch', repositoryId: 'owned', branch: feature }]]);
-  for (const [choice, id] of [['Compare with Current', 'gitPro.compareWithCurrent'], ['Show Diff with Working Tree', 'gitPro.diffWithWorkingTree'], ['Rebase Current onto This…', 'gitPro.rebaseCurrentOnto']] as const) {
+  for (const [choice, id] of [['Compare with Current', 'gitPro.compareWithCurrent'], ['Show Diff with Working Tree', 'gitPro.diffWithWorkingTree'], [another, 'gitPro.compareWithBranch'], ['Rebase Current onto This…', 'gitPro.rebaseCurrentOnto']] as const) {
     await h.action(feature, choice); assert.equal(h.executed.at(-1)![0], id);
   }
   assert.deepEqual(h.operations, []); assert.deepEqual(h.warnings, []);
   await h.action(branch('main'));
   const current = Array.from(h.actionItems.at(-1)!, item => item.action ?? item.label);
   assert.ok(integrate.every(action => !current.includes(action)), 'The checked-out branch hides Compare with Current, Show Diff, Merge and Rebase');
-  assert.deepEqual(h.actionItems.at(-1)!.filter(item => item.kind === -1).map(item => item.label), ['Delete branch']);
+  assert.deepEqual(current.slice(0, 4), ['Checkout', 'Compare', another, 'Branch'], 'but it can still be compared with another branch');
+  await h.action(branch('main'), another); assert.deepEqual(h.executed.at(-1), ['gitPro.compareWithBranch', { kind: 'branch', repositoryId: 'owned', branch: branch('main') }]);
+  assert.deepEqual(h.actionItems.at(-1)!.filter(item => item.kind === -1).map(item => item.label), ['Compare', 'Branch', 'Delete branch']);
   h.snapshot.head = '(detached)'; await h.action(branch('main'));
   assert.match(h.actionItems.at(-1)!.find(item => item.action === 'Merge into Current…')!.description!, /into HEAD$/);
   h.instance.dispose();
@@ -247,5 +249,41 @@ test('Branches view marks the checked-out local branch gitPro.branch.current and
   assert.equal(item(branch('feature')).contextValue, 'gitPro.branch.local'); assert.equal(item(branch('main', true)).contextValue, 'gitPro.branch.remote');
   store.head = 'feature'; assert.equal(item(branch('main')).contextValue, 'gitPro.branch.local');
   assert.deepEqual(Array.from((item(branch('feature')).command as { arguments: unknown[] }).arguments), [{ kind: 'branch', repositoryId: 'owned', branch: branch('feature') }]);
+  provider.dispose();
+});
+
+test('an empty Remote group explains that no remote branches are downloaded and offers Fetch, while a Local group never shows the hint', async () => {
+  class TreeItem { id?: string; contextValue?: string; description?: string; tooltip?: string; iconPath?: unknown; command?: { command: string }; constructor(readonly label: string, readonly state?: number) {} }
+  const vscode = { EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} }, TreeItem, TreeItemCollapsibleState: { None: 0, Collapsed: 1 },
+    ThemeIcon: class { constructor(readonly id: string, readonly color?: unknown) {} }, ThemeColor: class { constructor(readonly id: string) {} } };
+  const source = path.resolve(__dirname, '../../src/views/branches/branches.provider.js'), load = createRequire(source), exports: Record<string, unknown> = {};
+  runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  let branches: BranchInfo[] = [branch('main'), branch('feature')];
+  let remotes: () => Promise<unknown[]> = async () => [{ name: 'origin' }];
+  const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => ({ head: 'main' }) } }, branchSearchSnapshot: async () => branches, remotes: () => remotes() };
+  type Node = { kind: string; remote?: boolean };
+  const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const provider = new (exports.BranchesProvider as new (git: unknown) => { getChildren(node?: Node): Promise<Node[]>; getTreeItem(node: Node): TreeItem; dispose(): void })(git);
+  assert.deepEqual(plain((await provider.getChildren()).map(node => [node.kind, node.remote])), [['group', false], ['group', true]]);
+  const remote = await provider.getChildren({ kind: 'group', remote: true });
+  assert.deepEqual(plain(remote.map(node => node.kind)), ['hint'], 'no remote branch: one hint instead of an empty group');
+  const hint = provider.getTreeItem(remote[0]!);
+  assert.equal(hint.label, 'No remote branches downloaded yet'); assert.equal(hint.description, 'Click to fetch'); assert.equal(hint.command?.command, 'gitPro.fetch');
+  assert.equal(hint.contextValue, undefined, 'the hint has no branch menu'); assert.equal(hint.state, 0);
+  assert.deepEqual(plain((await provider.getChildren({ kind: 'group', remote: false })).map(node => node.kind)), ['branch', 'branch']);
+  assert.deepEqual(plain(await provider.getChildren(remote[0]!)), [], 'the hint has no children');
+  // With no remote configured a fetch would do nothing, so the hint says that and offers no command.
+  remotes = async () => [];
+  const none = provider.getTreeItem((await provider.getChildren({ kind: 'group', remote: true }))[0]!);
+  assert.equal(none.label, 'No remote configured'); assert.equal(none.command, undefined, 'nothing to fetch from');
+  assert.match(String(none.tooltip), /git remote add/);
+  // A failed remote lookup must not hide the fetch hint.
+  remotes = async () => { throw new Error('git unavailable'); };
+  assert.equal(provider.getTreeItem((await provider.getChildren({ kind: 'group', remote: true }))[0]!).label, 'No remote branches downloaded yet');
+  remotes = async () => [{ name: 'origin' }];
+  branches = [branch('main'), branch('origin/main', true), branch('origin/feature', true)];
+  assert.deepEqual(plain((await provider.getChildren({ kind: 'group', remote: true })).map(node => node.kind)), ['branch', 'branch'], 'with remote branches the hint is gone');
+  branches = [branch('origin/main', true)];
+  assert.deepEqual(plain(await provider.getChildren({ kind: 'group', remote: false })), [], 'an empty Local group stays empty');
   provider.dispose();
 });

@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { loadWithVscode } from './compare-loader';
+import { NonUtf8Error } from '../../src/git/history/history-parser';
 
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const LEFT = oid(1), RIGHT = oid(2), BASE = oid(3), MOVED = oid(4);
@@ -48,7 +49,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   const branchFiles = options.files ?? files('fork', BASE, LEFT, [{ status: 'M', path: 'src/app.ts' }, { status: 'A', path: 'logo.png' }, { status: 'R100', originalPath: 'old.md', path: 'README.md' }], ['logo.png']);
   const refs = new Map([['feature', LEFT], ['main', RIGHT], ['HEAD', RIGHT], ['refs/heads/main', RIGHT]]);
   let invalidate: () => void = () => undefined;
-  const repo = { id: 'repo', root, gitDir: path.join(root, '.git'), commonDir: path.join(root, '.git') };
+  const repo = { id: 'repo', root, gitDir: path.join(root, '.git'), commonDir: path.join(root, '.git') }, open = [repo];
   const history = {
     resolveRef: async (_id: string, ref: string) => { calls.push(`resolve:${ref}`); const value = refs.get(ref) ?? (/^[0-9a-f]{40}$/.test(ref) ? ref : undefined); if (!value) throw new Error('Invalid revision.'); return value; },
     compareRefs: async (_id: string, left: string, right: string, mode: string) => { calls.push(`compare:${left}:${right}:${mode}`);
@@ -61,7 +62,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
     revision: async (_id: string, value: string | undefined, file: string) => { calls.push(`revision:${value ?? 'none'}:${file}`); return Buffer.from(`${value ?? 'none'}:${file}`); }
   };
   const deps = {
-    registry: { list: () => [repo], store: { get: () => ({ head: options.head ?? 'main' }) }, onDidInvalidate: (listener: () => void) => { invalidate = listener; return { dispose: () => undefined }; }, resolveFile: async () => repo },
+    registry: { list: () => [...open], store: { get: () => ({ head: options.head ?? 'main' }) }, onDidInvalidate: (listener: () => void) => { invalidate = listener; return { dispose: () => undefined }; }, resolveFile: async () => repo },
     history, policy: { authorizeFile: async (base: string, relative: string) => path.join(base, ...relative.split('/')) },
     revisions: { add: (content: Buffer, label: string) => ({ ...uri('git-pro-revision', `/${label}`), label, content: content.toString() }) },
     historyPanels: { open: (...args: unknown[]) => { histories.push(args); } },
@@ -73,7 +74,10 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   const Blobs = blobs.BlobProvider as new (history: unknown) => unknown;
   const surface = new Panels({ extensionUri: uri('file', '/extension') }, deps, new Blobs(history));
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-  return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files, cleanup: async () => { surface.dispose(); await rm(root, { recursive: true, force: true }); } };
+  return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files,
+    /** registry.sync without this repository, and with it again. */
+    close: () => { open.length = 0; }, reopen: () => { open.splice(0, open.length, repo); },
+    cleanup: async () => { surface.dispose(); await rm(root, { recursive: true, force: true }); } };
 }
 
 test('Compare pins refs before the tab opens, reuses the tab for the same pair and replays state on readiness without reading Git', async () => {
@@ -229,6 +233,23 @@ test('Working files must be regular files of this repository, never symlinks or 
   } finally { await h.cleanup(); }
 });
 
+test('A path that leads into .git through a link (a tracked symlink or junction, or a Windows 8.3 name) is refused as Git metadata', async () => {
+  const h = await harness({ files: { scope: 'tips', from: LEFT, to: RIGHT, files: [{ status: 'M', path: 'link/config' }, { status: 'M', path: 'GIT~1/config' }, { status: 'M', path: 'plain/config' }], stats: [], omitted: false } });
+  try {
+    // The working tree has a link named `link` to .git (the repository root of the harness is already canonical); a ref supplied `link/config`.
+    await mkdir(path.join(h.root, '.git'), { recursive: true }); await writeFile(path.join(h.root, '.git', 'config'), '[core]\n');
+    await mkdir(path.join(h.root, 'plain')); await writeFile(path.join(h.root, 'plain', 'config'), 'ordinary\n');
+    let linked = true; try { await symlink(path.join(h.root, '.git'), path.join(h.root, 'link'), 'junction'); } catch { linked = false; }
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    if (linked) for (const type of ['localDiff', 'openFile', 'diff'] as const) {
+      await panel.send({ type, revision, index: 0 }); assert.match(String(panel.last('error')?.message), /Git metadata/, `${type} must refuse link/config`);
+    }
+    // The same file outside .git is still an ordinary working file.
+    await panel.send({ type: 'openFile', revision, index: 2 });
+    assert.ok(h.executed.some(args => args[0] === 'vscode.open' && /plain[\\/]config$/.test(String((args[1] as { fsPath?: string }).fsPath))), 'a regular working file keeps opening');
+  } finally { await h.cleanup(); }
+});
+
 test('A moved ref is reported without changing the pins, and Refresh re-pins it', async () => {
   const h = await harness();
   try {
@@ -262,4 +283,75 @@ test('Load failures show in the tab, busy requests are refused and disposal rele
     const count = panel.sent.length; await panel.send({ type: 'ready' }); assert.equal(panel.sent.length, count);
     h.history.compareRefs = original; await h.surface.openRefs('repo', 'feature', 'main'); assert.equal(h.panels.length, 3, 'A closed tab is never revealed again');
   } finally { await h.cleanup(); }
+});
+
+test('Open All Changes in working-tree mode leaves out submodules, symlinks and Git metadata, opens the rest and says how many it left out', async () => {
+  const entries = [{ status: 'M', path: 'src/app.ts' }, { status: 'M', path: 'sub' }, { status: 'M', path: '.git/config' }, { status: 'M', path: 'README.md' }, { status: 'D', path: 'only-branch.txt' }];
+  const h = await harness({ worktree: { scope: 'worktree', from: LEFT, to: undefined, files: entries, stats: entries.map(entry => ({ path: entry.path, added: 1, removed: 1 })), omitted: false } });
+  try {
+    // A submodule's working side is a folder; `.git/config` is refused by name.
+    await mkdir(path.join(h.root, 'sub'));
+    await h.surface.openWorktree('repo', 'feature'); const panel = h.panels[0]!;
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal(panel.last('error'), undefined, String(panel.last('error')?.message));
+    const opened = h.executed.at(-1)!; assert.equal(opened[0], 'vscode.changes');
+    const resources = opened[2] as [Uri, Uri | undefined, Uri | undefined][];
+    assert.deepEqual(Array.from(resources, resource => path.relative(h.root, resource[0].fsPath!).replace(/\\/g, '/')), ['src/app.ts', 'README.md', 'only-branch.txt']);
+    assert.equal(resources[0]![2]!.scheme, 'file'); assert.equal(resources[2]![2], undefined, 'A file only in the branch still opens with no working side');
+    assert.equal(panel.last('notice')?.message, 'Left out 2 files that have no regular working file (symlinks, submodules, nested repositories or Git metadata); use native Git for them.');
+  } finally { await h.cleanup(); }
+  const only = await harness({ worktree: { scope: 'worktree', from: LEFT, to: undefined, files: [{ status: 'M', path: 'sub' }], stats: [{ path: 'sub', added: 1, removed: 1 }], omitted: false } });
+  try {
+    await mkdir(path.join(only.root, 'sub'));
+    await only.surface.openWorktree('repo', 'feature'); const panel = only.panels[0]!;
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal(panel.last('error')?.message, 'Left out 1 file that has no regular working file (a symlink, submodule, nested repository or Git metadata); use native Git for it.');
+    assert.equal(only.executed.some(args => args[0] === 'vscode.changes'), false, 'Nothing is left to open');
+  } finally { await only.cleanup(); }
+});
+
+test('A closed repository marks the tab expired instead of reporting moved refs; a ref that no longer resolves is reported as gone', async () => {
+  const h = await harness();
+  const wait = () => new Promise(resolve => setTimeout(resolve, 900));
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    h.refs.delete('feature'); h.invalidate(); await wait();
+    assert.deepEqual(panel.state.moved, [], 'A deleted branch did not move'); assert.deepEqual(panel.state.gone, ['feature']); assert.equal(panel.state.expired, undefined);
+    h.refs.set('feature', LEFT); h.invalidate(); await wait(); assert.deepEqual(panel.state.gone, []);
+    const resolve = h.history.resolveRef; h.history.resolveRef = async () => { throw new Error('Repository is no longer open.'); };
+    h.close(); h.invalidate(); await wait();
+    assert.equal(panel.state.expired, true); assert.deepEqual(panel.state.moved, [], 'Closing the repository moves no ref'); assert.deepEqual(panel.state.gone, []);
+    assert.equal(panel.state.revision, revision, 'The captured file indexes stay valid');
+    await panel.send({ type: 'refresh' });
+    assert.match(String(panel.last('error')?.message), /Repository is no longer open\./); assert.doesNotMatch(String(panel.last('error')?.message), /no longer resolves/, 'Refresh names the closed repository, not a vanished ref');
+    h.reopen(); h.history.resolveRef = resolve; h.invalidate(); await wait();
+    assert.equal(panel.state.expired, undefined, 'Reopening the repository brings the tab back'); assert.deepEqual(panel.state.moved, []);
+  } finally { await h.cleanup(); }
+});
+
+test('Withheld file lists and shallow-clone fork points reach the webview as notes', async () => {
+  const h = await harness({ files: { scope: 'fork', from: BASE, to: LEFT, files: [], stats: [], omitted: true, note: 'nonUtf8Path' } });
+  try {
+    const compareRefs = h.history.compareRefs as (...args: unknown[]) => Promise<Record<string, unknown>>;
+    h.history.compareRefs = async (...args: unknown[]) => ({ ...await compareRefs(...args), fork: { oid: null, multiple: false, shallow: true } });
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    assert.deepEqual(panel.state.fork, { oid: null, multiple: false, shallow: true }); assert.equal(panel.state.files.note, 'nonUtf8Path'); assert.equal(panel.state.files.omitted, true);
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal(panel.last('error')?.message, 'Some changed paths are not valid UTF-8, so Git Pro cannot list or open them here. Use a terminal for this comparison.');
+    h.history.details = async (_id: string, value: string) => ({ commit: commit(Number.parseInt(value, 16)), parent: oid(999), files: [], stats: [], message: 'Details', filesOmitted: true, filesNote: 'nonUtf8Path' });
+    await panel.send({ type: 'selectCommit', revision: panel.state.revision, oid: oid(12) });
+    assert.equal(panel.state.files.scope, 'commit'); assert.equal(panel.state.files.omitted, true); assert.equal(panel.state.files.note, 'nonUtf8Path');
+  } finally { await h.cleanup(); }
+});
+
+test('Open All Changes shows a blob side that is not UTF-8 as a read-only notice; other failures still fail that side', async () => {
+  const vscode = { workspace: { registerTextDocumentContentProvider: () => ({ dispose: () => undefined }) }, Uri: { from: ({ scheme, path: value }: { scheme: string; path: string }) => ({ ...uri(scheme, value), query: '', fragment: '' }) } };
+  const exports = loadWithVscode(path.resolve(__dirname, '../../src/webviews/compare/compare-panel.js'), vscode);
+  const history = { revision: async (_id: string, _oid: string, file: string) => { if (file.endsWith('legacy.txt')) throw new NonUtf8Error('Text diff is unavailable: this revision is not UTF-8 text. Use native Git for this file.'); if (file === 'big.txt') throw new Error('Revision exceeds the 5 MiB text diff limit.'); return Buffer.from('text\n'); } };
+  const surface = (exports.createCompareSurface as (context: unknown, deps: unknown) => { blobs: { add(id: string, oid: string, file: string): unknown; provideTextDocumentContent(uri: unknown): Promise<string> }; dispose(): void })({ extensionUri: uri('file', '/extension') }, { registry: { onDidInvalidate: () => ({ dispose: () => undefined }) }, history });
+  try {
+    assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'docs/legacy.txt')), 'This version of legacy.txt is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n');
+    assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'plain.txt')), 'text\n');
+    await assert.rejects(surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'big.txt')), /5 MiB/);
+  } finally { surface.dispose(); }
 });

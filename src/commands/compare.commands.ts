@@ -34,14 +34,14 @@ const isCurrent = (deps: Pick<FeatureDeps, 'registry'>, entry: BranchEntry) => !
 function activeId(deps: Pick<FeatureDeps, 'registry'>): string { const id = deps.registry.active?.id; if (!id) throw new Error('Select a repository first.'); return id; }
 
 /** Branches first (the current one on top when it is offered), then up to 500 tags; the same sources as History refs. */
-async function pickRef(deps: CompareDeps, id: string, title: string, includeCurrent: boolean): Promise<RefChoice | undefined> {
+async function pickRef(deps: CompareDeps, id: string, title: string, includeCurrent: boolean, exclude?: string): Promise<RefChoice | undefined> {
   const [branches, tags] = await Promise.all([deps.git.branchSearchSnapshot(id), deps.tools.tags(id)]);
   if (branches.length > 10000) throw new Error('More than 10000 branches. Enter exact refs in History & Compare.');
   const head = deps.registry.store.get(id)?.head;
   const choices: RefChoice[] = [...branches.map(branch => ({ ref: branch.ref, name: branch.name, kind: branch.remote ? 'remote' as const : 'local' as const, current: !branch.remote && branch.name === head })),
     ...tags.slice(0, 500).map(tag => ({ ref: `refs/tags/${tag.name}`, name: tag.name, kind: 'tag' as const, current: false }))]
-    .filter(choice => includeCurrent || !choice.current).sort((a, b) => Number(b.current) - Number(a.current));
-  if (!choices.length) throw new Error(includeCurrent ? 'This repository has no branches or tags yet.' : 'There is no other branch or tag to compare with.');
+    .filter(choice => (includeCurrent || !choice.current) && choice.ref !== exclude).sort((a, b) => Number(b.current) - Number(a.current));
+  if (!choices.length) throw new Error(includeCurrent && !exclude ? 'This repository has no branches or tags yet.' : 'There is no other branch or tag to compare with.');
   const items = choices.map(choice => {
     const visual = choice.kind === 'tag' ? undefined : branchVisual({ remote: choice.kind === 'remote', current: choice.current });
     return { label: redact(choice.name), description: choice.current ? 'Current branch' : choice.kind === 'remote' ? 'Remote branch' : choice.kind === 'tag' ? 'Tag' : 'Local branch',
@@ -88,6 +88,20 @@ export class CompareCommands {
     if (isCurrent(this.deps, left)) [left, right] = [right, left];
     await this.surface.openRefs(left.repositoryId, left.branch.ref, right.branch.ref);
   }
+  /**
+   * Any branch against a branch or tag picked from a list, like WebStorm's "Compare with…", so the checked-out branch and remote branches can be compared too.
+   * From the palette both sides are picked. The checked-out branch reads on the right, as in Compare Branches.
+   */
+  async compareWithAnother(value: unknown): Promise<void> {
+    const entry = branchEntry(this.deps, value), id = entry ? entry.repositoryId : activeId(this.deps);
+    const first: RefChoice | undefined = entry ? { ref: entry.branch.ref, name: entry.branch.name, kind: entry.branch.remote ? 'remote' : 'local', current: isCurrent(this.deps, entry) }
+      : await pickRef(this.deps, id, 'Compare: choose the first branch or tag', true);
+    if (!first) return;
+    const second = await pickRef(this.deps, id, `Compare ${redact(first.name)} with…`, true, first.ref);
+    if (!second) return;
+    const [left, right] = first.current ? [second, first] : [first, second];
+    await this.surface.openRefs(id, left.ref, right.ref);
+  }
   /** §3.9: the ref's bounded blob as a read-only snapshot on the left, the real file (editable) on the right. */
   async compareWithRef(value: unknown): Promise<void> {
     const target = value instanceof vscode.Uri ? value : vscode.window.activeTextEditor?.document.uri;
@@ -113,7 +127,8 @@ export class CompareCommands {
     if (isCurrent(this.deps, entry)) throw new Error(`${redact(branch.name)} is the current branch. Choose another branch.`);
     const oid = await this.deps.advanced.resolve(id, branch.ref);
     if (oid !== branch.oid) throw new Error('Branch changed. Reopen Branch Actions before continuing.');
-    const preview = await this.deps.advanced.preview(id, kind === 'merge' ? { kind: 'merge', oid, strategy: 'ff' } : { kind: 'rebase', oid });
+    // The merge runs on the pinned OID; `source` makes the message say "Merge branch 'feature'" instead of "Merge commit '<oid>'".
+    const preview = await this.deps.advanced.preview(id, kind === 'merge' ? { kind: 'merge', oid, strategy: 'ff', source: branch.ref } : { kind: 'rebase', oid });
     const head = preview.snapshot.status.head, current = head && head !== '(detached)' ? head : 'detached HEAD';
     const title = kind === 'merge' ? `Merge ${branch.name} into ${current}?` : `Rebase ${current} onto ${branch.name}?`, button = kind === 'merge' ? 'Merge' : 'Rebase';
     if (await vscode.window.showWarningMessage(redact(title), { modal: true, detail: integrationDetail(this.deps, preview, `${branch.name} (${oid})`) }, button) !== button) return;
@@ -137,6 +152,7 @@ export function registerCompare(context: vscode.ExtensionContext, deps: FeatureD
   command('gitPro.compareWithCurrent', value => commands.compareWithCurrent(value));
   command('gitPro.diffWithWorkingTree', value => commands.diffWithWorkingTree(value));
   command('gitPro.compareBranches', (value, selected) => commands.compareBranches(value, selected));
+  command('gitPro.compareWithBranch', value => commands.compareWithAnother(value));
   command('gitPro.compareWithRef', value => commands.compareWithRef(value));
   command('gitPro.mergeIntoCurrent', value => commands.integrate(value, 'merge'));
   command('gitPro.rebaseCurrentOnto', value => commands.integrate(value, 'rebase'));

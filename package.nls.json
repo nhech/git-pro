@@ -85,5 +85,9 @@
   "setting.gitPro.compare.defaultFilesMode.description": "Which file changes a branch comparison lists first.",
   "setting.gitPro.compare.defaultFilesMode.fork": "Since fork: what the compared branch changed since it diverged (from the merge base).",
   "setting.gitPro.compare.defaultFilesMode.tips": "Tip to tip: the direct difference between the two branch tips.",
-  "color.gitPro.accent.description": "Git Pro accent for the current branch and HEAD in History, the merge base and an in-progress rebase. Webviews read it as --vscode-gitPro-accent."
+  "color.gitPro.accent.description": "Git Pro accent for the current branch and HEAD in History, the merge base and an in-progress rebase. Webviews read it as --vscode-gitPro-accent.",
+  "command.gitPro.compareWithBranch.title": "Compare with Another Branch…",
+  "capabilities.untrustedWorkspaces.description": "Git Pro requires trust before reading Git configuration or running Git.",
+  "capabilities.virtualWorkspaces.description": "Git Pro requires a filesystem and Git executable.",
+  "viewsWelcome.repositories.contents": "Open a trusted folder containing a Git repository. Git Pro uses the built-in Git extension.\n[Refresh](command:gitPro.refresh)\n[Initialize Repository](command:gitPro.init) · [Clone Repository](command:gitPro.clone)"
 }

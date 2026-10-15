@@ -70,7 +70,10 @@ export interface StageBlobs { readonly path: string; readonly operation: GitOper
 export interface ConflictsApi {
   list(repositoryId: string, signal?: AbortSignal): Promise<ConflictList>;
   previewBatch(repositoryId: string, paths: readonly string[]): Promise<ConflictBatch>;
-  /** One step (owner decision Q2): per path `restore --ours|--theirs --worktree` then `add`, or `rm -f` when that side has no file, all in one guarded run; a failure after an earlier step took effect reports `partiallyApplied`. */
+  /**
+   * One step (owner decision Q2): per path `restore --ours|--theirs --worktree` then `add` at that side's file mode, or `rm -f` when that side has no file, all in
+   * one guarded run; a failure once anything took effect (restore replaces the files one by one) reports `partiallyApplied`.
+   */
   acceptSide(batch: ConflictBatch, side: ConflictSide): Promise<void>;
   /** `git add` in one guarded run after re-reading every path in the fresh snapshot; the whole batch is refused when any path has marker lines (N14) or is binary (N13). */
   markResolved(batch: ConflictBatch): Promise<void>;

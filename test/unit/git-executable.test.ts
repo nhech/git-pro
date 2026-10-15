@@ -15,10 +15,23 @@ test('public Git bare name resolves to a machine executable and absolute configu
   assert.equal(version.status, 0); assert.match(version.stdout, /^git version /);
 });
 
-test('Git discovery rejects wrappers, arbitrary names, relative or empty PATH entries and oversized input', async () => {
+test('Git discovery rejects wrappers, arbitrary names, a PATH without an absolute directory and oversized input', async () => {
   const env = { PATH: path.dirname(gitExecutable) };
   for (const name of ['git --version', './git', 'other-git', 'git\0', 'git\n', path.resolve('git.cmd'), path.resolve('git.bat'), path.resolve('git.ps1'), 'g'.repeat(32769)]) await assert.rejects(resolveGitExecutable(name, [], env), /absolute native Git path/);
-  for (const PATH of ['', '.', `${path.dirname(gitExecutable)}${path.delimiter}`, `.${path.delimiter}${path.dirname(gitExecutable)}`, 'a'.repeat(65537)]) await assert.rejects(resolveGitExecutable('git', [], { PATH }), /absolute native Git path/);
+  for (const PATH of ['', '.', `.${path.delimiter}`, `.${path.delimiter}node_modules${path.delimiter}.bin`, 'a'.repeat(65537), Array.from({ length: 257 }, () => path.dirname(gitExecutable)).join(path.delimiter)]) await assert.rejects(resolveGitExecutable('git', [], { PATH }), /absolute native Git path/);
+});
+
+test('Git discovery skips empty and relative PATH entries instead of failing the whole PATH, and never searches them', async () => {
+  const dir = path.dirname(gitExecutable), expected = await realpath(gitExecutable), delimiter = path.delimiter;
+  // A trailing or doubled separator and a relative entry are common on Linux; the absolute directory still finds Git.
+  for (const PATH of [`${dir}${delimiter}`, `${delimiter}${dir}`, `${dir}${delimiter}${delimiter}`, `.${delimiter}${dir}`, `./node_modules/.bin${delimiter}${dir}`]) assert.equal(await resolveGitExecutable('git', [], { PATH }), expected, PATH);
+  const f = await fixture();
+  try {
+    // A relative entry is not a way in: a repository that carries its own git/git.exe next to the current directory is not used.
+    const planted = path.join(f.root, process.platform === 'win32' ? 'git.exe' : 'git'); await writeFile(planted, 'not git'); await chmod(planted, 0o755).catch(() => undefined);
+    const previous = process.cwd(); process.chdir(f.root);
+    try { assert.equal(await resolveGitExecutable('git', [f.root], { PATH: `.${delimiter}${dir}` }), expected); } finally { process.chdir(previous); }
+  } finally { await f.cleanup(); }
 });
 
 test('Git discovery rejects the first workspace executable instead of switching to a later machine Git', async () => {

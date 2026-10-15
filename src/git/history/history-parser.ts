@@ -14,6 +14,8 @@ export function verifiedLinearPrefix(commits: readonly HistoryCommit[], tip: str
 export interface ChangedFile { path: string; originalPath?: string; status: string }
 export interface FileStat { path: string; originalPath?: string; added: number | null; removed: number | null }
 export function decode(buffer: Buffer): string { return new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
+/** Content that is not strict UTF-8, refused in words: text sides never alias such bytes through replacement characters. */
+export class NonUtf8Error extends Error {}
 export function parseComparisonCounts(buffer:Buffer):{left:number;right:number}{
   const match=/^(\d+)\s+(\d+)$/.exec(decode(buffer).trim());
   if(!match||!Number.isSafeInteger(Number(match[1]))||!Number.isSafeInteger(Number(match[2])))throw new Error('Invalid comparison commit counts.');

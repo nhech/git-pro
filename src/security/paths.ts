@@ -10,6 +10,19 @@ export function containsPath(parent: string, child: string): boolean {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
+/** A path part that names Git metadata: .git, and the aliases Windows resolves to it (".git " with a space, ".git." with a dot, an alternate data stream). */
+const gitMetadataName = /^\.git(?:[ .:]|$)/i;
+
+/**
+ * Refuses Git metadata as a working file, by name and by where the path really leads: a tracked symlink, a junction or an 8.3 short name (GIT~1)
+ * can lead into .git although no path part says so. Returns the canonical path for a later ownership check.
+ */
+export async function refuseGitMetadata(repo: { readonly gitDir: string; readonly commonDir: string }, relative: string, absolute: string): Promise<string> {
+  const canonical = await canonicalFilePath(absolute);
+  if (relative.split(/[\\/]/).some(part => gitMetadataName.test(part)) || containsPath(repo.gitDir, canonical) || containsPath(repo.commonDir, canonical)) throw new Error('Git metadata cannot be opened as a working file.');
+  return canonical;
+}
+
 /** Canonicalizes existing parents too, so deleted paths and Windows aliases resolve consistently. */
 export async function canonicalFilePath(file: string): Promise<string> {
   let ancestor = path.resolve(file);
@@ -65,12 +78,26 @@ export class PathPolicy {
     for (let start = 0; start < relatives.length; start += 64) result.push(...await Promise.all(relatives.slice(start, start + 64).map(relative => this.authorizeUnder(canonicalRoot, relative))));
     return result;
   }
-  private async authorizeUnder(canonicalRoot: string, relative: string): Promise<string> {
+  /**
+   * For paths handed to Git as entries to stage, unstage or discard. A symlink is itself the entry Git records (its link text, never its target),
+   * so only where the folder holding it leads must stay inside the repository; `authorizeFiles` also follows the link itself, as reading a file must.
+   */
+  async authorizeEntries(root: string, relatives: readonly string[]): Promise<string[]> {
+    const canonicalRoot = await this.authorizeRoot(root), result: string[] = [];
+    for (let start = 0; start < relatives.length; start += 64) result.push(...await Promise.all(relatives.slice(start, start + 64).map(relative => this.authorizeUnder(canonicalRoot, relative, false))));
+    return result;
+  }
+  private async authorizeUnder(canonicalRoot: string, relative: string, followLink = true): Promise<string> {
     if (!relative || relative.includes('\0') || path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) {
       throw new Error('Invalid repository-relative path.');
     }
     const target = path.resolve(canonicalRoot, relative);
     if (!containsPath(canonicalRoot, target)) throw new Error('File is outside the repository.');
+    if (!followLink && await lstat(target).then(info => info.isSymbolicLink(), () => false)) {
+      const parent = path.dirname(target);
+      if (parent !== canonicalRoot) await this.authorizeUnder(canonicalRoot, path.relative(canonicalRoot, parent));
+      this.checkTrust(); return target;
+    }
     // A removed file is valid; check its nearest existing ancestor before authorizing.
     let ancestor = target;
     for (;;) {

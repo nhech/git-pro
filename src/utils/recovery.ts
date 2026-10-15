@@ -1,4 +1,4 @@
-import { GitFailure, classifyGitDiagnostic } from '../git/git-error-parser';
+import { GitFailure, classifyGitDiagnostic, stoppedLockIn } from '../git/git-error-parser';
 import { redact } from '../security/redaction';
 export interface Recovery {message:string;diagnostic:string;label:string;command:string}
 /** Recovery buttons navigate or read; they never retry a mutation. */
@@ -7,20 +7,25 @@ export function recoveryFor(error:unknown):Recovery{
   const gitDiagnostic=error instanceof GitFailure||details&&['gitErrorCode','stderr','gitCommand','exitCode'].some(key=>key in details);
   // Public Git errors stringify stdout/command payloads. Keep only message and
   // bounded stderr for diagnostics/classification, never that serialized payload.
-  const original=redact(gitDiagnostic?(typeof details?.message==='string'?details.message:'Git failed.'):String(error)).slice(0,2000);
+  const original=redact(gitDiagnostic?(typeof details?.message==='string'?details.message:'Git failed.'):error instanceof Error?error.message:String(error)).slice(0,2000);
   const diagnostic=redact(`${original}${typeof details?.stderr==='string'?'\n'+details.stderr.slice(0,8192):''}`).slice(0,2000);
-  const kind=error instanceof GitFailure?error.kind:details?.gitErrorCode==='AuthenticationFailed'?'auth':classifyGitDiagnostic(`${original}\n${typeof details?.stderr==='string'?details.stderr.slice(0,8192):''}`);
+  const text=`${original}\n${typeof details?.stderr==='string'?details.stderr.slice(0,8192):''}`,classified=classifyGitDiagnostic(text);
+  // Git output is a conflict only in Git's own words; Git Pro's own guards ("Conflict markers remain in a.txt…") still lead to the Conflicts tab.
+  const kind=error instanceof GitFailure?error.kind:details?.gitErrorCode==='AuthenticationFailed'?'auth':!gitDiagnostic&&classified==='unknown'&&/conflict|unmerged/i.test(original)?'conflict':classified;
+  // A lock left by a Git process that Git Pro itself stopped: "busy with another operation" would send the user looking for one that does not exist.
+  const lock=error instanceof GitFailure&&(kind==='timeout'||kind==='cancelled'||kind==='output-limit')?error.lockFile:undefined,stopped=kind==='locked'?stoppedLockIn(text):undefined;
+  const removeLock='Check that no Git process is still running, then delete that file yourself. Git Pro will not remove lock files.';
   const summaries:Partial<Record<NonNullable<typeof kind>,string>>={
-    auth:'Git authentication failed.',signing:'Commit signing failed.',locked:'Git is busy with another operation.',
+    auth:'Git authentication failed.',signing:'Commit signing failed.',locked:stopped?`A Git process that Git Pro stopped earlier left the lock file ${redact(stopped)}.`:'Git is busy with another operation.',
     repository:'Git repository is unavailable.',conflict:'Git reported unresolved conflicts.',
     cancelled:'Git operation was canceled.',timeout:'Git operation timed out.',
     'output-limit':'Git output exceeded the limit.'
   };
-  const summary=summaries[kind??'unknown']??(gitDiagnostic?'Git could not complete the operation.':original);
+  const summary=(summaries[kind??'unknown']??(gitDiagnostic?'Git could not complete the operation.':original))+(lock?`\nGit Pro stopped the Git process, and it left the lock file ${redact(lock)}. ${removeLock}`:'');
   const guidance:Partial<Record<NonNullable<typeof kind>,string>>={
     auth:'Check repository access and your configured Git credential helper or SSH agent, then retry explicitly. Git Pro does not collect credentials.',
     signing:'Check your configured signing key, signer and agent or pinentry. Refresh and review Git state before retrying; Git Pro will not disable signing or automatically retry the commit.',
-    locked:'Finish the other Git operation. Git Pro will not remove lock files.',
+    locked:stopped?removeLock:'Finish the other Git operation. Git Pro will not remove lock files.',
     repository:'Open the repository in a trusted filesystem workspace and refresh.',
     conflict:'Review conflicts and stage resolutions before continuing. A failed stash pop retains its stash.',
     cancelled:'Git state may have changed before cancellation. Refresh and inspect before retrying.',

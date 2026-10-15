@@ -13,6 +13,8 @@ export function parseTags(buffer:Buffer):Tag[]{
   if(fields.at(-1)?.trim())throw new Error('Truncated tag records.');return result;
 }
 export function parseWorktrees(buffer:Buffer):Worktree[]{
+  // Git before 2.36 has no -z: the same records, each field ended by a newline. A path containing a newline then reads as an unknown field and is refused below.
+  if(buffer.length&&!buffer.includes(0))buffer=Buffer.from(buffer.map(byte=>byte===0x0a?0:byte));
   if(buffer.length&&buffer.at(-1)!==0)throw new Error('Truncated worktree records.');const result:Worktree[]=[];let current:Worktree|undefined;
   for(const field of decode(buffer).split('\0')){if(!field){if(current){result.push(current);current=undefined;}continue;}if(field.startsWith('worktree ')){if(current)throw new Error('Malformed worktree boundary.');current={path:field.slice(9),locked:false,prunable:false,bare:false};continue;}if(!current)throw new Error('Missing worktree path.');if(field.startsWith('HEAD '))current.head=validateOid(field.slice(5));else if(field.startsWith('branch '))current.branch=field.slice(7);else if(field==='bare')current.bare=true;else if(field==='locked'||field.startsWith('locked '))current.locked=true;else if(field==='prunable'||field.startsWith('prunable '))current.prunable=true;else if(field!=='detached')throw new Error('Unsupported worktree metadata.');}
   return result;

@@ -9,6 +9,7 @@ import {gitExecutable} from '../fixtures/repository-fixture';
 import {configureFixtureSigning} from '../fixtures/signing-fixture';
 import {GitExecutor} from '../../src/git/git-executor';
 import {GitFailure} from '../../src/git/git-error-parser';
+import {parseGitVersion} from '../../src/git/git-version';
 import {recoveryFor} from '../../src/utils/recovery';
 
 test('real loopback credential helper succeeds with terminal prompts disabled; missing/rejected auth stays safe',async()=>{
@@ -47,7 +48,9 @@ test('real loopback credential helper succeeds with terminal prompts disabled; m
   }finally{executor?.dispose();if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));await f.close();}
 });
 
-test('real SSH signed commit verifies; unavailable signing key preserves HEAD, index and signing requirement',async()=>{
+// SSH signing (gpg.format=ssh) is Git 2.34 and newer; Git Pro's own floor is lower, so older Git cannot run this scenario.
+const sshSigning=((v:{major:number;minor:number}|undefined)=>!v||v.major>2||v.minor>=34)(parseGitVersion(spawnSync(gitExecutable,['--version'],{windowsHide:true}).stdout.toString()));
+test('real SSH signed commit verifies; unavailable signing key preserves HEAD, index and signing requirement',{skip:sshSigning?false:'needs Git 2.34 for SSH signing'},async()=>{
   const f=await advancedFixture();try{
     await f.commit('signed.txt','base\n','base');const signing=await configureFixtureSigning(f.root,f.parent,args=>f.git(args),f.env);
     await writeFile(path.join(f.root,'signed.txt'),'signed\n');f.git(['add','signed.txt']);

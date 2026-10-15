@@ -51,7 +51,7 @@
     "applicationCategory": "DeveloperApplication",
     "applicationSubCategory": "Visual Studio Code extension",
     "softwareVersion": "{{VERSION}}",
-    "softwareRequirements": "Visual Studio Code 1.100.0 or newer, Git and the VS Code built-in Git extension",
+    "softwareRequirements": "Visual Studio Code 1.100.0 or newer, Git 2.32 or newer and the VS Code built-in Git extension",
     "url": "https://git-pro.longtd.me/",
     "image": "https://git-pro.longtd.me/og.jpg",
     "screenshot": "https://git-pro.longtd.me/images/changes-and-commit.jpg",
@@ -182,7 +182,7 @@
             <ul class="ticks" role="list">
               <li>Column-based History; the accent marks HEAD and the current branch</li>
               <li>Details with parent choice, changed files and containing refs</li>
-              <li>Compare with Current: commits on each side, files since the fork or tip to tip, and Open All Changes</li>
+              <li>Compare with Current or Compare with Another Branch…: commits on each side, files since the fork or tip to tip, and Open All Changes</li>
               <li>Show Diff with Working Tree, with Get from Branch for the files you choose</li>
               <li>File History follows renames across parents</li>
             </ul>
@@ -319,7 +319,7 @@
         <header class="section-head reveal">
           <p class="eyebrow">Get started</p>
           <h2 id="get-started-title">Install and make your first commit</h2>
-          <p class="section-lead">Git Pro {{VERSION}} needs VS&nbsp;Code 1.100 or newer, Git and the built-in Git extension.</p>
+          <p class="section-lead">Git Pro {{VERSION}} needs VS&nbsp;Code 1.100 or newer, Git 2.32 or newer and the built-in Git extension.</p>
         </header>
 
         <div class="gs-grid">
@@ -362,7 +362,7 @@
               <h3>Requirements</h3>
               <ul class="ticks" role="list">
                 <li>VS&nbsp;Code 1.100.0 or newer</li>
-                <li>Git available on the extension host</li>
+                <li>Git 2.32 or newer on the extension host</li>
                 <li>VS&nbsp;Code's built-in Git extension, enabled</li>
                 <li>A trusted filesystem workspace</li>
               </ul>
@@ -403,7 +403,7 @@
               </tbody>
             </table>
           </div>
-          <p>The <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/SETTINGS.md">Settings guide</a> lists all 17 settings with ranges and scopes. To change the accent color, set the theme color <code>gitPro.accent</code>:</p>
+          <p>The <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/SETTINGS.md">Settings guide</a> lists all {{SETTINGS_COUNT}} settings with ranges and scopes. To change the accent color, set the theme color <code>gitPro.accent</code>:</p>
           <div class="code-block">
             <pre><code>"workbench.colorCustomizations": {
   "gitPro.accent": "#3794ff"
@@ -442,7 +442,7 @@
           <details>
             <summary>What do I need to run it?</summary>
             <div class="faq-body">
-              <p>VS&nbsp;Code 1.100.0 or newer with the built-in Git extension enabled, Git available on the extension host, and a trusted filesystem workspace.</p>
+              <p>VS&nbsp;Code 1.100.0 or newer with the built-in Git extension enabled, Git 2.32 or newer on the extension host, and a trusted filesystem workspace.</p>
             </div>
           </details>
 

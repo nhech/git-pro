@@ -4,8 +4,8 @@ import { PathPolicy, canonicalFilePath, type WorktreeDestinationGrant } from '..
 import type { OperationSnapshot } from '../advanced/advanced.service';
 import { ToolsService } from './tools.service';
 import { buildToolsMutation, type ToolsMutation } from './tools-builders';
-import { parseStatus } from '../git-parser';
-import { detectOperation } from '../../state/operation-state';
+import { hasChanges, parseStatus } from '../git-parser';
+import { detectOperation, gitPseudoRefs } from '../../state/operation-state';
 type Command=Extract<ToolsMutation,{kind:'worktreeAdd'|'worktreeRemove'|'worktreePrune'}>;
 export interface WorktreePreview {snapshot:OperationSnapshot;command:Command;fingerprint:string;details:readonly string[]}
 
@@ -40,9 +40,9 @@ export class WorktreeService {
       if(selected.item.locked||selected.item.prunable)throw new Error('Locked or missing worktrees require native Git review.');
       const external=grant?await this.tools.advanced.git.executor.inspectLinkedWorktree(repo.root,destination,grant):undefined;
       const gitDir=external?.gitDir??(await this.tools.advanced.git.executor.read(destination,{kind:'metadata',field:'gitDir'})).stdout.toString('utf8').trim();
-      if(await detectOperation(gitDir)!=='idle')throw new Error('Finish the linked worktree Git operation before removal.');
+      if(await detectOperation(gitDir,gitPseudoRefs(this.tools.advanced.git.executor,destination))!=='idle')throw new Error('Finish the linked worktree Git operation before removal.');
       const status=external?.status??(await this.tools.advanced.git.executor.read(destination,{kind:'status'})).stdout;
-      if(parseStatus(status).changes.length)throw new Error('Worktree contains changes or untracked files. Commit or stash them first.');
+      if(hasChanges(parseStatus(status)))throw new Error('Worktree contains changes or untracked files. Commit or stash them first.');
       fingerprintParts.push(status.toString('base64'));details=[destination,selected.item.branch??'Detached HEAD'];
     }else{
       // Prune changes administrative records in the trusted owner's commonDir,

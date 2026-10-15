@@ -31,12 +31,25 @@ test('merge Continue commits an edited message with -m and Git\'s default cleanu
   const args = buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'continue', message });
   assert.deepEqual(args, [...mutation, 'commit', '-m', message]);
   assert.equal(args.some(arg => arg.startsWith('--cleanup')), false, '--cleanup=strip would delete "#123 fix"');
-  assert.deepEqual(buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'continue' }), [...mutation, 'commit', '--no-edit']);
+  assert.deepEqual(buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'continue' }), [...mutation, 'commit', '--no-edit', '--cleanup=strip'], 'Git\'s prepared message without its "# Conflicts:" comment block');
   assert.deepEqual(buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'abort' }), [...mutation, 'merge', '--abort']);
   assert.equal(buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'continue', message: 'x'.repeat(65536) }).at(-1)!.length, 65536);
   for (const bad of ['', '  \n\t', 'nul\0byte', 'x'.repeat(65537)]) assert.throws(() => buildAdvancedMutation({ kind: 'operationControl', operation: 'merging', action: 'continue', message: bad }), /merge message/);
   for (const [operation, action] of [['merging', 'abort'], ['rebasing', 'continue'], ['cherry-picking', 'continue'], ['reverting', 'skip']] as const)
     assert.throws(() => buildAdvancedMutation({ kind: 'operationControl', operation, action, message: 'reviewed' }), /only to continuing a merge/, `${operation} ${action}`);
+});
+
+test('a named merge keeps the pinned OID on the command line and names the branch as Git would in the message', () => {
+  const merge = (source: string, into?: string) => buildAdvancedMutation({ kind: 'merge', oid, strategy: 'ff', source, ...(into !== undefined ? { into } : {}) });
+  assert.deepEqual(merge('refs/heads/feature', 'main'), [...mutation, 'merge', '--ff', '--no-autostash', '--no-edit', '-m', "Merge branch 'feature'", oid]);
+  assert.deepEqual(merge('refs/heads/feature', 'master').slice(-2), ["Merge branch 'feature'", oid]);
+  assert.deepEqual(merge('refs/heads/feature', 'develop').slice(-2), ["Merge branch 'feature' into develop", oid]);
+  assert.deepEqual(merge('refs/remotes/origin/feature', 'main').slice(-2), ["Merge remote-tracking branch 'origin/feature'", oid]);
+  assert.deepEqual(merge('refs/heads/feature').slice(-2), ["Merge branch 'feature' into HEAD", oid], 'detached HEAD, as Git words it');
+  assert.equal(buildAdvancedMutation({ kind: 'merge', oid, strategy: 'ff' }).includes('-m'), false, 'Advanced Actions merges keep Git\'s own message');
+  for (const source of ['feature', 'refs/tags/v1', 'refs/heads/../x', 'refs/heads/-x', `refs/heads/a'\nb`]) assert.throws(() => merge(source, 'main'), /branch/, source);
+  assert.throws(() => merge('refs/heads/feature', 'bad name'), /branch name/);
+  assert.throws(() => buildAdvancedMutation({ kind: 'merge', oid, strategy: 'squash', source: 'refs/heads/feature' }), /squash/);
 });
 
 /** A Git process that records its stdin and exits 0. */

@@ -131,6 +131,27 @@ test('Compare states: same commit, notes, empty and omitted files, moved refs, e
   assert.equal(h.get('files-heading').textContent, 'fatal: bad revision'); assert.equal(h.get('open-all').disabled, true);
 });
 
+test('Compare explains withheld non-UTF-8 lists, shallow clones, vanished refs and a closed repository in words', () => {
+  const h = harness({ flat: true });
+  h.post(commitsState({ files: { scope: 'fork', from: oid(3), to: oid(1), total: 0, offset: 0, omitted: true, binary: 0, items: [], note: 'nonUtf8Path' } }));
+  assert.equal(h.get('files-empty').textContent, 'Some changed paths are not valid UTF-8, so the file list is unavailable here; use a terminal for this comparison.');
+  assert.equal(h.get('file-rows').hidden, true); assert.equal(h.get('open-all').disabled, true); assert.doesNotMatch(h.get('files-heading').textContent, /Too many/);
+  h.post(commitsState({ fork: { oid: null, multiple: false, shallow: true }, files: { scope: 'tips', from: oid(1), to: oid(2), total: 1, offset: 0, omitted: false, binary: 0, note: 'shallowHistory', items: [{ index: 0, status: 'M', path: 'a.txt', added: 1, removed: 1, binary: false }] } }));
+  assert.equal(h.get('summary').textContent, 'Fork point unknown (shallow clone) · feature +30 · main +0');
+  assert.match(h.get('files-heading').textContent, /This repository is a shallow clone, so the common ancestor and the commit counts may be incomplete; showing tip-to-tip file changes\./);
+  assert.doesNotMatch(h.get('files-heading').textContent, /No common ancestor/);
+  h.post(commitsState({ gone: ['feature'] }));
+  assert.equal(h.get('moved').hidden, false); assert.equal(h.get('moved-text').textContent, 'feature no longer resolves to a commit; the comparison keeps its pinned commits.');
+  assert.equal(h.get('moved-refresh').hidden, true, 'Refresh could only fail while a ref is gone');
+  h.post(commitsState({ moved: ['main'], gone: ['feature', 'topic'] }));
+  assert.equal(h.get('moved-text').textContent, 'main has moved since this comparison. feature, topic no longer resolve to commits; the comparison keeps its pinned commits.');
+  h.post(commitsState({ moved: ['main'] })); assert.equal(h.get('moved-refresh').hidden, false);
+  h.post(commitsState({ expired: true, moved: [] }));
+  assert.equal(h.get('moved').hidden, false); assert.equal(h.get('moved-text').textContent, 'This repository is no longer open in Git Pro, so this comparison cannot be refreshed. Open the repository again to continue.');
+  assert.equal(h.get('moved-refresh').hidden, true);
+  h.post(commitsState()); assert.equal(h.get('moved').hidden, true);
+});
+
 test('Working-tree mode shows the WebStorm header and colour legend, and Get from Branch acts on up to 100 selected indexes', () => {
   const h = harness({ flat: true });
   const state = { type: 'state', revision: 2, mode: 'worktree', left: { name: 'feature', oid: oid(1), current: false }, swapped: false, head: 'main', filesMode: 'fork', moved: [], loading: false,

@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const crypto = require('node:crypto');
 
 // The VS Code Marketplace listing. Change it here only: pages use the {{MARKETPLACE_URL}} placeholder.
 const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=longtd.git-pro';
@@ -16,8 +17,10 @@ const OG_IMAGE = { file: 'og.jpg', type: 'image/jpeg', width: 1200, height: 630 
 const root = path.resolve(__dirname, '..');
 const source = path.join(root, 'site');
 const output = path.join(root, 'site-dist');
-const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-const placeholders = { MARKETPLACE_URL, VERSION: version };
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const version = manifest.version;
+// Counted from the manifest, so the page never states a stale number of settings.
+const placeholders = { MARKETPLACE_URL, VERSION: version, SETTINGS_COUNT: String(Object.keys(manifest.contributes.configuration.properties).length) };
 const notDeployed = new Set(['og', 'deploy', 'README.md']); // top-level entries of site/ that stay source-only
 const screenshots = ['changes-and-commit', 'file-actions', 'history'];
 const templated = new Set(['.html', '.xml', '.txt', '.webmanifest']);
@@ -147,6 +150,15 @@ function build() {
         .replace(UNLISTED_BLOCK, (match, inner) => (MARKETPLACE_LISTED ? '' : inner));
       fs.writeFileSync(to, text);
     } else fs.copyFileSync(from, to);
+  }
+
+  // Cloudflare may keep CSS and JS at the edge for hours, so the URLs carry a content hash: a deploy never pairs new HTML with old assets.
+  for (const name of ['styles.css', 'main.js']) {
+    const hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(output, name))).digest('hex').slice(0, 10);
+    for (const page of fs.readdirSync(output).filter(file => file.endsWith('.html'))) {
+      const file = path.join(output, page);
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split(`"${name}"`).join(`"${name}?v=${hash}"`).split(`"/${name}"`).join(`"/${name}?v=${hash}"`));
+    }
   }
 
   const copies = [

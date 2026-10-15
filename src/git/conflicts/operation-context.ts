@@ -4,7 +4,7 @@ import type { AdvancedService } from '../advanced/advanced.service';
 import { parseStatus, type StatusSnapshot } from '../git-parser';
 import { GitFailure } from '../git-error-parser';
 import { decode, parseHistory } from '../history/history-parser';
-import { detectConflictOperation, rebasePaused, type GitOperation } from '../../state/operation-state';
+import { detectConflictOperation, gitPseudoRefs, readPseudoRef, rebasePaused, type GitOperation, type PseudoRef, type PseudoRefs } from '../../state/operation-state';
 import { boundedFile } from '../../utils/bounded-file';
 import { validateBranchName, validateOid } from '../../security/refs';
 import { redact } from '../../security/redaction';
@@ -22,6 +22,22 @@ async function metadata(gitDir: string, name: string, maximum = 4096): Promise<s
 async function oidFile(gitDir: string, name: string): Promise<string | undefined> {
   const value = (await metadata(gitDir, name))?.split(/\r?\n/)[0]?.trim();
   try { return value ? validateOid(value) : undefined; } catch { return undefined; }
+}
+/** A pseudo-ref's commit from its file or, in a reftable repository, from Git; anything else only drops that label. */
+async function pseudoOid(gitDir: string, name: PseudoRef, refs: PseudoRefs): Promise<string | undefined> {
+  const value = await readPseudoRef(gitDir, name, refs).catch((error: unknown) => { if (error instanceof GitFailure && error.kind === 'cancelled') throw error; return undefined; });
+  try { return value ? validateOid(value) : undefined; } catch { return undefined; }
+}
+/**
+ * Conflicts with no marker of their own: a terminal `stash apply`/`pop` leaves only its marker label, so the first few conflicted files are checked (1 MiB each).
+ * `authorize` maps a repository-relative path to the file to read.
+ */
+export async function hasStashMarkers(authorize: (file: string) => Promise<string>, status: StatusSnapshot): Promise<boolean> {
+  for (const change of status.changes.filter(item => item.group === 'conflicts').slice(0, 8)) {
+    try { if (stashLabel.test((await boundedFile(await authorize(change.path), 1024 * 1024)).toString('latin1'))) return true; }
+    catch { /* An unreadable file is no evidence either way. */ }
+  }
+  return false;
 }
 async function counter(gitDir: string, name: string): Promise<number | undefined> {
   const value = (await metadata(gitDir, name, 64))?.trim();
@@ -57,7 +73,8 @@ export class OperationContext implements OperationSummaryProvider {
   /** One status read and the operation markers; no fingerprint, so a banner refresh stays cheap. */
   async summary(repositoryId: string, signal?: AbortSignal): Promise<OperationSummary> {
     const repo = this.advanced.git.repository(repositoryId), options = signal ? { signal } : {};
-    const status = parseStatus((await this.advanced.git.executor.read(repo.root, { kind: 'status' }, options)).stdout), operation = await detectConflictOperation(repo.gitDir, () => status.changes.some(change => change.group === 'conflicts'));
+    const status = parseStatus((await this.advanced.git.executor.read(repo.root, { kind: 'status' }, options)).stdout);
+    const operation = await detectConflictOperation(repo.gitDir, () => status.changes.some(change => change.group === 'conflicts'), { refs: gitPseudoRefs(this.advanced.git.executor, repo.root, signal), stashMarkers: () => hasStashMarkers(file => this.advanced.git.authorizePath(repo.id, file), status) });
     const summary = await this.describe(repo, operation, status, {}, signal);
     if (this.advanced.git.repository(repositoryId) !== repo) throw new Error('Repository changed while reading the operation.');
     return summary;
@@ -66,7 +83,7 @@ export class OperationContext implements OperationSummaryProvider {
   async describe(repo: RepositoryDescriptor, operation: GitOperation, status: StatusSnapshot, hints: { readonly stashMarkers?: boolean } = {}, signal?: AbortSignal): Promise<OperationSummary> {
     const cancelled = () => { if (signal?.aborted) throw new GitFailure('cancelled', 'Operation summary cancelled.'); };
     cancelled();
-    const sides = sidesFor(operation), gitDir = repo.gitDir, conflicts = status.changes.filter(change => change.group === 'conflicts').length;
+    const sides = sidesFor(operation), gitDir = repo.gitDir, conflicts = status.changes.filter(change => change.group === 'conflicts').length, pseudoRefs = gitPseudoRefs(this.advanced.git.executor, repo.root, signal);
     // A cherry-pick, revert, merge or stash apply run at a rebase stop owns these conflicts (detectConflictOperation); HEAD is then detached on the rebased work.
     const paused = operation !== 'rebasing' && await rebasePaused(gitDir), rebased = paused ? headName(await metadata(gitDir, `${await rebaseDir(gitDir)}/head-name`)) : undefined;
     const branch = status.head && status.head !== '(detached)' ? status.head : undefined, head = status.oid;
@@ -79,7 +96,7 @@ export class OperationContext implements OperationSummaryProvider {
     } else if (operation === 'rebasing') {
       // REBASE_HEAD is the commit being replayed in either backend.
       const dir = await rebaseDir(gitDir), merge = dir === 'rebase-merge';
-      const original = headName(await metadata(gitDir, `${dir}/head-name`)), onto = await oidFile(gitDir, `${dir}/onto`), replayed = await oidFile(gitDir, 'REBASE_HEAD');
+      const original = headName(await metadata(gitDir, `${dir}/head-name`)), onto = await oidFile(gitDir, `${dir}/onto`), replayed = await pseudoOid(gitDir, 'REBASE_HEAD', pseudoRefs);
       const ontoRefs = await this.refs(repo, onto, signal), ontoName = ontoRefs[0] ?? (onto ? short(onto) : 'the upstream');
       const current = await counter(gitDir, `${dir}/${merge ? 'msgnum' : 'next'}`), total = await counter(gitDir, `${dir}/${merge ? 'end' : 'last'}`);
       if (current && total && current <= total) progress = { current, total };
@@ -89,7 +106,7 @@ export class OperationContext implements OperationSummaryProvider {
       yours = side('Yours', replayed ? `Rebasing ${short(replayed)} from ${original ?? 'the original branch'}` : `Commit being rebased from ${original ?? 'the original branch'}`, rebasedBranch, replayed, await this.subject(repo, replayed, signal));
       theirs = side('Theirs', `Already rebased commits and commits from ${ontoName}`, ontoRefs[0], head);
     } else if (operation === 'cherry-picking' || operation === 'reverting') {
-      const picking = operation === 'cherry-picking', commit = await oidFile(gitDir, picking ? 'CHERRY_PICK_HEAD' : 'REVERT_HEAD'), refs = await this.refs(repo, commit, signal);
+      const picking = operation === 'cherry-picking', commit = await pseudoOid(gitDir, picking ? 'CHERRY_PICK_HEAD' : 'REVERT_HEAD', pseudoRefs), refs = await this.refs(repo, commit, signal);
       const name = commit ? short(commit) : 'commits';
       title = picking ? `Cherry-picking ${name} onto ${here}` : `Reverting ${name} on ${here}`;
       theirs = side('Theirs', picking ? refs.join(', ') || `Commit ${name}` : `Before ${name} (the reverted commit)`, refs[0], commit, await this.subject(repo, commit, signal));
@@ -100,7 +117,7 @@ export class OperationContext implements OperationSummaryProvider {
         title = `Squash-merging ${name}`; theirs = side('Theirs', refs.join(', ') || name, refs[0], recorded.oid, await this.subject(repo, recorded.oid, signal)); source = recorded;
       } else if (recorded) {
         title = `Conflicts from applying ${recorded.selector} (stash kept)`; theirs = side('Theirs', `${recorded.selector} · Stashed changes`, recorded.selector, recorded.oid); source = recorded;
-      } else if (conflicts && (hints.stashMarkers ?? await this.stashMarkers(repo, status))) {
+      } else if (conflicts && (hints.stashMarkers ?? await hasStashMarkers(file => this.advanced.git.authorizePath(repo.id, file), status))) {
         title = 'Conflicts from applying a stash (stash kept)'; theirs = side('Theirs', 'Stashed changes'); source = Object.freeze({ kind: 'stashMarkers' as const });
       } else title = conflicts ? 'Unresolved conflicts' : 'No merge conflicts';
       if (paused) title += ` · rebase of ${rebased ?? 'detached HEAD'} paused`;
@@ -120,13 +137,5 @@ export class OperationContext implements OperationSummaryProvider {
     if (!oid) return;
     try { return parseHistory((await this.advanced.git.executor.read(repo.root, { kind: 'commitMetadata', oid }, { maxOutputBytes: 64 * 1024, ...(signal ? { signal } : {}) })).stdout)[0]?.subject.slice(0, 200); }
     catch (error) { if (error instanceof GitFailure && error.kind === 'cancelled') throw error; return; }
-  }
-  /** Idle conflicts with no record: a terminal `stash apply`/`pop` leaves only its marker label, so the first few conflicted files are checked (1 MiB each). */
-  private async stashMarkers(repo: RepositoryDescriptor, status: StatusSnapshot): Promise<boolean> {
-    for (const change of status.changes.filter(item => item.group === 'conflicts').slice(0, 8)) {
-      try { if (stashLabel.test((await boundedFile(await this.advanced.git.authorizePath(repo.id, change.path), 1024 * 1024)).toString('latin1'))) return true; }
-      catch { /* An unreadable file is no evidence either way. */ }
-    }
-    return false;
   }
 }

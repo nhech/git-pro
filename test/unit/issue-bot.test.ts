@@ -180,7 +180,7 @@ test('/needs-info, /triaged, /reopen, /label and /unlabel stay inside their limi
   assert.ok(labelsAdded(info.of('addLabels')).includes('needs-info'));
   assert.deepEqual(info.of('removeLabel').map(item => item.name), ['needs-triage']);
   const body = String(info.of('createComment')[0]!.body);
-  assert.ok(body.includes('14 days') && !body.includes('@everyone') && body.includes('@​everyone'), 'a note never pings anybody');
+  assert.ok(body.includes('21 days') && !body.includes('@everyone') && body.includes('@​everyone'), 'a note never pings anybody');
   const triaged = fakeGitHub();
   await bot.onIssueComment({ github: triaged.github, context: context('issue_comment', { action: 'created', issue: issue({ labels: [{ name: 'needs-triage' }] }), comment: comment('/triaged', 'OWNER') }) });
   assert.deepEqual(triaged.of('removeLabel').map(item => item.name), ['needs-triage']);
@@ -234,4 +234,14 @@ test('workflows never expand issue or comment text, declare permissions, and pin
   assert.match(botWorkflow, /github\.repository == 'nhech\/git-pro'/);
   assert.match(botWorkflow, /persist-credentials: false/);
   assert.doesNotMatch(botWorkflow, /pull_request_target/, 'the bot never runs code from a pull request');
+});
+
+test('area labels come from what the reporter wrote, not from the form dropdowns', async () => {
+  const body = bugBody({ 'Where is the workspace?': 'Remote - SSH', 'Steps to reproduce': '1. Commit with a message', 'Actual behavior': 'The commit box stays disabled' });
+  const fake = fakeGitHub();
+  await bot.onIssueOpened({ github: fake.github, context: context('issues', { action: 'opened', issue: issue({ title: 'Commit box stays disabled', body }) }) });
+  const added = labelsAdded(fake.of('addLabels'));
+  assert.ok(added.includes('area: commit'));
+  assert.ok(!added.includes('area: tools'), 'the Remote - SSH choice is not a remote-tools report');
+  assert.deepEqual(bot.areaLabels('Crash', 'A plain body about stash handling'), ['area: tools'], 'an issue without a form is still read as a whole');
 });

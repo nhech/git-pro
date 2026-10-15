@@ -2,6 +2,7 @@ import { AdvancedService, type OperationSnapshot } from '../advanced/advanced.se
 import { parseStashes, parseTags, parseWorktrees, type Stash, type Tag } from './tools-parser';
 import { buildToolsMutation, type ToolsMutation, type ToolsRead } from './tools-builders';
 import { decode, parseChangedFiles } from '../history/history-parser';
+import { hasChanges } from '../git-parser';
 import type { ReadCommand } from '../command-builders';
 import { validateBranchName, validateOid } from '../../security/refs';
 import { validateRemoteUrl } from '../../security/remotes';
@@ -42,8 +43,8 @@ export class ToolsService {
     if(command.kind==='stashCreate'&&!snapshot.head)throw new Error('Create a first commit before stashing.');
     // Stashing untracked files removes them afterwards, which would delete files outside the repository through the link.
     if(command.kind==='stashCreate'&&command.untracked&&snapshot.external.length)throw new Error(`Untracked ${snapshot.external[0]} is reached through a link outside the repository. Remove the link or stash tracked files only.`);
-    if(command.kind==='stashBranch'&&snapshot.status.changes.length)throw new Error('Stash Branch requires a clean working tree.');
-    if((command.kind==='tagCheckout'||command.kind==='tagBranch')&&snapshot.status.changes.length)throw new Error('Commit or stash local changes before checking out a tag.');
+    if(command.kind==='stashBranch'&&hasChanges(snapshot.status))throw new Error('Stash Branch requires a clean working tree.');
+    if((command.kind==='tagCheckout'||command.kind==='tagBranch')&&hasChanges(snapshot.status))throw new Error('Commit or stash local changes before checking out a tag.');
     if(command.kind==='stashDrop'||command.kind==='stashBranch'){const list=await this.stashes(id),selected=list.find(item=>item.selector===command.selector);if(!selected||selected.oid!==command.expected)throw new Error('Stash selector changed. Refresh and select again.');if(list.filter(item=>item.oid===selected.oid).length!==1)throw new Error('Duplicate stash identity requires native Git review.');}
     if(command.kind==='stashApply'&&!(await this.stashes(id)).some(stash=>stash.oid===command.oid))throw new Error('Select an existing stash OID.');
     if(command.kind==='tagCreate'&&(await this.tags(id)).some(tag=>tag.name===command.name))throw new Error('Tag already exists.');

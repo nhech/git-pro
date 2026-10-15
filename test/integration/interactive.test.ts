@@ -72,3 +72,30 @@ test('owned editors work when core.commentChar is not "#" and keep "#" lines of 
     assert.match(f.git(['log','-1','--format=%B',`HEAD~1`]),/#456 stays/);
   }finally{await f.close();}
 });
+test('a reworded message keeps every line that starts with "#" under the default comment character',async()=>{
+  const f=await setup();try{
+    const preview=await f.interactive.preview(f.id,f.root),steps:RebaseStep[]=preview.commits.map(commit=>({oid:commit.oid,action:'pick'}));
+    const message='#42 hotfix for the parser\n\nSee #43 too\n# heading\n  #44 indented';
+    steps[1]={oid:f.b,action:'reword',message};
+    await f.interactive.execute(preview,steps);assert.equal((await f.advanced.snapshot(f.id)).operation,'idle');
+    assert.equal(f.git(['log','-1','--format=%B','HEAD~1']).trim(),message,'nothing was stripped');
+    assert.equal(f.git(['config','--default','unset','--get','core.commentChar']).trim(),'unset','the repository setting is untouched; the character applies to the rebase only');
+  }finally{await f.close();}
+});
+test('the comment character survives an edit stop: a later reword in the same rebase still keeps its "#" lines',async()=>{
+  const f=await setup();try{
+    const preview=await f.interactive.preview(f.id,f.root),message='#7 after the stop\n\n# kept too';
+    await f.interactive.execute(preview,[{oid:f.a,action:'edit'},{oid:f.b,action:'reword',message},{oid:f.c,action:'pick'}]);assert.equal((await f.advanced.snapshot(f.id)).operation,'rebasing');
+    const restarted=new InteractiveService(f.advanced,f.storage,f.editor,f.journal);f.advanced.setEditorJobs(restarted);
+    assert.ok((await restarted.resume(f.id))?.commentChar,'the persisted plan carries the character for the continue');
+    await f.advanced.control(await f.advanced.snapshot(f.id),'continue');assert.equal((await f.advanced.snapshot(f.id)).operation,'idle');
+    assert.equal(f.git(['log','-1','--format=%B','HEAD~1']).trim(),message);
+  }finally{await f.close();}
+});
+test('a plan that rewords nothing leaves Git comment handling alone, and the character avoids every reworded line start',async()=>{
+  const {rebaseCommentChar}=await import('../../src/git/rebase/rebase-plan');
+  assert.equal(rebaseCommentChar([{oid:'a'.repeat(40),action:'pick'}]),undefined);
+  assert.equal(rebaseCommentChar([{oid:'a'.repeat(40),action:'reword',message:'plain'}]),';');
+  assert.equal(rebaseCommentChar([{oid:'a'.repeat(40),action:'reword',message:'; one\n  @ two\nthree'}]),'!','skips characters a line starts with, indentation ignored');
+  assert.throws(()=>rebaseCommentChar([{oid:'a'.repeat(40),action:'reword',message:[';','@','!','%','^','~','|',':',',','+','=','`','"',"'"].join('\n')}]),/native Git/);
+});

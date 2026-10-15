@@ -2,8 +2,10 @@ import { mkdir, writeFile, realpath, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { AdvancedService, type OperationSnapshot } from '../advanced/advanced.service';
-import { validateRebasePlan, type RebaseStep, type LinearCommit } from './rebase-plan';
+import { validateRebasePlan, rebaseCommentChar, type RebaseStep, type LinearCommit } from './rebase-plan';
+import { rebaseCommentChars } from '../advanced/advanced-builders';
 import { validateOid } from '../../security/refs';
+import { hasChanges } from '../git-parser';
 import { decode, parseRangeMessages } from '../history/history-parser';
 import { detectOperation } from '../../state/operation-state';
 import { boundedFile } from '../../utils/bounded-file';
@@ -16,7 +18,7 @@ export class InteractiveService {
   constructor(private readonly advanced:AdvancedService,private readonly storage:string,private readonly editor:OwnedEditor,private readonly journal:RebaseJournal){}
   async preview(id:string,ref:string):Promise<InteractivePreview>{
     const snapshot=await this.advanced.snapshot(id),base=await this.advanced.resolve(id,ref);
-    if(snapshot.operation!=='idle'||!snapshot.head||snapshot.status.changes.length)throw new Error('Interactive rebase requires a clean committed repository.');
+    if(snapshot.operation!=='idle'||!snapshot.head||hasChanges(snapshot.status))throw new Error('Interactive rebase requires a clean committed repository.');
     const repo=this.advanced.git.repository(id),raw=decode((await this.advanced.git.executor.read(repo.root,{kind:'linearRange',base,tip:snapshot.head})).stdout).trim().split('\n').filter(Boolean);
     if(!raw.length||raw.length>200)throw new Error('Choose a range of 1–200 commits after the base.');
     let parent=base;const chain:{oid:string;parent:string}[]=[];
@@ -42,12 +44,14 @@ export class InteractiveService {
   async execute(preview:InteractivePreview,steps:readonly RebaseStep[]):Promise<void>{
     if(!this.previews.has(preview))throw new Error('Rebase preview expired.');validateRebasePlan(preview.commits,steps);
     const frozen=steps.map(step=>({oid:step.oid,action:step.action,...(step.action==='reword'?{message:step.message}:{})}));
+    // Chosen before anything starts: Git would otherwise drop reworded lines that begin with '#'.
+    const commentChar=rebaseCommentChar(steps),comment=commentChar===undefined?{}:{commentChar};
     await this.advanced.guarded(preview.snapshot,async repo=>{
       this.previews.delete(preview);await this.cleanup(repo.id);if(await this.journal.get(repo.id))throw new Error('An owned rebase job already exists. Resume or abort it first.');
       await mkdir(this.storage,{recursive:true});const token=randomUUID(),directory=path.join(await realpath(this.storage),token);await mkdir(directory);
       const info:RebaseJobInfo={directory,token,base:preview.base,tip:preview.snapshot.head!,repositoryId:repo.id},file=path.join(directory,'plan.json');
-      await writeFile(file,JSON.stringify({token,gitDir:repo.gitDir,steps:frozen}),{encoding:'utf8',flag:'wx',mode:0o600});await this.journal.put(repo.id,info);
-      try{await this.advanced.git.executor.mutate(repo.root,{kind:'interactiveRebase',base:preview.base},{editorJob:{...this.editor,file,token}});}finally{await this.cleanup(repo.id);}
+      await writeFile(file,JSON.stringify({token,gitDir:repo.gitDir,steps:frozen,...comment}),{encoding:'utf8',flag:'wx',mode:0o600});await this.journal.put(repo.id,info);
+      try{await this.advanced.git.executor.mutate(repo.root,{kind:'interactiveRebase',base:preview.base,...comment},{editorJob:{...this.editor,file,token,...comment}});}finally{await this.cleanup(repo.id);}
     });
   }
   private async owned(job:RebaseJobInfo,id:string):Promise<string>{
@@ -62,7 +66,9 @@ export class InteractiveService {
     if(await detectOperation(repo.gitDir)!=='rebasing')return;
     const original=decode(await boundedFile(path.join(repo.gitDir,'rebase-merge','orig-head'),1024)).trim(),onto=decode(await boundedFile(path.join(repo.gitDir,'rebase-merge','onto'),1024)).trim();
     if(original!==job.tip||onto!==job.base)throw new Error('Active rebase differs from the persisted plan. Use native Git to review this state.');
-    return {...this.editor,file:path.join(directory,'plan.json'),token:job.token};
+    // The comment character was fixed when the plan was made; a later reword in this rebase must strip with the same one.
+    const file=path.join(directory,'plan.json'),commentChar=(JSON.parse(decode(await boundedFile(file,1024*1024))) as {commentChar?:unknown}).commentChar;
+    return {...this.editor,file,token:job.token,...(typeof commentChar==='string'&&rebaseCommentChars.includes(commentChar)?{commentChar}:{})};
   }
   async cleanup(id:string):Promise<void>{
     const job=await this.journal.get(id);if(!job||await detectOperation(this.advanced.git.repository(id).gitDir)==='rebasing')return;

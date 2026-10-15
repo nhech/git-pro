@@ -18,7 +18,8 @@
   };
   const updateButtons = () => {
     document.body.setAttribute('aria-busy', String(busy));
-    const disabled = busy || !repositoryId || !staged || !element('message').value.trim() || operation !== 'idle';
+    // Amend with nothing staged rewrites only the message of the last commit.
+    const disabled = busy || !repositoryId || (!staged && !element('amend').checked) || !element('message').value.trim() || operation !== 'idle';
     element('commit').disabled = disabled; element('push').disabled = disabled;
     element('commit-label').textContent = busy ? 'Committing…' : 'Commit';
     for (const id of ['message', 'history', 'clearHistory', 'amend', 'signoff', 'noVerify']) element(id).disabled = busy || !repositoryId;
@@ -31,7 +32,7 @@
     const flags = document.getElementById('option-flags');
     if (flags) { flags.textContent = selected.join(' · '); flags.hidden = !selected.length; }
   };
-  for (const id of ['amend', 'signoff', 'noVerify']) element(id).addEventListener('change', updateOptions);
+  for (const id of ['amend', 'signoff', 'noVerify']) element(id).addEventListener('change', () => { updateOptions(); updateButtons(); });
   // As in native Source Control: Ctrl+Enter (⌘Enter on macOS) commits from the message box, and the placeholder names the branch.
   const mac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
   const setPlaceholder = branch => { element('message').placeholder = `Message (${mac ? '⌘Enter' : 'Ctrl+Enter'} to commit${branch ? ` on '${branch}'` : ''})`; };

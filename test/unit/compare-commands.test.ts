@@ -64,7 +64,7 @@ function compareHarness(head = 'main') {
 test('registerCompare publishes the Compare tab through the trusted wrapper and withdraws it on disposal', () => {
   const h = compareHarness();
   try {
-    assert.deepEqual([...h.commands.keys()].sort(), ['gitPro.compareBranches', 'gitPro.compareWithCurrent', 'gitPro.compareWithRef', 'gitPro.diffWithWorkingTree', 'gitPro.mergeIntoCurrent', 'gitPro.rebaseCurrentOnto']);
+    assert.deepEqual([...h.commands.keys()].sort(), ['gitPro.compareBranches', 'gitPro.compareWithBranch', 'gitPro.compareWithCurrent', 'gitPro.compareWithRef', 'gitPro.diffWithWorkingTree', 'gitPro.mergeIntoCurrent', 'gitPro.rebaseCurrentOnto']);
     assert.equal(h.deps.surfaces.compare, h.surface);
     for (const disposable of h.context.subscriptions) disposable.dispose();
     assert.equal(h.surface.disposed, 1); assert.equal(h.deps.surfaces.compare, undefined);
@@ -127,6 +127,49 @@ test('Compare Branches needs exactly two branches of one repository and keeps th
   } finally { h.cleanup(); }
 });
 
+test('Compare with Another Branch works from any branch, lists the others with the checked-out one first, and keeps the checked-out branch on the right', async () => {
+  const h = compareHarness();
+  try {
+    const labelsOf = (items: Pick[]) => plain(items.map(item => item.label));
+    // A local branch: the choice list leaves out the branch itself and offers the current branch, remote branches and tags.
+    h.state.pick = items => items.find(item => item.label === 'origin/main');
+    await h.run('gitPro.compareWithBranch', node(branch('feature')));
+    assert.deepEqual(labelsOf(h.picks.at(-1)!.items), ['main', 'origin/main', 'v1.0']);
+    assert.equal(h.picks.at(-1)!.title, 'Compare feature with…');
+    assert.equal(h.picks.at(-1)!.items[0]!.description, 'Current branch');
+    // Choosing the checked-out branch puts it on the right.
+    h.state.pick = items => items.find(item => item.label === 'main');
+    await h.run('gitPro.compareWithBranch', node(branch('feature')));
+    // The checked-out branch itself: the other branch goes on the left. A remote branch and a tag work as well.
+    h.state.pick = items => items.find(item => item.label === 'feature');
+    await h.run('gitPro.compareWithBranch', node(branch('main')));
+    assert.deepEqual(labelsOf(h.picks.at(-1)!.items), ['feature', 'origin/main', 'v1.0']);
+    h.state.pick = items => items.find(item => item.label === 'main');
+    await h.run('gitPro.compareWithBranch', node(branch('origin/main', true)));
+    h.state.pick = items => items.find(item => item.label === 'v1.0');
+    await h.run('gitPro.compareWithBranch', node(branch('feature')));
+    assert.deepEqual(h.surface.refs, [
+      ['owned', 'refs/heads/feature', 'refs/remotes/origin/main'], ['owned', 'refs/heads/feature', 'refs/heads/main'], ['owned', 'refs/heads/feature', 'refs/heads/main'],
+      ['owned', 'refs/remotes/origin/main', 'refs/heads/main'], ['owned', 'refs/heads/feature', 'refs/tags/v1.0']]);
+    // Dismissing the list opens nothing; a branch of a repository that closed is refused.
+    h.state.pick = () => undefined; const before = h.surface.refs.length;
+    await h.run('gitPro.compareWithBranch', node(branch('feature')));
+    assert.equal(h.surface.refs.length, before);
+    await assert.rejects(h.run('gitPro.compareWithBranch', node(branch('feature'), 'closed')), /no longer open/);
+    // From the palette no branch is given, so both sides are picked, the second list without the first choice.
+    const picked: string[] = [];
+    h.state.pick = items => { const choice = items.find(item => item.label === (picked.length === 0 ? 'origin/main' : 'main')); picked.push(choice!.label); return choice; };
+    await h.run('gitPro.compareWithBranch');
+    assert.deepEqual(picked, ['origin/main', 'main']);
+    assert.deepEqual(labelsOf(h.picks.at(-1)!.items), ['main', 'feature', 'v1.0']);
+    assert.deepEqual(h.surface.refs.at(-1), ['owned', 'refs/remotes/origin/main', 'refs/heads/main']);
+    // A node whose ref does not match its name is not trusted: the palette path asks for both sides instead.
+    h.surface.refs.length = 0; picked.length = 0;
+    await h.run('gitPro.compareWithBranch', node({ ...branch('feature'), ref: 'refs/heads/other' }));
+    assert.deepEqual(picked, ['origin/main', 'main']);
+  } finally { h.cleanup(); }
+});
+
 test('Compare with Branch or Tag shows the ref blob against the editable file, current first, and explains a file missing in the ref', async () => {
   const h = compareHarness();
   try {
@@ -155,7 +198,7 @@ test('Merge into Current and Rebase Current onto This pin the branch OID, reuse 
     const feature = node(branch('feature', false, oid('b')));
     h.state.resolved.set('refs/heads/feature', oid('b'));
     await h.run('gitPro.mergeIntoCurrent', feature);
-    assert.deepEqual(plain(h.previews), [{ kind: 'merge', oid: oid('b'), strategy: 'ff' }]);
+    assert.deepEqual(plain(h.previews), [{ kind: 'merge', oid: oid('b'), strategy: 'ff', source: 'refs/heads/feature' }], 'the OID is pinned and the branch is named so the message reads "Merge branch \'feature\'"');
     const merge = h.warnings[0]!;
     assert.equal(merge.text, 'Merge feature into main?'); assert.deepEqual(merge.choices, ['Merge']);
     assert.match(merge.detail, new RegExp(`^${h.root.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\nHEAD: ${oid('c')}\\nTarget: feature \\(${oid('b')}\\)\\n1 changed files between HEAD and target\\nsrc/a\\.ts\\nLocal changes: 0`));
@@ -180,13 +223,13 @@ function getFromBranchHarness() {
   const trees = new Map([['keep.txt', blob('keep.txt')], ['old.txt', blob('old.txt')], ['link', `120000 blob ${oid('2')}\tlink`], ['sub', `160000 commit ${oid('3')}\tsub`], ['dir', `040000 tree ${oid('4')}\tdir`]]);
   const documents: { uri: { scheme: string; fsPath: string }; isDirty: boolean }[] = [], warnings: { text: string; detail: string; choices: string[] }[] = [];
   const state = { confirm: 'Get from Branch' as string | undefined, onModal: undefined as (() => void) | undefined, previewError: undefined as Error | undefined, restoreError: undefined as Error | undefined,
-    conflicts: false, merging: new Set<string>(), tracked: new Set(['keep.txt', 'new.txt', 'added.txt']), previews: [] as { paths: string[] }[], restores: [] as unknown[][] };
+    conflicts: false, changes: [] as { group: string; status: string; path: string; originalPath?: string }[], merging: new Set<string>(), tracked: new Set(['keep.txt', 'new.txt', 'added.txt']), previews: [] as { paths: string[] }[], restores: [] as unknown[][] };
   // Merge editors are tabs whose input has base, input1, input2 and result (TabInputTextMerge, duck-typed).
   const uri = (fsPath: string) => ({ scheme: 'file', fsPath }), tabGroups = { get all() { return [{ tabs: [...state.merging].map(file => ({ input: { base: uri('b'), input1: uri('1'), input2: uri('2'), result: uri(file) } })) }]; } };
   const git = { repository: () => repo, authorizePath: async (_id: string, file: string) => path.join(root, file),
     preview: async (repositoryId: string, paths: readonly string[]) => {
       if (state.previewError) throw state.previewError;
-      const preview = { repositoryId, paths: [...paths], status: { changes: state.conflicts ? [{ group: 'conflicts', path: 'x.txt' }] : [] } }; state.previews.push(preview); return preview;
+      const preview = { repositoryId, paths: [...paths], status: { changes: state.conflicts ? [{ group: 'conflicts', path: 'x.txt' }] : state.changes } }; state.previews.push(preview); return preview;
     },
     restoreFromSource: async (preview: unknown, at: string) => { if (state.restoreError) throw state.restoreError; state.restores.push([preview, at]); } };
   const vscode = { workspace: { textDocuments: documents }, window: { tabGroups, showWarningMessage: async (text: string, options: { detail: string }, ...choices: string[]) => { warnings.push({ text, detail: options.detail, choices }); state.onModal?.(); return state.confirm; } } };
@@ -243,6 +286,21 @@ test('Get from Branch refuses a path the index does not track but the disk has: 
     await assert.rejects(h.run(rows), /old\.txt is not tracked by Git/, 'the branch-side path of a rename is checked too');
     assert.deepEqual(h.warnings, [], 'no modal offers it'); assert.deepEqual(h.state.restores, []);
     h.state.tracked.add('old.txt'); assert.equal(await h.run([{ status: 'M', path: 'old.txt' }]), true, 'a tracked file is replaced as reviewed');
+  } finally { h.cleanup(); }
+});
+
+test('Get from Branch refuses an intent-to-add file before the modal: the index lists it, but holds none of its content', async () => {
+  const h = getFromBranchHarness();
+  try {
+    // `git add -N added.txt`: ls-files lists it (so it counts as tracked), and status reports it as added in the working tree.
+    h.state.changes = [{ group: 'working', status: 'A', path: 'added.txt' }, { group: 'working', status: 'M', path: 'keep.txt' }];
+    await assert.rejects(h.run(rows), /added\.txt is only marked for adding \(git add -N\)\. Get from Branch would overwrite or delete it, and Git keeps no copy to restore it from\. Stage it, or move it first\./);
+    // Paired with a deleted file, status shows it as the target of a working-tree rename instead.
+    h.state.changes = [{ group: 'working', status: 'R', path: 'new.txt', originalPath: 'old.txt' }];
+    await assert.rejects(h.run(rows), /new\.txt is only marked for adding/);
+    assert.deepEqual(h.warnings, [], 'no modal offers it'); assert.deepEqual(h.state.restores, []);
+    h.state.changes = [{ group: 'staged', status: 'A', path: 'added.txt' }, { group: 'working', status: 'M', path: 'added.txt' }];
+    assert.equal(await h.run(rows), true, 'a staged addition holds its content in the index and is replaced as reviewed');
   } finally { h.cleanup(); }
 });
 

@@ -84,7 +84,7 @@ export class CommitComposer implements vscode.WebviewViewProvider, vscode.Dispos
     const config=vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)),limit=boundedInteger(config.get('commit.subjectLimit'),72,20,200),historyLimit=boundedInteger(config.get('commit.messageHistoryLimit'),20,0,100);
     await this.view.webview.postMessage({ type: 'state', session: this.session, repositoryId: repo.id, repository: redact(repo.root),
       message: this.drafts.get(repo.id) ?? this.context.workspaceState.get(this.key(repo.id), ''),
-      staged: snapshot?.changes.filter(change => change.group === 'staged').length ?? 0, busy: this.busy,
+      staged: (snapshot?.changes.filter(change => change.group === 'staged').length ?? 0) + (snapshot?.omitted?.filter(change => change.group === 'staged').length ?? 0), busy: this.busy,
       operation: snapshot?.operation ?? 'idle', subjectLimit: limit,
       history: this.context.workspaceState.get<string[]>(`gitPro.messages:${repo.id}`, []).slice(0,historyLimit),
       // The placeholder names the branch, as native Source Control does; detached HEAD shows none.

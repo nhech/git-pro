@@ -5,10 +5,10 @@ This page lists what Git Pro requires and the limits it has today. Report proble
 ## Requirements
 
 - VS Code 1.100.0 or newer with the built-in Git extension enabled.
-- Git available on the extension host.
+- Git 2.32 or newer on the extension host. With an older Git, Git Pro says so and stays inactive instead of failing action by action. Git before 2.36 cannot report a worktree whose folder name contains a line break, and Git Pro refuses such a list rather than misreading it.
 - A trusted filesystem workspace. Browser and virtual workspaces are unsupported.
 
-Git identity, authentication and signing use the configured Git environment. Remote workspaces require Git and credentials on the remote host. Remote WSL and Dev Containers have not completed release validation.
+Git identity, authentication and signing use the configured Git environment. SSH commit signing needs Git 2.34 or newer, which is Git's own requirement. Remote workspaces require Git and credentials on the remote host. Remote WSL and Dev Containers have not completed release validation.
 
 ## Workflow limits
 

@@ -4,17 +4,19 @@ import { PathPolicy } from '../security/paths';
 
 /** Bounded scan; .git may be a directory or linked-worktree/submodule file. */
 export async function discoverRepositories(roots: readonly string[], policy: PathPolicy,
-  options: { maxDirectories?: number; maxDepth?: number; signal?: AbortSignal } = {}): Promise<string[]> {
+  options: { maxDirectories?: number; maxDepth?: number; ignoredFolders?: readonly string[]; signal?: AbortSignal } = {}): Promise<string[]> {
   const queue = roots.map(root => ({ root, depth: 0 }));
   const result: string[] = []; const seen = new Set<string>(); let visited = 0;
-  const ignored = new Set(['.git', 'node_modules', '.vscode-test', 'dist', '.test-build', '.next']);
+  const ignored = new Set(['.git', 'node_modules', '.vscode-test', 'dist', '.test-build', '.next', ...(options.ignoredFolders ?? [])]);
   while (queue.length && visited < (options.maxDirectories ?? 200)) {
     if (options.signal?.aborted) break;
     const entry = queue.shift()!;
-    const root = await policy.authorizeRoot(entry.root);
-    if (seen.has(root)) continue;
+    // One folder that cannot be authorized or read (a root-owned Docker volume, a removed folder) must not hide the repositories found elsewhere.
+    const root = await policy.authorizeRoot(entry.root).catch(() => undefined);
+    if (!root || seen.has(root)) continue;
     seen.add(root); visited++;
-    const children = await readdir(root, { withFileTypes: true });
+    const children = await readdir(root, { withFileTypes: true }).catch(() => undefined);
+    if (!children) continue;
     if (children.some(child => child.name === '.git' && !child.isSymbolicLink())) result.push(root);
     if (entry.depth < (options.maxDepth ?? 3)) {
       for (const child of children) if (child.isDirectory() && !child.isSymbolicLink() && !ignored.has(child.name)) {

@@ -150,3 +150,11 @@ test('Changes rows never wait long for a slow operation summary and pick up its 
   assert.ok(calls.length>=2&&calls.length<=3,'one re-render once the summary arrives');
   h.panel.dispose();
 });
+
+test('the Changes view allows scripts by nonce only, never by origin', async () => {
+  const h = await conflictHarness('fixture-missing', 'merging', [{ group: 'conflicts', path: 'a.ts', status: 'UU' }]);
+  const html = h.view.webview.html;
+  assert.match(html, /script-src 'nonce-[0-9a-f]{32}';/);
+  assert.doesNotMatch(html, /script-src[^;]*owned:/, 'the webview origin must not be a script source');
+  h.panel.dispose();
+});

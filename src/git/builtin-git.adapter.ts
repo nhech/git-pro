@@ -61,7 +61,7 @@ export class BuiltinGitAdapter implements vscode.Disposable {
       stage: async (root, paths) => { await (await this.repository(root)).add([...paths]); },
       commit: async (root, message, options) => {
         const repo = await this.repository(root); await repo.status();
-        if (!repo.state.indexChanges.length) throw new Error('Stage changes before committing.');
+        if (!options.amend && !repo.state.indexChanges.length) throw new Error('Stage changes before committing.');
         await repo.commit(message, { ...options, all: false, postCommitCommand: null });
       },
       fetch: async (root, remote) => { await (await this.repository(root)).fetch(remote ? { remote } : {}); },
@@ -75,7 +75,10 @@ export class BuiltinGitAdapter implements vscode.Disposable {
     };
   }
   async init(root: string): Promise<void> {
-    if (!this.api) throw new Error('Enable Git first.'); await this.api.init(vscode.Uri.file(root), { defaultBranch: 'main' });
+    if (!this.api) throw new Error('Enable Git first.');
+    // The built-in `git.init` honours git.defaultBranchName (default "main"); an empty value defers to Git's own init.defaultBranch, so nothing is passed then.
+    const configured = vscode.workspace.getConfiguration('git').get<string>('defaultBranchName', 'main').trim();
+    await this.api.init(vscode.Uri.file(root), configured ? { defaultBranch: configured } : undefined);
   }
   async clone(): Promise<void> {
     // Baseline API has no clone method. Invoke the user-facing built-in workflow

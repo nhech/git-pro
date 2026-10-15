@@ -15,17 +15,19 @@
   const shownRows=()=>items.filter(visible).slice(0,visibleCount);
   const action=(name,key,keys)=>{if(!busy)send({type:'action',action:name,...(key?{key}:{}),...(keys?{keys}:{})});};
   const selectionNodes=()=>[...selected].map(key=>rowByKey.get(key)).filter(Boolean);
+  // The working tree can only report a file as Added, Renamed or Copied when it was added with `git add -N`: Git keeps no copy of its content, so a discard would only empty it.
+  const discardable=row=>row.group==='working'&&(row.kind==='folder'||!['Added','Renamed','Copied'].includes(row.status));
   const canMutate=(name,nodes)=>{
     if(conflictActions.has(name))return nodes.length>0&&nodes.length<=100&&nodes.every(row=>row.kind==='file'&&row.group==='conflicts');
     const compatible=nodes.length>0&&(nodes.every(row=>row.kind==='file')||nodes.length===1&&nodes[0].kind==='folder');
-    return compatible&&nodes.every(row=>name==='stage'?['working','untracked'].includes(row.group):name==='unstage'?row.group==='staged':row.group==='working');
+    return compatible&&nodes.every(row=>name==='stage'?['working','untracked'].includes(row.group):name==='unstage'?row.group==='staged':discardable(row));
   };
   const contextActions=row=>{
     if(row.kind==='group')return row.group==='staged'?[['unstageAll','Unstage Staged Changes']]:['working','untracked'].includes(row.group)?[['stageAll',`Stage ${row.label}`]]:row.group==='conflicts'?[['openConflicts','Resolve Conflicts…']]:[];
     if(row.kind==='folder')return row.group==='staged'?[['unstage','Unstage Folder']]:row.group==='working'?[['stage','Stage Folder'],['discard','Discard Folder']]:row.group==='untracked'?[['stage','Stage Folder']]:[];
     if(row.kind!=='file')return[];
     if(row.group==='conflicts')return[...(row.conflict?.mergeable?[['merge','Merge…']]:[]),['acceptYours','Accept Yours'],['acceptTheirs','Accept Theirs'],['openConflicts','Open in Conflicts'],['resolve','Resolve Conflict'],['history','File History'],['copyPath','Copy Relative Path']];
-    const result=[['diff','Diff']];if(row.group==='staged')result.push(['unstage','Unstage']);if(['working','untracked'].includes(row.group))result.push(['stage','Stage']);result.push(['history','File History'],['copyPath','Copy Relative Path']);if(row.group==='working')result.push(['discard','Discard']);return result;
+    const result=[['diff','Diff']];if(row.group==='staged')result.push(['unstage','Unstage']);if(['working','untracked'].includes(row.group))result.push(['stage','Stage']);result.push(['history','File History'],['copyPath','Copy Relative Path']);if(discardable(row))result.push(['discard','Discard']);return result;
   };
   // Inline row actions, as in native Source Control: shown on hover, focus and selection. Each one is also in the context menu.
   const inlineActions=row=>{
@@ -37,7 +39,7 @@
     if(row.group==='conflicts')return[...(row.conflict?.workingFile===false?[]:[['open','Open File']]),row.conflict?.mergeable?['merge','Merge…']:['openConflicts','Open in Conflicts']];
     if(row.group!=='untracked')result.push(['diff','Open Changes']);
     if(!deleted)result.push(['open','Open File']);
-    if(row.group==='working')result.push(['discard','Discard Changes']);
+    if(discardable(row))result.push(['discard','Discard Changes']);
     result.push(row.group==='staged'?['unstage','Unstage Changes']:['stage','Stage Changes']);return result;
   };
   // File-type glyphs in the spirit of the Seti icon theme. Static text and vectors only; the type comes from the name's extension.

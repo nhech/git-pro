@@ -67,7 +67,9 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   }
   const shown=(menu:string,command:string,context:Record<string,unknown>)=>menus[menu]!.filter(item=>item.command===command).some(item=>item.when===undefined||when(item.when,context));
   const palette=(command:string,context:Record<string,unknown>)=>{const item=menus.commandPalette!.find(entry=>entry.command===command);return !item?.when||when(item.when,context);};
-  const argumentOnly=['gitPro.conflicts.acceptYours','gitPro.conflicts.acceptTheirs','gitPro.conflicts.merge','gitPro.compareBranches','gitPro.mergeIntoCurrent','gitPro.rebaseCurrentOnto'];
+  const argumentOnly=['gitPro.conflicts.acceptYours','gitPro.conflicts.acceptTheirs','gitPro.conflicts.merge','gitPro.compareBranches','gitPro.mergeIntoCurrent','gitPro.rebaseCurrentOnto',
+    // Menu-only: each needs the tree item or folder it was invoked on, so from the palette it would do nothing useful.
+    'gitPro.openFile','gitPro.stageFolder','gitPro.unstageFolder','gitPro.discardFolder'];
   assert.deepEqual(menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command).sort(),[...argumentOnly].sort(),'argument-only commands are hidden from the palette');
   for(const id of ['gitPro.conflicts.open','gitPro.operation.menu','gitPro.compareWithCurrent','gitPro.diffWithWorkingTree','gitPro.compareWithRef'])assert.ok(palette(id,{}),`${id} stays in the palette`);
   const merging={'gitPro.operation':'merging','gitPro.hasConflicts':true},rebasing={'gitPro.operation':'rebasing'},idle={'gitPro.operation':'idle'};
@@ -100,4 +102,36 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   assert.deepEqual([settings['gitPro.compare.defaultFilesMode']?.enum,settings['gitPro.compare.defaultFilesMode']?.default],[['fork','tips'],'fork']);
   for(const id of ['gitPro.conflicts.autoOpen','gitPro.conflicts.groupByDirectory','gitPro.compare.defaultFilesMode'])assert.equal(settings[id]?.scope,'resource',id);
   assert.equal(settings['gitPro.mergeEditor.sideOrder'],undefined,'Pane order is fixed to Yours | Result | Theirs in v1');
+});
+
+test('the Branches view context menu offers Compare with Another Branch… for local, remote and the checked-out branch, and the others only where they apply',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8')) as {contributes:{menus:Record<string,{command:string;when?:string;group?:string}[]>}};
+  const entries=manifest.contributes.menus['view/item/context']!;
+  const shows=(command:string,viewItem:string)=>entries.filter(entry=>entry.command===command).some(entry=>{
+    const pattern=/viewItem =~ \/(.+?)\/(?= |$)/.exec(entry.when??'');
+    return entry.when?.includes('view == gitPro.branchesView')===true&&entry.when.includes('!listMultiSelection')&&(!pattern||new RegExp(pattern[1]!).test(viewItem));
+  });
+  for(const viewItem of ['gitPro.branch.local','gitPro.branch.remote','gitPro.branch.current'])assert.ok(shows('gitPro.compareWithBranch',viewItem),`Compare with Another Branch… is offered on ${viewItem}`);
+  for(const command of ['gitPro.compareWithCurrent','gitPro.diffWithWorkingTree','gitPro.mergeIntoCurrent','gitPro.rebaseCurrentOnto']){
+    assert.ok(shows(command,'gitPro.branch.local')&&shows(command,'gitPro.branch.remote'),`${command} is offered on other branches`);
+    assert.ok(!shows(command,'gitPro.branch.current'),`${command} is hidden on the checked-out branch`);
+  }
+  assert.ok(!shows('gitPro.compareWithBranch','gitPro.tools'),'it is not offered on other views\' items');
+  assert.ok(!shows('gitPro.compareWithBranch','gitProXbranchXlocal'),'the dots of the context pattern are escaped, not wildcards');
+});
+
+test('the Branches view title offers Search, Fetch and Refresh for open repositories',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8')) as {contributes:{menus:Record<string,{command:string;when?:string;group?:string}[]>}};
+  const title=manifest.contributes.menus['view/title']!.filter(entry=>entry.when?.includes('view == gitPro.branchesView')===true);
+  assert.deepEqual(title.map(entry=>entry.command).sort(),['gitPro.branches','gitPro.fetch','gitPro.refresh']);
+  assert.ok(title.every(entry=>/^navigation(@\d+)?$/.test(entry.group??'')),'all three are icon buttons');
+  for(const command of ['gitPro.fetch','gitPro.refresh'])assert.ok(title.find(entry=>entry.command===command)?.when?.includes('gitPro.hasRepositories'),`${command} needs an open repository`);
+});
+
+test('the welcome text and the workspace capability notes are localizable, not literal',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8')) as {capabilities:Record<string,{description?:string}>;contributes:{viewsWelcome:{contents:string}[]}};
+  const messages=JSON.parse(readFileSync('package.nls.json','utf8')) as Record<string,string>;
+  const texts=[...Object.values(manifest.capabilities).map(entry=>entry.description??''),...manifest.contributes.viewsWelcome.map(entry=>entry.contents)];
+  assert.equal(texts.length,3);
+  for(const text of texts){assert.match(text,/^%[\w.]+%$/,`${text} is an nls reference`);assert.ok(messages[text.slice(1,-1)]?.trim());}
 });

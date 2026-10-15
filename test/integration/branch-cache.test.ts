@@ -10,9 +10,15 @@ import {spawn} from 'node:child_process';
 import {silentLogger} from '../../src/utils/logging';
 test('bounded display branch cache is immutable and fresh safety reads see external ref updates',async()=>{
   const f=await advancedFixture();try{
-    const first=await f.commit('file.txt','first\n','first');f.git(['branch','topic']);const cached=await f.gitService.branchSearchSnapshot(f.id);assert.equal(cached.find(branch=>branch.name==='topic')!.oid,first);
-    const second=await f.commit('file.txt','second\n','second');f.git(['update-ref','refs/heads/topic',second]);assert.equal((await f.gitService.branchSearchSnapshot(f.id)).find(branch=>branch.name==='topic')!.oid,first);
+    const first=await f.commit('file.txt','first\n','first');f.git(['branch','topic']);
+    // A commit through the service refreshes the repository, which drops the display cache; take the cached read after it.
+    const second=await f.commit('file.txt','second\n','second');const cached=await f.gitService.branchSearchSnapshot(f.id);assert.equal(cached.find(branch=>branch.name==='topic')!.oid,first);
+    // Whether a display read still shares the cached snapshot after an external ref change depends on the file watcher's timing (it invalidates the repository),
+    // which test/unit/git-service-branch-cache.test.ts pins deterministically; what must hold in every case is that the safety read is fresh.
+    f.git(['update-ref','refs/heads/topic',second]);
     assert.equal((await f.gitService.branches(f.id)).find(branch=>branch.name==='topic')!.oid,second);assert.throws(()=>{(cached[0]! as {oid:string}).oid=second;});
+    // Refresh (and the trailing reload after ref activity) invalidates the repository, so the next display read sees the external update.
+    await f.gitService.registry.refresh(f.id);assert.equal((await f.gitService.branchSearchSnapshot(f.id)).find(branch=>branch.name==='topic')!.oid,second);
   }finally{await f.close();}
 });
 

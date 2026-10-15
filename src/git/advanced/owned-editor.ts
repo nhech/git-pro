@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 export interface OwnedEditor { node: string; helper: string }
-export interface EditorJob extends OwnedEditor {file:string;token:string}
+/** `commentChar` is the character the rebase's Git processes treat as a comment (see `rebaseCommentChar`); absent when Git's own setting stands. */
+export interface EditorJob extends OwnedEditor {file:string;token:string;commentChar?:string}
 /** Git interprets editor values through its shell; quote only host-owned paths. */
 export function editorCommand(editor: OwnedEditor,job?:{file:string;token:string;mode:'sequence'|'message'}): string {
   const quote = (value: string) => {

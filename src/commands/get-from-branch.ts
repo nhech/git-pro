@@ -4,6 +4,7 @@ import type { FeatureDeps } from '../conflicts/surfaces';
 import { decode, type ChangedFile } from '../git/history/history-parser';
 import { chunkPaths } from '../git/argv-chunks';
 import { parseIndex } from '../git/conflicts/index-parser';
+import { intentToAdd } from '../git/git.service';
 import { refuseUnsaved } from '../editor/open-files';
 import { redact } from '../security/redaction';
 import { validateOid } from '../security/refs';
@@ -45,6 +46,9 @@ export async function getFromBranch(deps: Pick<FeatureDeps, 'git' | 'executor'>,
   // Idle state, authorised files of this repository, and a fingerprint of their working content that the restore re-checks.
   const preview = await deps.git.preview(repo.id, paths);
   if (preview.status.changes.some(change => change.group === 'conflicts')) throw new Error('Resolve the current conflicts before getting files from a branch.');
+  // `git add -N` puts a path in the index (so it counted as tracked above) with none of its content: the same loss, which the restore also refuses.
+  const intended = intentToAdd(preview.status, paths);
+  if (intended.length) throw new Error(`${redact(intended[0]!)} is only marked for adding (git add -N)${intended.length > 1 ? ` (and ${intended.length - 1} more)` : ''}. Get from Branch would overwrite or delete it, and Git keeps no copy to restore it from. Stage it, or move it first.`);
   // N12: Git reads and writes these files on disk, so never under an unsaved editor or an open merge editor of any of them.
   await refuseUnsaved(targets);
   const restored = paths.filter(file => !absent.has(file)), removed = paths.filter(file => absent.has(file));

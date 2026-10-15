@@ -24,6 +24,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-2. Codicons 0.0.45 (media/codicons/codicon.ttf and media/codicons/codicon.css), https://github.com/microsoft/vscode-codicons
+2. Codicons 0.0.45 (media/codicons/codicon.ttf and media/codicons/codicon.css, plus four adapted files), https://github.com/microsoft/vscode-codicons
 
-Copyright (c) Microsoft Corporation. The icons are licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/. The stylesheet is licensed under the MIT License above. The files are included unmodified.
+Copyright (c) Microsoft Corporation. The icons are licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/. The stylesheet is licensed under the MIT License above. The font and stylesheet are included unmodified.
+
+Changes made: media/operation-icons/git-merge-light.svg, git-merge-dark.svg, git-compare-light.svg and git-compare-dark.svg are adapted from the Codicons git-merge and git-compare icons. The path data is unchanged; only the fill colour was changed from currentColor to #424242 (light) and #C5C5C5 (dark).

@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { BuiltinGitAdapter } from './git/builtin-git.adapter';
 import { GitExecutor } from './git/git-executor';
 import { resolveGitExecutable } from './git/git-executable';
-import { PathPolicy, canonicalFilePath } from './security/paths';
+import { atLeast, minimumGit, readGitVersion } from './git/git-version';
+import { PathPolicy, canonicalFilePath, refuseGitMetadata } from './security/paths';
 import { redact } from './security/redaction';
 import { RepositoryRegistry } from './repositories/repository-registry';
 import { discoverRepositories } from './repositories/repository-discovery';
@@ -76,6 +77,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     let gitExecutable: string;
     try { gitExecutable = await resolveGitExecutable(adapter.executable, roots()); policy.checkTrust(); }
     catch (error) { logger.error(String(error)); unavailable('Git could not be started. See the Git Pro output, then reload the window.'); return; }
+    // Below the minimum, committing, pulling and History fail on the first revision Git Pro passes; say so once instead of failing action by action.
+    const gitVersion = await readGitVersion(gitExecutable);
+    if (gitVersion && !atLeast(gitVersion, minimumGit)) {
+      logger.error(`Git ${gitVersion.text} is older than the ${minimumGit.major}.${minimumGit.minor} that Git Pro needs.`);
+      unavailable(`Git ${gitVersion.text} is too old. Git Pro needs Git ${minimumGit.major}.${minimumGit.minor} or newer. Update Git, then reload the window.`); return;
+    }
     const executor = new GitExecutor(gitExecutable, policy, logger, undefined, process.env, {node:process.execPath,helper:vscode.Uri.joinPath(context.extensionUri,'media','helpers','preserve-editor.cjs').fsPath},()=>{
       const config=vscode.workspace.getConfiguration('gitPro');
       return {readTimeoutMs:boundedInteger(config.get('cli.readTimeout'),15,5,600)*1000,mutationTimeoutMs:boundedInteger(config.get('cli.timeout'),120,15,600)*1000,networkTimeoutMs:boundedInteger(config.get('cli.networkTimeout'),180,30,900)*1000};
@@ -83,7 +90,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const store = new RepositoryStore();
     // Polling is only a safety net behind the built-in Git API events, so it pauses while the window is unfocused and catches up on focus.
     const registry = new RepositoryRegistry(policy, executor, store, logger, 5000, { isActive: () => vscode.window.state.focused, isBusy: repo => coordinator.busy(repo.commonDir) });
-    const coordinator = new OperationCoordinator(() => { policy.checkTrust(); if (!adapter.enabled) throw new Error('Built-in Git is disabled.'); });
+    // Enablement is checked before trust: git.enabled=false is folded into the trust policy, and would otherwise be reported as an untrusted workspace.
+    const coordinator = new OperationCoordinator(() => { if (!adapter.enabled) throw new Error('Built-in Git is disabled.'); policy.checkTrust(); });
     const providers = { repositories: new RepositoriesProvider(registry), changes: new ChangesProvider(registry) };
     // One late-bound holder: the register* calls below fill in the feature surfaces these constructors use.
     const surfaces = createSurfaces();
@@ -123,7 +131,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       vscode.window.registerWebviewViewProvider('gitPro.commitView', composer));
     const command = (id: string, action: (...args: unknown[]) => Promise<unknown>) => {
       context.subscriptions.push(vscode.commands.registerCommand(id, async (...args: unknown[]) => {
-        try { policy.checkTrust(); if (!adapter.enabled) throw new Error('Enable the built-in Git extension first.'); return await action(...args); }
+        try { if (!adapter.enabled) throw new Error('Enable the built-in Git extension first.'); policy.checkTrust(); return await action(...args); }
         catch (error) {
           const recovery=recoveryFor(error);logger.error(recovery.diagnostic);
           // GitFailure names no repository; every Git Pro mutation acts on the active one, and its refresh has run before the rejection arrives here.
@@ -164,8 +172,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       historyPanels.open(repo.id,undefined,selected.map(item=>item.ref).join('\n'));
     });
     command('gitPro.toggleBlame', async () => {
-      const configuration = vscode.workspace.getConfiguration('gitPro');
-      await configuration.update('blame.enabled', !configuration.get('blame.enabled', false), vscode.ConfigurationTarget.Workspace);
+      // blame.enabled is resource-scoped, so read it for the active file and write it where it already lives: a folder or workspace value that exists stays
+      // the effective one, and otherwise the user settings are used, so the toggle never creates or edits the repository's own .vscode/settings.json.
+      const configuration = vscode.workspace.getConfiguration('gitPro', vscode.window.activeTextEditor?.document.uri), inspected = configuration.inspect<boolean>('blame.enabled');
+      const target = inspected?.workspaceFolderValue !== undefined ? vscode.ConfigurationTarget.WorkspaceFolder : inspected?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+      await configuration.update('blame.enabled', !configuration.get('blame.enabled', false), target);
     });
     command('gitPro.openBlameCommit',async()=>blame.openCurrentCommit());
     command('gitPro.fileHistory', async uri => {
@@ -185,6 +196,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       const repo = registry.list().find(item => item.id === id);
       if (!repo) throw new Error('Repository is no longer open.');
       const file = await policy.authorizeFile(repo.root, relative);
+      await refuseGitMetadata(repo, relative, file);
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
     const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,surfaces};
@@ -204,9 +216,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       vscode.window.onDidChangeWindowState(state => { if (state.focused) registry.wake(); }));
     await synchronize();
     try {
-      for (const root of await discoverRepositories(roots(), policy, { signal: lifetime.signal })) {
-        if (lifetime.signal.aborted) break;
-        await adapter.open(root);
+      // The built-in Git's own scan settings decide whether and how deep nested repositories are looked for, so Git Pro never opens (and thereby auto-fetches)
+      // repositories the user chose not to detect: only `true` and `subFolders` scan sub-folders, the depth is git.repositoryScanMaxDepth (capped), and
+      // git.repositoryScanIgnoredFolders is honoured.
+      const git = vscode.workspace.getConfiguration('git'), detection = git.get<boolean | string>('autoRepositoryDetection', true);
+      if (detection === true || detection === 'subFolders') {
+        const configured = git.get<number>('repositoryScanMaxDepth', 1), ignoredFolders = git.get<unknown>('repositoryScanIgnoredFolders', ['node_modules']);
+        for (const root of await discoverRepositories(roots(), policy, { signal: lifetime.signal, maxDepth: configured < 0 ? 3 : Math.min(configured, 3),
+          ignoredFolders: Array.isArray(ignoredFolders) ? ignoredFolders.filter((name): name is string => typeof name === 'string') : [] })) {
+          if (lifetime.signal.aborted) break;
+          await adapter.open(root);
+        }
       }
       await synchronize();
     } catch (error) { logger.error(String(error)); }
