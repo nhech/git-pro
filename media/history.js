@@ -217,7 +217,9 @@
       toggle.addEventListener('click', () => { if (busy) return; comparisonExpanded = !comparisonExpanded; remember();workspace.className = comparisonExpanded ? 'split comparing' : 'split'; toggle.textContent = comparisonExpanded ? 'Show History' : 'Expand Compare'; if (comparisonExpanded) heading.focus(); else viewport.focus(); }); details.append(toolbar);
       const short = value => /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(String(value)) ? String(value).slice(0, 8) : String(value), range = text(details, 'p', `${short(item.result.from)} → ${short(item.result.to)}`); range.title = `${item.result.from} → ${item.result.to}`;
       const sides = document.createElement('div'); sides.className = 'comparison-sides'; for (const [label, side] of [['Left only', 'left'], ['Right only', 'right']]) { const card = document.createElement('section'); card.className = 'comparison-side'; card.setAttribute('aria-label', label); sides.append(card); showSide(card, label, side, item.result[`${side}Commits`], item.result[`${side}Count`], item.result[`${side}Offset`]); } details.append(sides);
-      text(details, 'h3', 'Changed files'); showFiles(item.result.files, item.result.stats, scope);
+      text(details, 'h3', 'Changed files');
+      if (item.result.filesNote === 'nonUtf8Path') text(details, 'p', 'Some changed paths are not valid UTF-8, so the file list is unavailable here. Use native Git to review this comparison.').className = 'refs-note';
+      else showFiles(item.result.files, item.result.stats, scope);
     }
     if (item.type === 'cancelled') { status.textContent = item.message; status.className = ''; }
     if (item.type === 'error') { status.textContent = item.message; status.className = 'error'; }

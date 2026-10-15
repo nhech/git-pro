@@ -57,7 +57,7 @@ export function integrationDetail(deps: Pick<FeatureDeps, 'git'>, preview: Advan
   const local = preview.snapshot.status.changes.map(change => `${change.group}: ${change.path}`);
   const rebase = preview.rebaseContext ? `\nLocal-only commits: ${preview.rebaseContext.localCount} · first ${preview.rebaseContext.candidates.length} shown\n${preview.rebaseContext.candidates.map(commit => `${commit.oid.slice(0, 10)} ${commit.subject.slice(0, 200)}`).join('\n')}\nTopology context: Git may flatten merges or skip equivalent commits.` : '';
   const merge = preview.mergeContext ? `\nTopology: ${preview.mergeContext.headOnly} HEAD-only / ${preview.mergeContext.targetOnly} target-only commits\nResulting history depends on the selected merge strategy.` : '';
-  return redact(`${deps.git.repository(preview.snapshot.repositoryId).root}\nHEAD: ${preview.snapshot.head}\nTarget: ${target}\n${preview.files.length} changed files between HEAD and target\n${preview.files.slice(0, 20).map(file => file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0, 20).join('\n')}${rebase}${merge}`);
+  return redact(`${deps.git.repository(preview.snapshot.repositoryId).root}\nHEAD: ${preview.snapshot.head}\nTarget: ${target}\n${preview.filesNote ? 'Changed files are not listed: some paths are not valid UTF-8' : `${preview.files.length} changed files between HEAD and target`}\n${preview.files.slice(0, 20).map(file => file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0, 20).join('\n')}${rebase}${merge}`);
 }
 
 /** Compare entry points (§3.7–§3.9) and Merge into Current / Rebase Current onto This (owner decision Q3), all behind the trusted wrapper. */

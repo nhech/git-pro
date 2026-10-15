@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { loadWithVscode } from './compare-loader';
 import { NonUtf8Error } from '../../src/git/history/history-parser';
+import { LinkOutsideError } from '../../src/security/paths';
 
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const LEFT = oid(1), RIGHT = oid(2), BASE = oid(3), MOVED = oid(4);
@@ -63,7 +64,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   };
   const deps = {
     registry: { list: () => [...open], store: { get: () => ({ head: options.head ?? 'main' }) }, onDidInvalidate: (listener: () => void) => { invalidate = listener; return { dispose: () => undefined }; }, resolveFile: async () => repo },
-    history, policy: { authorizeFile: async (base: string, relative: string) => path.join(base, ...relative.split('/')) },
+    history, policy: { authorizeFile: async (base: string, relative: string) => { if (relative === 'outlink') throw new LinkOutsideError(); return path.join(base, ...relative.split('/')); } },
     revisions: { add: (content: Buffer, label: string) => ({ ...uri('git-pro-revision', `/${label}`), label, content: content.toString() }) },
     historyPanels: { open: (...args: unknown[]) => { histories.push(args); } },
     git: { branchSearchSnapshot: async () => [{ name: 'feature', oid: oid(10), ref: 'refs/heads/feature', remote: false, upstream: '', worktree: '' }] }, tools: { tags: async () => [{ name: 'v1', oid: oid(11), target: oid(11), annotated: false }] }
@@ -234,7 +235,7 @@ test('Working files must be regular files of this repository, never symlinks or 
 });
 
 test('A path that leads into .git through a link (a tracked symlink or junction, or a Windows 8.3 name) is refused as Git metadata', async () => {
-  const h = await harness({ files: { scope: 'tips', from: LEFT, to: RIGHT, files: [{ status: 'M', path: 'link/config' }, { status: 'M', path: 'GIT~1/config' }, { status: 'M', path: 'plain/config' }], stats: [], omitted: false } });
+  const h = await harness({ files: { scope: 'tips', from: LEFT, to: RIGHT, files: [{ status: 'M', path: 'link/config' }, { status: 'M', path: 'plain/config' }], stats: [], omitted: false } });
   try {
     // The working tree has a link named `link` to .git (the repository root of the harness is already canonical); a ref supplied `link/config`.
     await mkdir(path.join(h.root, '.git'), { recursive: true }); await writeFile(path.join(h.root, '.git', 'config'), '[core]\n');
@@ -245,7 +246,7 @@ test('A path that leads into .git through a link (a tracked symlink or junction,
       await panel.send({ type, revision, index: 0 }); assert.match(String(panel.last('error')?.message), /Git metadata/, `${type} must refuse link/config`);
     }
     // The same file outside .git is still an ordinary working file.
-    await panel.send({ type: 'openFile', revision, index: 2 });
+    await panel.send({ type: 'openFile', revision, index: 1 });
     assert.ok(h.executed.some(args => args[0] === 'vscode.open' && /plain[\\/]config$/.test(String((args[1] as { fsPath?: string }).fsPath))), 'a regular working file keeps opening');
   } finally { await h.cleanup(); }
 });
@@ -310,21 +311,35 @@ test('Open All Changes in working-tree mode leaves out submodules, symlinks and 
   } finally { await only.cleanup(); }
 });
 
+test('A tracked link that leads out of the repository is left out of Open All like any other symlink, not a failure of the whole action', async () => {
+  const entries = [{ status: 'M', path: 'README.md' }, { status: 'T', path: 'outlink' }];
+  const h = await harness({ worktree: { scope: 'worktree', from: LEFT, to: undefined, files: entries, stats: entries.map(entry => ({ path: entry.path, added: 1, removed: 1 })), omitted: false } });
+  try {
+    await h.surface.openWorktree('repo', 'feature'); const panel = h.panels[0]!;
+    await panel.send({ type: 'openAll', revision: panel.state.revision });
+    assert.equal(panel.last('error'), undefined, String(panel.last('error')?.message));
+    const resources = h.executed.at(-1)![2] as [Uri, Uri | undefined, Uri | undefined][];
+    assert.deepEqual(Array.from(resources, resource => path.relative(h.root, resource[0].fsPath!).replace(/\\/g, '/')), ['README.md']);
+    assert.equal(panel.last('notice')?.message, 'Left out 1 file that has no regular working file (a symlink, submodule, nested repository or Git metadata); use native Git for it.');
+  } finally { await h.cleanup(); }
+});
+
 test('A closed repository marks the tab expired instead of reporting moved refs; a ref that no longer resolves is reported as gone', async () => {
   const h = await harness();
-  const wait = () => new Promise(resolve => setTimeout(resolve, 900));
+  // The panel re-checks its refs after a debounce; polling a bounded time is steadier than guessing how long that takes on a busy CI machine.
+  const until = async (check: () => boolean) => { for (let attempt = 0; attempt < 100 && !check(); attempt++) await new Promise(resolve => setTimeout(resolve, 50)); };
   try {
     await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
-    h.refs.delete('feature'); h.invalidate(); await wait();
+    h.refs.delete('feature'); h.invalidate(); await until(() => (panel.state.gone as unknown[]).length === 1);
     assert.deepEqual(panel.state.moved, [], 'A deleted branch did not move'); assert.deepEqual(panel.state.gone, ['feature']); assert.equal(panel.state.expired, undefined);
-    h.refs.set('feature', LEFT); h.invalidate(); await wait(); assert.deepEqual(panel.state.gone, []);
+    h.refs.set('feature', LEFT); h.invalidate(); await until(() => (panel.state.gone as unknown[]).length === 0); assert.deepEqual(panel.state.gone, []);
     const resolve = h.history.resolveRef; h.history.resolveRef = async () => { throw new Error('Repository is no longer open.'); };
-    h.close(); h.invalidate(); await wait();
+    h.close(); h.invalidate(); await until(() => panel.state.expired === true);
     assert.equal(panel.state.expired, true); assert.deepEqual(panel.state.moved, [], 'Closing the repository moves no ref'); assert.deepEqual(panel.state.gone, []);
     assert.equal(panel.state.revision, revision, 'The captured file indexes stay valid');
     await panel.send({ type: 'refresh' });
     assert.match(String(panel.last('error')?.message), /Repository is no longer open\./); assert.doesNotMatch(String(panel.last('error')?.message), /no longer resolves/, 'Refresh names the closed repository, not a vanished ref');
-    h.reopen(); h.history.resolveRef = resolve; h.invalidate(); await wait();
+    h.reopen(); h.history.resolveRef = resolve; h.invalidate(); await until(() => panel.state.expired === undefined);
     assert.equal(panel.state.expired, undefined, 'Reopening the repository brings the tab back'); assert.deepEqual(panel.state.moved, []);
   } finally { await h.cleanup(); }
 });
@@ -350,7 +365,7 @@ test('Open All Changes shows a blob side that is not UTF-8 as a read-only notice
   const history = { revision: async (_id: string, _oid: string, file: string) => { if (file.endsWith('legacy.txt')) throw new NonUtf8Error('Text diff is unavailable: this revision is not UTF-8 text. Use native Git for this file.'); if (file === 'big.txt') throw new Error('Revision exceeds the 5 MiB text diff limit.'); return Buffer.from('text\n'); } };
   const surface = (exports.createCompareSurface as (context: unknown, deps: unknown) => { blobs: { add(id: string, oid: string, file: string): unknown; provideTextDocumentContent(uri: unknown): Promise<string> }; dispose(): void })({ extensionUri: uri('file', '/extension') }, { registry: { onDidInvalidate: () => ({ dispose: () => undefined }) }, history });
   try {
-    assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'docs/legacy.txt')), 'This version of legacy.txt is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n');
+    assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'docs/legacy.txt')), `This version of legacy.txt (${LEFT.slice(0, 8)}) is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n`, 'the commit is named, so two non-UTF-8 versions of one file are not identical notices');
     assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'plain.txt')), 'text\n');
     await assert.rejects(surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'big.txt')), /5 MiB/);
   } finally { surface.dispose(); }

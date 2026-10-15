@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readlink, symlink, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { DailyError } from '../../src/git/git.service';
 import { dailyFixture, options } from '../fixtures/daily-fixture';
@@ -53,7 +53,8 @@ test('a symlink is an entry that stages and unstages without being followed', as
   try {
     await writeFile(path.join(f.root, 'base.txt'), 'base\n'); await f.git.stage(f.id, ['base.txt']); await f.git.commit(await f.git.preview(f.id), 'base', options);
     await mkdir(path.join(f.root, 'dir'));
-    // A link to a folder and one to a file outside the repository: Git records only the link text for either.
+    // A link to a folder and one to a file that really exists outside the repository (a dangling target would not exercise the link check): Git records only the link text for either.
+    await writeFile(path.join(f.parent, 'outside-file.txt'), 'outside\n'); await writeFile(path.join(f.parent, 'outside-other.txt'), 'other\n');
     try { await symlink('dir', path.join(f.root, 'dirlink'), 'dir'); await symlink('../outside-file.txt', path.join(f.root, 'outlink')); }
     catch (error) { if (['EPERM', 'EACCES', 'ENOSYS'].includes((error as NodeJS.ErrnoException).code ?? '')) return; throw error; }
     assert.ok((await lstat(path.join(f.root, 'dirlink'))).isSymbolicLink());
@@ -64,6 +65,32 @@ test('a symlink is an entry that stages and unstages without being followed', as
     assert.equal(await f.git.stageAll(f.id), 2, 'Stage All counts both links instead of failing on them');
     assert.equal((await f.git.state(f.id)).changes.filter(change => change.group === 'staged').length, 2);
     await assert.rejects(f.git.stage(f.id, ['dir/../../outside']), /path|outside/i, 'a path through a parent folder is still refused');
+    // Unstage All, commit and Discard go through the same entry rule: a link whose target exists outside the repository is still just a link.
+    assert.equal(await f.git.unstageAll(f.id), 2, 'Unstage All is not defeated by the link that leads outside');
+    assert.equal(f.rawGit(['ls-files', '--', 'dirlink', 'outlink']).trim(), '');
+    await f.git.stageAll(f.id); await f.git.commit(await f.git.preview(f.id), 'links', options);
+    await unlink(path.join(f.root, 'outlink')); await symlink('../outside-other.txt', path.join(f.root, 'outlink'));
+    await f.git.discard(await f.git.preview(f.id, ['outlink']));
+    // Where Git is not allowed to make links (core.symlinks=false, the Windows default) it writes the link text into a plain file instead.
+    const restored = await readlink(path.join(f.root, 'outlink')).catch((error: NodeJS.ErrnoException) => { if (error.code === 'EINVAL') return readFile(path.join(f.root, 'outlink'), 'utf8'); throw error; });
+    assert.equal(restored.trim(), '../outside-file.txt', 'Discard put the committed link back; the file outside was never touched');
+    assert.equal(await readFile(path.join(f.parent, 'outside-file.txt'), 'utf8'), 'outside\n'); assert.equal(await readFile(path.join(f.parent, 'outside-other.txt'), 'utf8'), 'other\n');
+  } finally { await f.close(); }
+});
+
+test('a repository Git does not track yet is not staged as an embedded repository, by Stage or by Stage All', async () => {
+  const f = await dailyFixture();
+  try {
+    await writeFile(path.join(f.root, 'base.txt'), 'base\n'); await f.git.stage(f.id, ['base.txt']); await f.git.commit(await f.git.preview(f.id), 'base', options);
+    await writeFile(path.join(f.root, 'base.txt'), 'edited\n');
+    const nested = path.join(f.root, 'tools', 'lib'); await mkdir(nested, { recursive: true });
+    f.rawGit(['init', '-b', 'main'], nested); await writeFile(path.join(nested, 'a.txt'), 'a\n'); f.rawGit(['add', 'a.txt'], nested); f.rawGit(['commit', '-m', 'nested'], nested);
+    const listed = (await f.git.state(f.id)).changes.find(change => change.path.startsWith('tools/'));
+    assert.equal(listed?.path, 'tools/lib/', 'Git lists an untracked repository as a directory with a trailing slash');
+    await assert.rejects(f.git.stage(f.id, ['tools/lib/']), /does not track yet/);
+    assert.equal(await f.git.stageAll(f.id), 1, 'Stage All stages the edited file and leaves the repository out');
+    assert.equal(f.rawGit(['ls-files', '-s', '--', 'tools']).trim(), '', 'no gitlink was created');
+    assert.deepEqual((await f.git.state(f.id)).changes.filter(change => change.group === 'staged').map(change => change.path), ['base.txt']);
   } finally { await f.close(); }
 });
 

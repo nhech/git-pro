@@ -9,7 +9,7 @@ import { redact } from '../security/redaction';
 import * as path from 'node:path';
 import { LeaseService } from '../git/advanced/lease.service';
 import { InteractiveService } from '../git/rebase/interactive.service';
-import { validateRebasePlan, type RebaseStep, type RebaseAction } from '../git/rebase/rebase-plan';
+import { validateRebasePlan, nativeContinueCommand, type RebaseStep, type RebaseAction } from '../git/rebase/rebase-plan';
 import type { RebasePlanner } from '../webviews/rebase/rebase-planner';
 import type { InteractivePreview } from '../git/rebase/interactive.service';
 import { createSurfaces, isConflictFailure, type Surfaces } from '../conflicts/surfaces';
@@ -101,7 +101,7 @@ export class AdvancedCommands {
     const local=preview.snapshot.status.changes.map(change=>`${change.group}: ${change.path}`);
     const rebase=preview.rebaseContext?`\nLocal-only commits: ${preview.rebaseContext.localCount} · first ${preview.rebaseContext.candidates.length} shown\n${preview.rebaseContext.candidates.map(commit=>`${commit.oid.slice(0,10)} ${commit.subject.slice(0,200)}`).join('\n')}\nTopology context: Git may flatten merges or skip equivalent commits.`:'';
     const merge=preview.mergeContext?`\nTopology: ${preview.mergeContext.headOnly} HEAD-only / ${preview.mergeContext.targetOnly} target-only commits\nResulting history depends on the selected merge strategy.`:'';
-    const detail=redact(`${this.advanced.git.repository(id).root}\nHEAD: ${preview.snapshot.head}\nTarget(s): ${target}\n${preview.files.length} changed files between HEAD and target\n${preview.files.slice(0,20).map(file=>file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0,20).join('\n')}${warning}${rebase}${merge}`);
+    const detail=redact(`${this.advanced.git.repository(id).root}\nHEAD: ${preview.snapshot.head}\nTarget(s): ${target}\n${preview.filesNote?'Changed files are not listed: some paths are not valid UTF-8':`${preview.files.length} changed files between HEAD and target`}\n${preview.files.slice(0,20).map(file=>file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0,20).join('\n')}${warning}${rebase}${merge}`);
     if(await vscode.window.showWarningMessage(`${label}?`,{modal:true,detail},'Apply')!=='Apply')return;
     try{await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:`Git Pro: ${label}`},()=>this.advanced.execute(preview));}
     catch(error){
@@ -133,8 +133,16 @@ export class AdvancedCommands {
   }
   private async applyRebasePlan(preview:InteractivePreview,steps:readonly RebaseStep[]):Promise<void>{
     const id=preview.snapshot.repositoryId;
-    await this.interactive.execute(preview,steps);const status=await this.advanced.snapshot(id);
+    // Whether the rebase stops on a conflict (execute then throws) or at an edit, a rebase that rewords commits says how to continue it outside Git Pro.
+    try{await this.interactive.execute(preview,steps);}finally{await this.nativeContinueHint(id);}
+    const status=await this.advanced.snapshot(id);
     await vscode.window.showInformationMessage(status.operation==='rebasing'?'Rebase paused. Use Advanced Actions to resolve/edit and continue, skip or abort.':'Interactive rebase completed.');
+  }
+  /** The plan runs with its own comment character so that reworded "#" lines survive; a terminal `git rebase --continue` must use the same one or Git strips the wrong lines. */
+  private async nativeContinueHint(id:string):Promise<void>{
+    let job:Awaited<ReturnType<InteractiveService['resume']>>;
+    try{job=await this.interactive.resume(id);}catch{return;}
+    if(job?.commentChar!==undefined)void vscode.window.showInformationMessage(`This rebase treats "${job.commentChar}" as its comment character so that reworded "#" lines are kept. Git Pro's Continue uses it automatically; in a terminal run: ${nativeContinueCommand(job.commentChar)}`);
   }
   async conflict(arg?:unknown):Promise<void>{
     const value=arg as {repositoryId?:unknown;change?:{path?:unknown}}|undefined;

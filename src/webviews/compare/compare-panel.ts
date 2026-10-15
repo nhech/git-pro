@@ -10,7 +10,7 @@ import { parseCompareAction, type CompareAction } from './compare-protocol';
 import { compareHtml } from './compare-html';
 import { redact } from '../../security/redaction';
 import { historyPath } from '../../git/history/history-builders';
-import { refuseGitMetadata } from '../../security/paths';
+import { LinkOutsideError, refuseGitMetadata } from '../../security/paths';
 
 /** What the Compare tab reads from the feature dependencies; a narrow type keeps the panel testable with stand-ins. */
 export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools'>;
@@ -301,7 +301,11 @@ class ComparePanel {
   /** The real working file as an editable side: same repository, inside the root, a regular file and not Git metadata. Undefined when it does not exist. */
   private async workingFile(relative: string): Promise<vscode.Uri | undefined> {
     historyPath(relative);
-    const absolute = await this.owner.deps.policy.authorizeFile(this.root, relative);
+    // A tracked link that leads out of the repository (or loops) has no editable side either, so it is left out like any other symlink.
+    const absolute = await this.owner.deps.policy.authorizeFile(this.root, relative).catch((error: unknown) => {
+      if (error instanceof LinkOutsideError || (error as NodeJS.ErrnoException | undefined)?.code === 'ELOOP') throw new NoWorkingSide(error instanceof Error ? error.message : String(error));
+      throw error;
+    });
     // By name and by where it really leads: a branch can carry `link/config` where the working tree has a tracked symlink (or a Windows 8.3 name GIT~1) into .git.
     const repo = this.owner.deps.registry.list().find(item => item.id === this.repositoryId); if (!repo) throw new Error('Repository is no longer open.');
     await refuseGitMetadata(repo, relative, absolute).catch((error: unknown) => { throw new NoWorkingSide(error instanceof Error ? error.message : String(error)); });
@@ -372,7 +376,8 @@ export const createCompareSurface = ((context, deps) => {
   // Open All Changes cannot tell a side that is not UTF-8 without reading every file first, so such a side opens as a read-only notice instead of failing.
   const blobs = new BlobProvider({ revision: (id, oid, file, signal) => deps.history.revision(id, oid, file, signal).catch((error: unknown) => {
     if (!(error instanceof NonUtf8Error)) throw error;
-    return Buffer.from(`This version of ${path.posix.basename(file)} is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n`);
+    // The commit is named so that two non-UTF-8 versions of one file are not shown as identical notices (which a multi-diff would read as "no change").
+    return Buffer.from(`This version of ${path.posix.basename(file)} (${(oid ?? '').slice(0, 8)}) is not UTF-8 text, so Git Pro cannot show it here. Use native Git to compare it.\n`);
   }) });
   return new ComparePanels(context, deps, blobs, [vscode.workspace.registerTextDocumentContentProvider(BlobProvider.scheme, blobs), blobs]);
 }) satisfies CreateCompareSurface;

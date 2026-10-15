@@ -193,7 +193,7 @@ export class RepositoryRegistry implements Disposable {
         if (this.errors.delete(id)) changed = true;
       } catch (error) {
         if (!entry.controller.signal.aborted && !this.disposed) {
-          const message = redact(String(error));
+          const message = redact(error instanceof Error ? error.message : String(error));
           if (this.errors.get(id) !== message) { changed = true; this.logger.error(`Status refresh failed: ${message}`); }
           this.errors.set(id, message);
         }

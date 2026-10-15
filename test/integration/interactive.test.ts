@@ -82,6 +82,17 @@ test('a reworded message keeps every line that starts with "#" under the default
     assert.equal(f.git(['config','--default','unset','--get','core.commentChar']).trim(),'unset','the repository setting is untouched; the character applies to the rebase only');
   }finally{await f.close();}
 });
+test('the comment character also avoids the line starts of the commits that are only squashed, so their own lines are kept',async()=>{
+  const f=await setup();try{
+    const d=await f.commit('d.txt','d\n','fourth\n\n; semicolon line in a squashed commit\n#7 hash line in a squashed commit');
+    const preview=await f.interactive.preview(f.id,f.root),steps:RebaseStep[]=preview.commits.map(commit=>({oid:commit.oid,action:'pick'}));
+    assert.ok(preview.lineStarts.has(';')&&preview.lineStarts.has('#'),'the preview knows how the messages of the range begin their lines');
+    steps[1]={oid:f.b,action:'reword',message:'second, reworded'};steps[3]={oid:d,action:'squash'};
+    await f.interactive.execute(preview,steps);assert.equal((await f.advanced.snapshot(f.id)).operation,'idle');
+    const squashed=f.git(['log','-1','--format=%B']);
+    assert.match(squashed,/; semicolon line in a squashed commit/);assert.match(squashed,/#7 hash line in a squashed commit/);assert.doesNotMatch(squashed,/This is a combination/,'Git\'s own generated lines are still removed');
+  }finally{await f.close();}
+});
 test('the comment character survives an edit stop: a later reword in the same rebase still keeps its "#" lines',async()=>{
   const f=await setup();try{
     const preview=await f.interactive.preview(f.id,f.root),message='#7 after the stop\n\n# kept too';

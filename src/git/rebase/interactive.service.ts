@@ -12,7 +12,8 @@ import { boundedFile } from '../../utils/bounded-file';
 import type { EditorJob, OwnedEditor } from '../advanced/owned-editor';
 export interface RebaseJobInfo {directory:string;token:string;base:string;tip:string;repositoryId:string}
 export interface RebaseJournal {get(id:string):Promise<RebaseJobInfo|undefined>;put(id:string,job:RebaseJobInfo|undefined):Promise<void>}
-export interface InteractivePreview {snapshot:OperationSnapshot;base:string;commits:readonly LinearCommit[]}
+/** `lineStarts`: the first character of every line of every message in the range, so the plan's comment character can avoid all of them. */
+export interface InteractivePreview {snapshot:OperationSnapshot;base:string;commits:readonly LinearCommit[];lineStarts:ReadonlySet<string>}
 export class InteractiveService {
   private readonly previews=new WeakSet<InteractivePreview>();
   constructor(private readonly advanced:AdvancedService,private readonly storage:string,private readonly editor:OwnedEditor,private readonly journal:RebaseJournal){}
@@ -26,7 +27,8 @@ export class InteractiveService {
     if(parent!==snapshot.head)throw new Error('Range does not end at the reviewed HEAD.');
     const messages=await this.messages(repo.root,base,snapshot.head,chain.map(link=>link.oid));
     const commits:LinearCommit[]=chain.map(({oid,parent})=>Object.freeze({oid,parent,subject:Buffer.from(((messages.get(oid)??'').split('\n',1)[0]??'').slice(0,500),'utf8').toString('utf8')}));
-    const result=Object.freeze({snapshot,base,commits:Object.freeze(commits)});this.previews.add(result);return result;
+    const lineStarts=new Set<string>();for(const message of messages.values())for(const line of message.split(/\r?\n/))lineStarts.add(line.trimStart()[0]??'');
+    const result=Object.freeze({snapshot,base,commits:Object.freeze(commits),lineStarts});this.previews.add(result);return result;
   }
   /** One `git log` for the whole range; a Git process per commit costs seconds for a 200-commit plan. */
   private async messages(root:string,base:string,tip:string,oids:readonly string[]):Promise<Map<string,string>>{
@@ -45,7 +47,7 @@ export class InteractiveService {
     if(!this.previews.has(preview))throw new Error('Rebase preview expired.');validateRebasePlan(preview.commits,steps);
     const frozen=steps.map(step=>({oid:step.oid,action:step.action,...(step.action==='reword'?{message:step.message}:{})}));
     // Chosen before anything starts: Git would otherwise drop reworded lines that begin with '#'.
-    const commentChar=rebaseCommentChar(steps),comment=commentChar===undefined?{}:{commentChar};
+    const commentChar=rebaseCommentChar(steps,preview.lineStarts),comment=commentChar===undefined?{}:{commentChar};
     await this.advanced.guarded(preview.snapshot,async repo=>{
       this.previews.delete(preview);await this.cleanup(repo.id);if(await this.journal.get(repo.id))throw new Error('An owned rebase job already exists. Resume or abort it first.');
       await mkdir(this.storage,{recursive:true});const token=randomUUID(),directory=path.join(await realpath(this.storage),token);await mkdir(directory);

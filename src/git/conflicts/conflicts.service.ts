@@ -9,7 +9,7 @@ import { chunkPaths } from '../argv-chunks';
 import { GitFailure, partiallyApplied } from '../git-error-parser';
 import { LinkOutsideError, containsPath } from '../../security/paths';
 import { conflictKind, isConflictCode, sidePresent, sideStatus, sidesFor, stagePresence } from './conflict-kinds';
-import { OperationContext, stashLabel } from './operation-context';
+import { OperationContext, hasStashLabels } from './operation-context';
 import type { MutationCommand } from '../command-builders';
 import type { RepositoryDescriptor } from '../../repositories/repository-registry';
 import type { ConflictBatch, ConflictList, ConflictRow, ConflictSide, ConflictSource, ConflictsApi, StageBlobs } from './conflict-contract';
@@ -231,7 +231,7 @@ export class ConflictsService implements ConflictsApi {
         if(reads[index]){
           const data=await boundedFile(item.absolute);
           if(data.includes(0))binary=true;
-          else try{const text=decode(data);markers=Object.freeze({present:hasConflictMarkers(text),blocks:countConflictBlocks(text)});if(stashLabel.test(text))stashMarkers=true;}catch{binary=true;}
+          else try{const text=decode(data);markers=Object.freeze({present:hasConflictMarkers(text),blocks:countConflictBlocks(text)});if(hasStashLabels(text))stashMarkers=true;}catch{binary=true;}
         }
         const workingFile=item.size!==undefined;
         return Object.freeze({...item.base,markers,binary,mergeable:(item.base.code==='UU'||item.base.code==='AA')&&workingFile&&!binary,workingFile});

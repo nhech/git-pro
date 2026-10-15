@@ -35,3 +35,11 @@ test('one folder that cannot be authorized or read does not stop the scan', asyn
     assert.deepEqual(found, ['good'], 'repositories elsewhere are still found, and nothing inside the refused folder is');
   } finally { await t.cleanup(); }
 });
+
+test('ignored folder names compare the way the file system does: case-insensitively on Windows and macOS, exactly elsewhere', async () => {
+  const t = await tree(['Vendor/one', 'one']);
+  try {
+    const found = (await discoverRepositories([t.root], policy(), { maxDepth: 3, ignoredFolders: ['vendor'] })).map(root => path.relative(t.root, root).replace(/\\/g, '/')).sort();
+    assert.deepEqual(found, process.platform === 'win32' || process.platform === 'darwin' ? ['one'] : ['Vendor/one', 'one']);
+  } finally { await t.cleanup(); }
+});

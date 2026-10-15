@@ -11,15 +11,17 @@ export function containsPath(parent: string, child: string): boolean {
 }
 
 /** A path part that names Git metadata: .git, and the aliases Windows resolves to it (".git " with a space, ".git." with a dot, an alternate data stream). */
-const gitMetadataName = /^\.git(?:[ .:]|$)/i;
+const gitMetadataName = /^\.git[. ]*(?::|$)/i;
 
 /**
  * Refuses Git metadata as a working file, by name and by where the path really leads: a tracked symlink, a junction or an 8.3 short name (GIT~1)
  * can lead into .git although no path part says so. Returns the canonical path for a later ownership check.
  */
-export async function refuseGitMetadata(repo: { readonly gitDir: string; readonly commonDir: string }, relative: string, absolute: string): Promise<string> {
+export async function refuseGitMetadata(repo: { readonly root: string; readonly gitDir: string; readonly commonDir: string }, relative: string, absolute: string): Promise<string> {
   const canonical = await canonicalFilePath(absolute);
-  if (relative.split(/[\\/]/).some(part => gitMetadataName.test(part)) || containsPath(repo.gitDir, canonical) || containsPath(repo.commonDir, canonical)) throw new Error('Git metadata cannot be opened as a working file.');
+  // Where the path really leads, too: a link can reach the .git of a nested repository that is not registered, which is no gitDir of this one.
+  const real = path.relative(repo.root, canonical), inside = real !== '' && !real.startsWith('..') && !path.isAbsolute(real);
+  if (relative.split(/[\\/]/).some(part => gitMetadataName.test(part)) || (inside && real.split(/[\\/]/).some(part => gitMetadataName.test(part))) || containsPath(repo.gitDir, canonical) || containsPath(repo.commonDir, canonical)) throw new Error('Git metadata cannot be opened as a working file.');
   return canonical;
 }
 

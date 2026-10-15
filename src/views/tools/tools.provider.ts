@@ -21,7 +21,7 @@ export class ToolsProvider implements vscode.TreeDataProvider<Node>,vscode.Dispo
         case 'Remotes':rows=(await this.tools.remotes(repo.id)).map(remote=>row(remote.name,remote.name,remote.fetch.join(', '),`Fetch: ${remote.fetch.join(', ')}\nPush: ${remote.push.join(', ')}`));break;
         case 'Worktrees':rows=(await this.tools.worktrees(repo.id)).map((worktree,index)=>row(worktree.path,worktree.path,`${index===0?'primary · ':''}${worktree.locked?'locked · ':''}${worktree.branch??'detached'}`,worktree.head??'unborn'));break;
       }
-    }catch(error){rows=[{kind:'notice',label:redact(`Unable to load: ${String(error)}`)}];}
+    }catch(error){rows=[{kind:'notice',label:redact(`Unable to load: ${error instanceof Error ? error.message : String(error)}`)}];}
     if(this.disposed||this.tools.advanced.git.registry.active!==repo)return[];
     if(rows.length>500)rows=[...rows.slice(0,500),{kind:'notice',label:'First 500 shown — open Tools to filter or review in native Git'}];
     if(!rows.length)rows=[{kind:'notice',label:'No entries — open group actions to create one'}];return rows;

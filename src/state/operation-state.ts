@@ -69,8 +69,16 @@ export async function readPseudoRef(gitDir: string, name: PseudoRef, refs?: Pseu
 /** The last step the rebase ran is a `merge` (rebase -r), whose own conflicts write MERGE_HEAD. The apply backend has no merge steps; a missing or unreadable list keeps the rebase. */
 async function mergeStep(gitDir: string): Promise<boolean> {
   if (!await exists(path.join(gitDir, 'rebase-merge'))) return false;
-  try { return /^m(?:erge)? /.test((await boundedFile(path.join(gitDir, 'rebase-merge', 'done'), 1024 * 1024)).toString('latin1').split(/\r?\n/).filter(line => line && !line.startsWith('#')).at(-1) ?? ''); }
+  try { return /^m(?:erge)? /.test(await lastDoneStep(gitDir)); }
   catch { return true; }
+}
+/** The last step the rebase ran is a `squash` or `fixup` (long or abbreviated); an unreadable list counts as no. */
+async function squashStep(gitDir: string): Promise<boolean> {
+  try { return /^(?:s|squash|f|fixup)(?:\s|$)/.test(await lastDoneStep(gitDir)); }
+  catch { return false; }
+}
+async function lastDoneStep(gitDir: string): Promise<string> {
+  return (await boundedFile(path.join(gitDir, 'rebase-merge', 'done'), 1024 * 1024)).toString('latin1').split(/\r?\n/).filter(line => line && !line.startsWith('#')).at(-1) ?? '';
 }
 /**
  * The operation whose sides the index conflicts follow, for Yours/Theirs (sidesFor), labels and Continue/Skip/Abort. It is detectOperation's answer except
@@ -85,7 +93,8 @@ export async function detectConflictOperation(gitDir: string, conflicts: boolean
   const operation = await detectOperation(gitDir, evidence.refs);
   if (operation !== 'rebasing') return operation;
   if (await readPseudoRef(gitDir, 'REVERT_HEAD', evidence.refs) !== undefined) return 'reverting';
-  const replayed = await readPseudoRef(gitDir, 'REBASE_HEAD', evidence.refs), stopped = replayed === undefined || await exists(path.join(gitDir, 'rebase-merge', 'amend'));
+  // A squash or fixup that conflicts leaves `amend` too (it amends the commit before it), so the file alone does not say the user stopped the rebase on purpose.
+  const replayed = await readPseudoRef(gitDir, 'REBASE_HEAD', evidence.refs), stopped = replayed === undefined || (await exists(path.join(gitDir, 'rebase-merge', 'amend')) && !await squashStep(gitDir));
   const picked = await readPseudoRef(gitDir, 'CHERRY_PICK_HEAD', evidence.refs);
   if (picked !== undefined && (stopped || picked !== replayed)) return 'cherry-picking';
   if (await exists(path.join(gitDir, 'MERGE_HEAD'))) return stopped || !await mergeStep(gitDir) ? 'merging' : operation;

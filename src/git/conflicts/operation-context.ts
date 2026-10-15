@@ -14,6 +14,9 @@ import type { ConflictSource, OperationSide, OperationSummary, OperationSummaryP
 
 /** The label Git writes on the stash side of a `stash apply`/`pop` conflict, the same evidence built-in Git uses. */
 export const stashLabel = /^>{7} Stashed changes\r?$/m;
+const stashOrigin = /^<{7} Updated upstream\r?$/m;
+/** Both labels of one stash apply's markers: a file that merely quotes ">>>>>>> Stashed changes" in committed text does not turn a rebase's conflicts into a stash apply's. */
+export const hasStashLabels = (text: string): boolean => stashOrigin.test(text) && stashLabel.test(text);
 const controllable: readonly GitOperation[] = ['merging', 'rebasing', 'cherry-picking', 'reverting'];
 /** N6: operation metadata is repository-controlled. Bounded, never through a link, strict UTF-8; anything unreadable or malformed only drops that label. */
 async function metadata(gitDir: string, name: string, maximum = 4096): Promise<string | undefined> {
@@ -34,7 +37,7 @@ async function pseudoOid(gitDir: string, name: PseudoRef, refs: PseudoRefs): Pro
  */
 export async function hasStashMarkers(authorize: (file: string) => Promise<string>, status: StatusSnapshot): Promise<boolean> {
   for (const change of status.changes.filter(item => item.group === 'conflicts').slice(0, 8)) {
-    try { if (stashLabel.test((await boundedFile(await authorize(change.path), 1024 * 1024)).toString('latin1'))) return true; }
+    try { if (hasStashLabels((await boundedFile(await authorize(change.path), 1024 * 1024)).toString('latin1'))) return true; }
     catch { /* An unreadable file is no evidence either way. */ }
   }
   return false;
@@ -61,11 +64,17 @@ const rebaseDir = async (gitDir: string) => (await lstat(path.join(gitDir, 'reba
 function side(label: 'Yours' | 'Theirs', detail: string, ref?: string, oid?: string, subject?: string): OperationSide {
   return Object.freeze({ label, ...(ref ? { ref: redact(ref) } : {}), ...(oid ? { oid } : {}), ...(subject ? { subject: redact(subject) } : {}), detail: redact(detail) });
 }
-/** Git's prepared merge message for Edit Message…: bounded strict UTF-8 with its comment lines (the `# Conflicts:` block) removed. Empty when Git left none or it cannot be read; the user reviews it either way. */
+/** Git's prepared merge message, bounded strict UTF-8, without its `# Conflicts:` block. Empty when Git left none or it cannot be read; Edit Message… shows it for review either way. */
 export async function readMergeMessage(gitDir: string): Promise<string> {
-  const text = await metadata(gitDir, 'MERGE_MSG', 256 * 1024);
-  const kept = (text ?? '').split(/\r?\n/).filter(line => !line.startsWith('#')).join('\n').replace(/\s+$/, '');
+  const kept = withoutConflictsHint((await metadata(gitDir, 'MERGE_MSG', 256 * 1024)) ?? '');
   return kept ? `${kept.slice(0, 65535)}\n` : '';
+}
+/**
+ * The block Git appends to MERGE_MSG after a conflicted merge, in whatever comment character it used ("# Conflicts:" then one "#<tab>path" line each). Only that block is
+ * removed: a line the user typed that starts with the same character ("#123 merge feature") is part of the message.
+ */
+export function withoutConflictsHint(text: string): string {
+  return text.replace(/(?:\r?\n)*([^\w\s]) ?Conflicts:\r?\n(?:\1\t[^\n]*(?:\n|$))*\s*$/, '').replace(/\s+$/, '');
 }
 /** WP1's operation context (§3.4): titles, Yours/Theirs labels and progress for the banner, the Conflicts tab and the merge editor. Display only; it never mutates. */
 export class OperationContext implements OperationSummaryProvider {

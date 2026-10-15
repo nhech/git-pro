@@ -109,7 +109,8 @@ export class GitExecutor {
     if(command.kind==='applyHunk'&&(!options.patchBuffer?.length||options.patchBuffer.length>1024*1024))throw new Error('Owned hunk patch is missing or exceeds 1 MiB.');
     if(options.patchBuffer&&command.kind!=='applyHunk')throw new Error('Patch stdin does not match this mutation.');
     if ('paths' in command && command.paths.length > 5000) throw new Error('Select between 1 and 5000 paths.');
-    if ('paths' in command) await this.policy.authorizeFiles(root, command.paths);
+    // Every path here is handed to Git as an entry (a symlink is recorded as the link, never followed), as GitService.paths() already authorized it.
+    if ('paths' in command) await this.policy.authorizeEntries(root, command.paths);
     const preserve = command.kind==='operationControl' && command.action==='continue' && command.operation!=='merging';
     if (preserve && !this.editor&&!options.editorJob) throw new Error('Owned message editor unavailable. Continue this operation in native Git.');
     if(command.kind==='interactiveRebase'&&!options.editorJob)throw new Error('Owned sequence editor unavailable.');

@@ -7,7 +7,9 @@ export async function discoverRepositories(roots: readonly string[], policy: Pat
   options: { maxDirectories?: number; maxDepth?: number; ignoredFolders?: readonly string[]; signal?: AbortSignal } = {}): Promise<string[]> {
   const queue = roots.map(root => ({ root, depth: 0 }));
   const result: string[] = []; const seen = new Set<string>(); let visited = 0;
-  const ignored = new Set(['.git', 'node_modules', '.vscode-test', 'dist', '.test-build', '.next', ...(options.ignoredFolders ?? [])]);
+  // Folder names compare the way the file system does, as built-in Git's git.repositoryScanIgnoredFolders does: "Vendor" ignores "vendor" on Windows and macOS.
+  const fold = (name: string): string => process.platform === 'win32' || process.platform === 'darwin' ? name.toLowerCase() : name;
+  const ignored = new Set(['.git', 'node_modules', '.vscode-test', 'dist', '.test-build', '.next', ...(options.ignoredFolders ?? [])].map(fold));
   while (queue.length && visited < (options.maxDirectories ?? 200)) {
     if (options.signal?.aborted) break;
     const entry = queue.shift()!;
@@ -19,7 +21,7 @@ export async function discoverRepositories(roots: readonly string[], policy: Pat
     if (!children) continue;
     if (children.some(child => child.name === '.git' && !child.isSymbolicLink())) result.push(root);
     if (entry.depth < (options.maxDepth ?? 3)) {
-      for (const child of children) if (child.isDirectory() && !child.isSymbolicLink() && !ignored.has(child.name)) {
+      for (const child of children) if (child.isDirectory() && !child.isSymbolicLink() && !ignored.has(fold(child.name))) {
         queue.push({ root: path.join(root, child.name), depth: entry.depth + 1 });
       }
     }

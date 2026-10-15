@@ -41,3 +41,14 @@ test('Continue on a merge started outside Git Pro drops the "# Conflicts:" block
     assert.equal(f.git(['log', '-1', '--format=%B']).trimEnd(), "Merge branch 'side'");
   } finally { await f.close(); }
 });
+
+test('a message the user wrote with "#" lines survives the default Continue: only the appended "# Conflicts:" block is removed', async () => {
+  const f = await advancedFixture(); try {
+    await f.commit('a.txt', 'base\n', 'base'); f.git(['checkout', '-b', 'side']); await f.commit('a.txt', 'side\n', 'side');
+    f.git(['checkout', 'main']); await f.commit('a.txt', 'main\n', 'main');
+    assert.throws(() => f.git(['merge', 'side', '-m', '#123 merge side', '-m', '#45 also fixes this']), /Fixture Git failed/);
+    await writeFile(path.join(f.root, 'a.txt'), 'both\n'); f.git(['add', 'a.txt']);
+    await f.advanced.control(await f.advanced.snapshot(f.id), 'continue');
+    assert.equal(f.git(['log', '-1', '--format=%B']).trimEnd(), '#123 merge side\n\n#45 also fixes this', 'the lines the user typed are the permanent message');
+  } finally { await f.close(); }
+});

@@ -40,7 +40,9 @@ export class WorktreeService {
       if(selected.item.locked||selected.item.prunable)throw new Error('Locked or missing worktrees require native Git review.');
       const external=grant?await this.tools.advanced.git.executor.inspectLinkedWorktree(repo.root,destination,grant):undefined;
       const gitDir=external?.gitDir??(await this.tools.advanced.git.executor.read(destination,{kind:'metadata',field:'gitDir'})).stdout.toString('utf8').trim();
-      if(await detectOperation(gitDir,gitPseudoRefs(this.tools.advanced.git.executor,destination))!=='idle')throw new Error('Finish the linked worktree Git operation before removal.');
+      // A reftable worktree outside the workspace cannot be asked through the repository read path; failing to ask counts as an operation in progress (MERGE_MSG is left by one), never as idle.
+      const operation=await detectOperation(gitDir,gitPseudoRefs(this.tools.advanced.git.executor,destination)).catch((): 'unknown-sequencer'=>'unknown-sequencer');
+      if(operation!=='idle')throw new Error('Finish the linked worktree Git operation before removal.');
       const status=external?.status??(await this.tools.advanced.git.executor.read(destination,{kind:'status'})).stdout;
       if(hasChanges(parseStatus(status)))throw new Error('Worktree contains changes or untracked files. Commit or stash them first.');
       fingerprintParts.push(status.toString('base64'));details=[destination,selected.item.branch??'Detached HEAD'];

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { lstat, readlink } from 'node:fs/promises';
 import * as path from 'node:path';
+import { isUtf8 } from 'node:buffer';
 import { GitService } from '../git.service';
 import { hasChanges, parseStatus, type StatusSnapshot } from '../git-parser';
 import { detectConflictOperation, gitPseudoRefs, type GitOperation, type PseudoRefs } from '../../state/operation-state';
-import { hasStashMarkers } from '../conflicts/operation-context';
+import { hasStashMarkers, readMergeMessage } from '../conflicts/operation-context';
 import { OperationCoordinator } from '../../state/operation-coordinator';
 import { validateOid } from '../../security/refs';
 import { buildAdvancedMutation, type AdvancedMutation } from './advanced-builders';
@@ -28,7 +29,8 @@ async function linkChain(root: string, relative: string): Promise<string> {
   }
   return `unlinked:${relative}`;
 }
-export interface AdvancedPreview { snapshot: OperationSnapshot; command: AdvancedMutation; files: readonly ChangedFile[];mergeContext?:{readonly headOnly:number;readonly targetOnly:number};rebaseContext?:{readonly localCount:number;readonly candidates:readonly HistoryCommit[]} }
+/** `filesNote`: the list of changed files is withheld because some path is not valid UTF-8; the operation itself is not affected. */
+export interface AdvancedPreview { snapshot: OperationSnapshot; command: AdvancedMutation; files: readonly ChangedFile[];filesNote?:'nonUtf8Path';mergeContext?:{readonly headOnly:number;readonly targetOnly:number};rebaseContext?:{readonly localCount:number;readonly candidates:readonly HistoryCommit[]} }
 export class AdvancedService {
   private editorJobs: {resume(id:string):Promise<EditorJob|undefined>;cleanup(id:string):Promise<void>}|undefined;
   setEditorJobs(jobs:{resume(id:string):Promise<EditorJob|undefined>;cleanup(id:string):Promise<void>}):void{this.editorJobs=jobs;}
@@ -48,7 +50,7 @@ export class AdvancedService {
     // Every index entry that differs from HEAD appears in the status bytes above with both OIDs, so a whole-index listing adds nothing.
     // `git diff` can only print something when a tracked file differs from the index; skip the unbounded read otherwise.
     // Hashed while streaming: a large unstaged file must not turn the fingerprint into an output-limit failure.
-    if(status.changes.some(change=>change.group==='working'||change.group==='conflicts'))append('working',Buffer.from((await this.git.executor.read(repo.root,{kind:'workDiff',paths:[]},{digest:true})).digest!));
+    if([...status.changes,...(status.omitted??[])].some(change=>change.group==='working'||change.group==='conflicts'))append('working',Buffer.from((await this.git.executor.read(repo.root,{kind:'workDiff',paths:[]},{digest:true})).digest!));
     let bytes = 0; const external: string[] = [];
     for (const change of status.changes.filter(item=>item.group==='untracked'||item.group==='conflicts')) {
       const file = await this.git.authorizePath(repo.id,change.path).catch(error=>{if(change.group==='untracked'&&error instanceof LinkOutsideError)return;throw error;});
@@ -106,7 +108,7 @@ export class AdvancedService {
     }
     let mergeContext:AdvancedPreview['mergeContext'];
     if(command.kind==='merge'&&snapshot.head){const counts=parseComparisonCounts((await this.git.executor.read(this.git.repository(id).root,{kind:'comparisonCount',from:snapshot.head,to:command.oid})).stdout);mergeContext=Object.freeze({headOnly:counts.left,targetOnly:counts.right});}
-    const preview: AdvancedPreview = Object.freeze({snapshot,command:captured,files:Object.freeze(parseChangedFiles(affected).map(file=>Object.freeze(file))),...(rebaseContext?{rebaseContext}:{}),...(mergeContext?{mergeContext}:{})});
+    const readable=isUtf8(affected),preview: AdvancedPreview = Object.freeze({snapshot,command:captured,files:Object.freeze(readable?parseChangedFiles(affected).map(file=>Object.freeze(file)):[]),...(readable?{}:{filesNote:'nonUtf8Path' as const}),...(rebaseContext?{rebaseContext}:{}),...(mergeContext?{mergeContext}:{})});
     this.previews.add(preview); return preview;
   }
   private async fresh(snapshot: OperationSnapshot): Promise<RepositoryDescriptor> {
@@ -136,7 +138,9 @@ export class AdvancedService {
       if (action==='continue' && snapshot.status.changes.some(change=>change.group==='conflicts')) throw new Error('Resolve and stage all conflicts before continuing.');
       this.snapshots.delete(snapshot);
       const editorJob=operation==='rebasing'&&action!=='abort'?await this.editorJobs?.resume(repo.id):undefined;
-      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action,...(message!==undefined?{message}:{}),...(editorJob?.commentChar!==undefined?{commentChar:editorJob.commentChar}:{})},{...(editorJob?{editorJob}:{})});}
+      // Continue Merge without an edit commits the message Git prepared, minus only the "# Conflicts:" block it appended: a stripping cleanup would also delete a "#123 …" line the user wrote.
+      const prepared=message===undefined&&operation==='merging'&&action==='continue'?(await readMergeMessage(repo.gitDir)).trim()||undefined:undefined,sent=message??prepared;
+      try{await this.git.executor.mutate(repo.root,{kind:'operationControl',operation:operation as 'merging'|'rebasing'|'cherry-picking'|'reverting',action,...(sent!==undefined?{message:sent}:{}),...(editorJob?.commentChar!==undefined?{commentChar:editorJob.commentChar}:{})},{...(editorJob?{editorJob}:{})});}
       finally{await this.editorJobs?.cleanup(repo.id);}
     },()=>this.git.registry.refresh(repo.id));
   }

@@ -75,12 +75,12 @@ export class GitService implements RestoreFromSource {
    */
   private async paths(repo: RepositoryDescriptor, values: readonly string[], repositories = false): Promise<string[]> {
     if (!values.length || values.length > 5000) throw new Error('Select between 1 and 5000 files.');
-    const files = await this.policy.authorizeEntries(repo.root, [...new Set(values)]);
+    const unique = [...new Set(values)], files = await this.policy.authorizeEntries(repo.root, unique);
     // Authorization already placed every file inside this repository; only a registered repository nested in it could own one.
     const nested = this.registry.list().some(other => other.id !== repo.id && containsPath(repo.root, other.root));
     // Bounded parallelism: up to 5000 files would otherwise queue thousands of filesystem calls at once.
     for (let start = 0; start < files.length; start += 64) {
-      await Promise.all(files.slice(start, start + 64).map(async file => {
+      await Promise.all(files.slice(start, start + 64).map(async (file, offset) => {
         const info = await lstat(file).catch(() => undefined);
         const isRepository = info?.isDirectory() === true && await lstat(path.join(file, '.git')).then(() => true, () => false);
         if (nested) {
@@ -89,6 +89,11 @@ export class GitService implements RestoreFromSource {
           if (owner?.id !== repo.id && !(owner && isRepository && path.relative(owner.root, file) === '')) throw new Error('Select files belonging to this repository, excluding nested repositories.');
         }
         if (isRepository && !repositories) throw new Error(`${path.basename(file)} is a submodule or nested repository. Git Pro can stage and unstage it, but Discard and Get from Branch leave it alone.`);
+        // Only a submodule (a gitlink the index already holds) is staged as one entry. A repository Git does not track yet would be added as an embedded repository,
+        // a gitlink with no .gitmodules, which is rarely meant and which Git only warns about.
+        if (isRepository && !(await this.executor.read(repo.root, { kind: 'index', paths: [unique[start + offset]!.replace(/\/+$/, '')] })).stdout.length) {
+          throw new Error(`${path.basename(file)} is a repository of its own that this repository does not track yet. Staging it would add an embedded repository without a .gitmodules entry; use a terminal if you mean that.`);
+        }
         if (info?.isDirectory() && !isRepository) throw new Error('Select individual changed files rather than directories.');
       }));
     }
@@ -152,7 +157,8 @@ export class GitService implements RestoreFromSource {
   /** Stages every working-tree and untracked change in fresh status. Returns the count; a clean tree is a no-op. */
   stageAll(id: string): Promise<number> {
     return this.run(id, async ({ repo, status }) => {
-      const paths = status.changes.filter(change => change.group === 'working' || change.group === 'untracked').map(change => change.path);
+      // An untracked directory shown with a trailing slash is a repository of its own; staging it would embed it as a gitlink, so Stage All leaves it out.
+      const paths = status.changes.filter(change => (change.group === 'working' || change.group === 'untracked') && !(change.group === 'untracked' && change.path.endsWith('/'))).map(change => change.path);
       if (paths.length) await this.stagePaths(repo, paths);
       return paths.length;
     });
@@ -254,6 +260,8 @@ export class GitService implements RestoreFromSource {
       catch (error) { return { oid, pushed: false, pushError: recoveryFor(error).message }; }
     });
   }
+  /** Remotes without the idle-repository check of `remotes`: listing them for a view is harmless in the middle of a merge or rebase, and must not cost a status read. */
+  async listRemotes(id: string): Promise<readonly RemoteInfo[]> { const repo = this.repository(id); await this.policy.authorizeRoot(repo.root); return this.backend.remotes(repo.root); }
   async remotes(id: string): Promise<readonly RemoteInfo[]> { const { repo } = await this.ready(id); return this.backend.remotes(repo.root); }
   private async remote(repo: RepositoryDescriptor, name: string | undefined): Promise<string> {
     const remotes = await this.backend.remotes(repo.root);

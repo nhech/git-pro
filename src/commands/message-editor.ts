@@ -12,6 +12,9 @@ async function discard(document:vscode.TextDocument):Promise<void>{
   if(document.isClosed)return;
   try{
     // An untitled document with text is dirty, so a plain close would ask to save it. Revert-and-close acts on the active editor, so bring this one forward first.
-    await vscode.window.showTextDocument(document);await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+    await vscode.window.showTextDocument(document);
+    // The two calls are separate round trips: if the user switched editors in between, closing "the active editor" would revert their own file.
+    if(vscode.window.activeTextEditor?.document!==document)return;
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
   }catch{/* Closing is housekeeping; the message (or the cancel) has already been decided. */}
 }

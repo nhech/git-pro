@@ -163,6 +163,9 @@ test('A changed path that is not UTF-8 withholds the file list with a note, whil
     assert.equal(result.files.scope, 'fork'); assert.equal(result.files.omitted, true); assert.equal(result.files.note, 'nonUtf8Path'); assert.deepEqual(result.files.files, []); assert.deepEqual(result.files.stats, []);
     const tips = await f.service.comparisonFiles(f.id, latin, base, 'tips');
     assert.equal(tips.omitted, true); assert.equal(tips.note, 'nonUtf8Path');
+    // The History panel's own two-ref compare takes the same route instead of failing on the path.
+    const history = await f.service.compare(f.id, 'latin', 'main');
+    assert.equal(history.filesNote, 'nonUtf8Path'); assert.deepEqual(history.files, []); assert.deepEqual(history.stats, []); assert.equal(history.leftCount, 1);
     const details = await f.service.details(f.id, latin);
     assert.equal(details.commit.oid, latin); assert.equal(details.filesOmitted, true); assert.equal(details.filesNote, 'nonUtf8Path'); assert.deepEqual(details.files, []);
     const ordinary = await f.service.compareRefs(f.id, 'main', 'latin', 'fork');
@@ -188,7 +191,7 @@ test('A revision that is not UTF-8 is refused in words, and Open All Changes sho
       await h.send({ type: 'openAll', revision: state.revision });
       const resources = h.executed.at(-1)![2] as [{ fsPath: string }, unknown, unknown][];
       const side = resources.find(resource => resource[0].fsPath.endsWith('legacy.txt'))!, plain = resources.find(resource => resource[0].fsPath.endsWith('plain.txt'))!;
-      assert.match(await h.surface.blobs.provideTextDocumentContent(side[1]), /^This version of legacy\.txt is not UTF-8 text, so Git Pro cannot show it here\./);
+      assert.match(await h.surface.blobs.provideTextDocumentContent(side[1]), /^This version of legacy\.txt \([0-9a-f]{8}\) is not UTF-8 text, so Git Pro cannot show it here\./);
       assert.equal(await h.surface.blobs.provideTextDocumentContent(plain[2]), 'two\n', 'UTF-8 sides are unchanged');
     } finally { h.surface.dispose(); }
   } finally { await f.close(); }

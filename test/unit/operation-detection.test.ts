@@ -87,3 +87,13 @@ test('at a rebase stop committed by hand, a later merge or stash apply owns the 
     assert.equal(await detectConflictOperation(g.dir, true), 'rebasing', 'without the evidence the earlier answer stands');
   } finally { await g.cleanup(); }
 });
+
+test('only the "Conflicts:" block Git appended is removed from a prepared merge message, in any comment character', async () => {
+  const { withoutConflictsHint } = await import('../../src/git/conflicts/operation-context');
+  assert.equal(withoutConflictsHint("Merge branch 'x'\n\n# Conflicts:\n#\ta.txt\n#\tb c.txt\n"), "Merge branch 'x'");
+  assert.equal(withoutConflictsHint("Merge branch 'x'\n\n; Conflicts:\n;\ta.txt\n"), "Merge branch 'x'", 'core.commentChar can be anything');
+  assert.equal(withoutConflictsHint('#123 merge x\n\n#45 also fixes this\n\n# Conflicts:\n#\ta.txt\n'), '#123 merge x\n\n#45 also fixes this', 'a "#" line the user wrote stays');
+  assert.equal(withoutConflictsHint('#123 merge x\n'), '#123 merge x');
+  assert.equal(withoutConflictsHint('Conflicts: are fine to mention\n'), 'Conflicts: are fine to mention', 'the word alone is not the block');
+  assert.equal(withoutConflictsHint("Merge\n\n# Conflicts:\n#\ta.txt\nnot part of the block\n"), "Merge\n\n# Conflicts:\n#\ta.txt\nnot part of the block", 'a block followed by more text is left alone');
+});

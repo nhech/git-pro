@@ -1,9 +1,11 @@
 import { GitFailure, classifyGitDiagnostic, stoppedLockIn } from '../git/git-error-parser';
 import { redact } from '../security/redaction';
 export interface Recovery {message:string;diagnostic:string;label:string;command:string}
+/** A file path in Git Pro's own message ("src/conflicts/panel.ts was added…") says nothing about conflicts; only the words around it do. */
+const withoutPaths=(message:string):string=>message.replace(/\S*[\\/]\S*/g,' ');
 /** Recovery buttons navigate or read; they never retry a mutation. */
 export function recoveryFor(error:unknown):Recovery{
-  const details=error&&typeof error==='object'?error as {message?:unknown;gitErrorCode?:unknown;stderr?:unknown;gitCommand?:unknown;exitCode?:unknown}:undefined;
+  const details=error&&typeof error==='object'?error as {code?:unknown;message?:unknown;gitErrorCode?:unknown;stderr?:unknown;gitCommand?:unknown;exitCode?:unknown}:undefined;
   const gitDiagnostic=error instanceof GitFailure||details&&['gitErrorCode','stderr','gitCommand','exitCode'].some(key=>key in details);
   // Public Git errors stringify stdout/command payloads. Keep only message and
   // bounded stderr for diagnostics/classification, never that serialized payload.
@@ -11,7 +13,7 @@ export function recoveryFor(error:unknown):Recovery{
   const diagnostic=redact(`${original}${typeof details?.stderr==='string'?'\n'+details.stderr.slice(0,8192):''}`).slice(0,2000);
   const text=`${original}\n${typeof details?.stderr==='string'?details.stderr.slice(0,8192):''}`,classified=classifyGitDiagnostic(text);
   // Git output is a conflict only in Git's own words; Git Pro's own guards ("Conflict markers remain in a.txt…") still lead to the Conflicts tab.
-  const kind=error instanceof GitFailure?error.kind:details?.gitErrorCode==='AuthenticationFailed'?'auth':!gitDiagnostic&&classified==='unknown'&&/conflict|unmerged/i.test(original)?'conflict':classified;
+  const kind=error instanceof GitFailure?error.kind:details?.gitErrorCode==='AuthenticationFailed'?'auth':!gitDiagnostic&&classified==='unknown'&&(details?.code==='conflict'||/conflict|unmerged/i.test(withoutPaths(original)))?'conflict':classified;
   // A lock left by a Git process that Git Pro itself stopped: "busy with another operation" would send the user looking for one that does not exist.
   const lock=error instanceof GitFailure&&(kind==='timeout'||kind==='cancelled'||kind==='output-limit')?error.lockFile:undefined,stopped=kind==='locked'?stoppedLockIn(text):undefined;
   const removeLock='Check that no Git process is still running, then delete that file yourself. Git Pro will not remove lock files.';

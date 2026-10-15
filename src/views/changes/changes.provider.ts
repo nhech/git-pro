@@ -56,8 +56,12 @@ export class ChangesProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     if (error) return [{ kind: 'message', message: error }];
     const changes = this.registry.store.get(repo.id)?.changes;
     if (!changes) return [{ kind: 'message', message: 'Loading repository status…' }];
-    if (!node) return changes.length ? (['conflicts', 'staged', 'working', 'untracked'] as const)
-      .filter(group => changes.some(change => change.group === group)).map(group => ({ kind: 'group', group })) : [{ kind: 'message', message: this.registry.store.get(repo.id)?.omitted?.length ? unlistedChanges : 'Working tree clean' }];
+    if (!node) {
+      // Entries whose names Git Pro cannot show stay visible as a line of their own, beside the groups that can be listed.
+      const unlisted: Node[] = this.registry.store.get(repo.id)?.omitted?.length ? [{ kind: 'message', message: unlistedChanges }] : [];
+      return changes.length ? [...(['conflicts', 'staged', 'working', 'untracked'] as const)
+        .filter(group => changes.some(change => change.group === group)).map((group): Node => ({ kind: 'group', group })), ...unlisted] : unlisted.length ? unlisted : [{ kind: 'message', message: 'Working tree clean' }];
+    }
     if(node.kind!=='group'&&node.kind!=='folder')return[];
     const prefix=node.kind==='folder'?node.prefix:'';
     if(this.grouping(repo)!=='folder')return changes.filter(change=>change.group===node.group&&change.path.startsWith(prefix)).map(change=>({kind:'file',repositoryId:repo.id,change}));

@@ -47,7 +47,7 @@ export class RebasePlanner implements vscode.Disposable {
             steps[index]={oid:selected.oid,action,...(action==='reword'?{message}: {})};
           }
           revision++;await publish();
-        }catch(error){await post({type:'error',message:redact(String(error))});}
+        }catch(error){await post({type:'error',message:redact(error instanceof Error?error.message:String(error))});}
         finally{if(ownedBusy){busy=false;await post({type:'busy',busy:false});}}
       });
       const close=panel.onDidDispose(()=>{disposed=true;this.panels.delete(panel);receive.dispose();close.dispose();if(!settled){settled=true;resolve(undefined);}});

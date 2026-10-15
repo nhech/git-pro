@@ -7,7 +7,7 @@ import { runInNewContext } from 'node:vm';
 type Edit = (initial: string, title: string) => Promise<string | undefined>;
 
 /** Runs the compiled editor against a fake `vscode`; `answer` is what the user clicks and `text` what is in the scratch document by then. */
-async function run(answer: string | undefined, text: string, options: { closedByUser?: boolean; closeFails?: boolean } = {}) {
+async function run(answer: string | undefined, text: string, options: { closedByUser?: boolean; closeFails?: boolean; userSwitchedAway?: boolean } = {}) {
   const source = path.resolve(__dirname, '../../src/commands/message-editor.js');
   const shown: unknown[][] = [], commands: string[] = [];
   const document = { isClosed: options.closedByUser === true, getText: () => text };
@@ -15,6 +15,8 @@ async function run(answer: string | undefined, text: string, options: { closedBy
     ViewColumn: { Beside: -2 },
     workspace: { openTextDocument: async () => document },
     window: {
+      // After showTextDocument the scratch document is the active editor, unless the user moved to another file in between.
+      get activeTextEditor() { return { document: options.userSwitchedAway ? { isClosed: false } : document }; },
       showTextDocument: async (...args: unknown[]) => { shown.push(args); },
       showInformationMessage: async () => answer
     },
@@ -41,6 +43,12 @@ test('the scratch message document is reverted and closed after Use Message, Can
   const empty = await run('Use Message', '   ');
   assert.deepEqual(empty.result, { error: 'Enter a non-empty message of at most 65536 characters.' });
   assert.deepEqual(empty.commands, ['workbench.action.revertAndCloseActiveEditor'], 'a message that is refused does not leave its tab behind');
+});
+
+test('the scratch document is not closed when another editor became active in between, so that file is never reverted', async () => {
+  const switched = await run('Use Message', 'kept', { userSwitchedAway: true });
+  assert.deepEqual(switched.result, { value: 'kept' });
+  assert.deepEqual(switched.commands, [], 'revertAndCloseActiveEditor would have hit the other editor');
 });
 
 test('nothing is closed twice when the user already closed the document, and a failed close never changes the outcome', async () => {

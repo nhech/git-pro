@@ -108,6 +108,7 @@ export class DailyCommands implements vscode.Disposable {
   }
   async commit(id: string, message: string, options: CommitRequest, push: boolean): Promise<boolean> {
     const preview = await this.git.preview(id);
+    if (options.amend && !preview.head) throw new Error('There is no commit to amend.');
     if (options.amend && await vscode.window.showWarningMessage(`Amend ${preview.head?.slice(0, 12)}? This rewrites the last commit.`, { modal: true }, 'Amend') !== 'Amend') return false;
     if (options.noVerify && await vscode.window.showWarningMessage('Skip Git hooks for this commit?', { modal: true }, 'Skip Hooks') !== 'Skip Hooks') return false;
     const config = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.git.repository(id).root));

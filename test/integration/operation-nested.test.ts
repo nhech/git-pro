@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 import { advancedFixture } from '../fixtures/advanced-fixture';
+import { gitExecutable } from '../fixtures/repository-fixture';
 import { ConflictsService } from '../../src/git/conflicts/conflicts.service';
 import { GitFailure } from '../../src/git/git-error-parser';
 
@@ -68,6 +70,25 @@ test('a rebase -r merge step that stops on conflicts stays the rebase: Yours is 
     const snapshot = await f.advanced.snapshot(f.id);
     assert.equal(snapshot.operation, 'rebasing', 'REBASE_HEAD and MERGE_HEAD at a merge step, the last done step a merge');
     assert.deepEqual((await new ConflictsService(f.advanced).list(f.id)).summary.sides, rebase);
+    await f.advanced.control(snapshot, 'abort'); assert.equal((await f.advanced.snapshot(f.id)).operation, 'idle');
+  } finally { await f.close(); }
+});
+
+test('a squash or fixup that stops on conflicts is still the rebase: Yours is the replayed side, and Continue, Skip and Abort stay available', async () => {
+  const f = await advancedFixture(); try {
+    const base = await f.commit('f.txt', 'base\n', 'base');
+    await f.commit('a.txt', 'one\n', 'one'); await f.commit('f.txt', 'MINE\n', 'two'); await f.commit('f.txt', 'MINE-3\n', 'three');
+    // drop the middle commit and fixup the last into the first: the last commit's change to f.txt no longer applies, so the fixup stops on a conflict.
+    const script = path.join(f.parent, 'todo.cjs'), forward = (value: string) => value.replace(/\\/g, '/');
+    // The editor script avoids backslashes so that it reads the same whatever shell Git runs it through.
+    await writeFile(script, "const fs=require('fs');const NL=String.fromCharCode(10);const file=process.argv[2];const lines=fs.readFileSync(file,'utf8').split(NL).filter(l=>/^pick /.test(l));fs.writeFileSync(file,[lines[0],'drop '+lines[1].slice(5),'fixup '+lines[2].slice(5)].join(NL)+NL);");
+    const sequence = `"${forward(process.execPath)}" "${forward(script)}"`;
+    const result = spawnSync(gitExecutable, ['rebase', '-i', base], { cwd: f.root, env: { ...f.env, GIT_SEQUENCE_EDITOR: sequence, GIT_EDITOR: 'true' }, windowsHide: true, encoding: 'utf8' });
+    assert.notEqual(result.status, 0, 'the fixup conflicts');
+    assert.match(await readFile(path.join(f.root, '.git', 'rebase-merge', 'done'), 'utf8'), /^fixup /m);
+    const snapshot = await f.advanced.snapshot(f.id);
+    assert.equal(snapshot.operation, 'rebasing', 'REBASE_HEAD and rebase-merge/amend are both there, but the last step was a fixup, not an edit stop');
+    assert.deepEqual((await new ConflictsService(f.advanced).list(f.id)).summary.sides, rebase, 'Yours is the commit being replayed (stage 3), not the commit it was squashed into');
     await f.advanced.control(snapshot, 'abort'); assert.equal((await f.advanced.snapshot(f.id)).operation, 'idle');
   } finally { await f.close(); }
 });

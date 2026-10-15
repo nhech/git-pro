@@ -17,7 +17,7 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
     if (branches.length || !node.remote) return branches;
     // Remote branches are only the ones Git already has locally; say so, and offer the fetch that downloads the rest.
     // A fetch cannot help a repository with no remote, so that case says so instead. If the lookup fails, assume a remote exists.
-    const remotes = await this.git.remotes(repo.id).then(list => list.length > 0, () => true);
+    const remotes = await this.git.listRemotes(repo.id).then(list => list.length > 0, () => true);
     return [{ kind: 'hint', remotes }];
   }
   getTreeItem(node: BranchNode): vscode.TreeItem {

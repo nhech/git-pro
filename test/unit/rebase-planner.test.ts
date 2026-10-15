@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { parsePlannerRequest } from '../../src/webviews/rebase/planner-protocol';
-import { validateRebasePlan } from '../../src/git/rebase/rebase-plan';
+import { nativeContinueCommand, validateRebasePlan } from '../../src/git/rebase/rebase-plan';
 
 test('planner protocol rejects arbitrary plans and bounds aggregate UTF-8 message data',()=>{
   const oid='a'.repeat(40);assert.equal(parsePlannerRequest({type:'action',session:'s',revision:1,oid,action:'edit'}).type,'action');
@@ -98,4 +98,10 @@ test('planner keeps hostile subjects literal and separates action guidance from 
   const retained=elements.get('action-help')!.textContent;
   receive!({data:{type:'state',session:'expired',revision:4,steps:[steps[0]],range:'Wrong'}});assert.equal(elements.get('action-help')!.textContent,retained);
   receive!({data:{type:'busy',session:'s',busy:true}});list.children[0]!.listeners.get('click')!({});assert.equal(elements.get('action-help')!.textContent,retained);assert.equal(sent.length,before);
+});
+
+test('the terminal command that continues a rebase carries the plan comment character, quoted for every shell', () => {
+  assert.equal(nativeContinueCommand(';'), "git -c 'core.commentChar=;' rebase --continue", 'a semicolon would otherwise end the shell command');
+  assert.equal(nativeContinueCommand('@'), "git -c 'core.commentChar=@' rebase --continue");
+  assert.equal(nativeContinueCommand("'"), `git -c "core.commentChar='" rebase --continue`);
 });

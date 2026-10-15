@@ -260,7 +260,7 @@ test('an empty Remote group explains that no remote branches are downloaded and 
   runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   let branches: BranchInfo[] = [branch('main'), branch('feature')];
   let remotes: () => Promise<unknown[]> = async () => [{ name: 'origin' }];
-  const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => ({ head: 'main' }) } }, branchSearchSnapshot: async () => branches, remotes: () => remotes() };
+  const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => ({ head: 'main' }) } }, branchSearchSnapshot: async () => branches, listRemotes: () => remotes() };
   type Node = { kind: string; remote?: boolean };
   const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
   const provider = new (exports.BranchesProvider as new (git: unknown) => { getChildren(node?: Node): Promise<Node[]>; getTreeItem(node: Node): TreeItem; dispose(): void })(git);

@@ -197,7 +197,7 @@ export class HistoryPanel implements vscode.Disposable {
           if(current!==generation||disposed||sidePages!==captured)return;
           sidePages={...captured,...(action.side==='left'?{leftOffset:action.offset,leftCommits:page}:{rightOffset:action.offset,rightCommits:page})};comparison=sidePages;updateSideMembership();await post({type:'comparison',result:sidePages,inputs:comparisonInputs});
         }
-      } catch (error) { if (!disposed && current === generation) await post({ type: 'error', message: redact(String(error)) }); }
+      } catch (error) { if (!disposed && current === generation) await post({ type: 'error', message: redact(error instanceof Error ? error.message : String(error)) }); }
       finally { if (ownedDiff) diffBusy = false;if(ownedRequest&&current===generation)requestBusy=false; if (!disposed && !requestBusy&&!diffBusy&&(ownedDiff||ownedRequest)&&(ownedDiff||current===generation)) await post({ type: 'busy', busy: false, canCancel: false, selected }); }
     });
     const dispose = panel.onDidDispose(() => { disposed = true; generation++; request?.abort();refsLookup?.abort();initialController?.abort();initialController=undefined;initialAcquisition=undefined;buffered=undefined; receive.dispose(); dispose.dispose(); this.panels.delete(panel); commits = []; rows = []; comparison = undefined;detailMessage=undefined;sidePages=undefined;comparisonInputs=undefined;comparisonCommits.clear();historicalPaths.clear();followQuery=undefined;query=undefined; });

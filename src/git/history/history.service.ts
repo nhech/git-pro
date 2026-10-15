@@ -170,7 +170,9 @@ export class HistoryService implements CompareService {
     const a = validateOid(decode(left).trim()), b = validateOid(decode(right).trim());
     const [files, stats,leftCommits,rightCommits,counts] = await Promise.all([this.read(id, { kind: 'changedFiles', from: a, to: b }, signal), this.read(id, { kind: 'numstat', from: a, to: b }, signal),this.read(id,{kind:'comparisonCommits',tip:a,exclude:b},signal),this.read(id,{kind:'comparisonCommits',tip:b,exclude:a},signal),this.read(id,{kind:'comparisonCount',from:a,to:b},signal)]);
     const count=parseComparisonCounts(counts);
-    return { from: a, to: b, files: parseChangedFiles(files), stats: parseNumstat(stats),leftCommits:parseHistory(leftCommits),rightCommits:parseHistory(rightCommits),leftCount:count.left,rightCount:count.right,leftOffset:0,rightOffset:0 };
+    // A path that is not UTF-8 withholds the file list (and says why) instead of failing the whole comparison, as the Compare tab does.
+    const readable=utf8Listing(files,stats);
+    return { from: a, to: b, files: readable?parseChangedFiles(files):[], stats: readable?parseNumstat(stats):[],...(readable?{}:{filesNote:'nonUtf8Path' as const}),leftCommits:parseHistory(leftCommits),rightCommits:parseHistory(rightCommits),leftCount:count.left,rightCount:count.right,leftOffset:0,rightOffset:0 };
   }
   async comparisonPage(id:string,tip:string,exclude:string,offset:number,signal?:AbortSignal):Promise<HistoryCommit[]>{return parseHistory(await this.read(id,{kind:'comparisonCommits',tip,exclude,offset},signal));}
   /** A branch, tag or exact OID, pinned to its commit; ranges and other revision syntax stay rejected by the `ref` recipe. */
