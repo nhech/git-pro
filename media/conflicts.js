@@ -90,6 +90,9 @@
     const files=items.filter(item=>item.type==='file'&&item.group==='unresolved'&&visible(item));selected.clear();for(const row of files.slice(0,100))selected.add(row.key);
     if(files.length>100)announce('Selected the first 100 files. Actions apply to up to 100 files at a time.');publish();renderSelection();
   };
+  // A native menu hands focus back to the page, not to the row it was opened on; the first focus or key afterwards puts it back there.
+  let menuReturnKey;
+  const restoreAfterMenu=()=>{const key=menuReturnKey;menuReturnKey=undefined;if(key&&elements.has(key)&&(!document.activeElement||document.activeElement===document.body))focusRow(key);};
   const focusRow=key=>{const node=elements.get(key);if(!node)return;focusedKey=key;for(const [other,element] of elements)element.tabIndex=other===key?0:-1;node.focus();};
   const toggleGroup=item=>{if(collapsed.has(item.key))collapsed.delete(item.key);else collapsed.add(item.key);renderRows();focusRow(item.key);};
   // Enter and double-click: Merge… for a mergeable row; otherwise the Accept buttons get focus and the reason is announced (§3.2).
@@ -142,7 +145,7 @@
     node.addEventListener('click',event=>{closeMenu(false);focusRow(item.key);selectRow(item,event);});
     node.addEventListener('dblclick',()=>enter(item));
     // A right-click outside the selection selects just that row before the native menu opens, as in the Explorer.
-    node.addEventListener('contextmenu',()=>{focusedKey=item.key;if(!selected.has(item.key))selectOnly(item);});
+    node.addEventListener('contextmenu',()=>{focusedKey=item.key;menuReturnKey=item.key;if(!selected.has(item.key))selectOnly(item);});
     tagRow(node,item);
     node.addEventListener('keydown',event=>keydown(item,node,event));
     return node;
@@ -319,6 +322,7 @@
   document.addEventListener('keyup',event=>{if(!swallow)return;event.stopPropagation();if(event.key==='Alt'||!event.altKey)swallow=false;});
   document.addEventListener('pointerdown',event=>{if(menu&&!menu.contains(event.target))closeMenu(false);});
   // A dropdown of ours is anchored to its button: it goes away when the panel loses focus, is resized or scrolls, instead of floating where it was.
+  window.addEventListener('focus',restoreAfterMenu);document.addEventListener('keydown',restoreAfterMenu,true);
   window.addEventListener('blur',()=>closeMenu(false));window.addEventListener('resize',()=>closeMenu(false));document.addEventListener('scroll',()=>closeMenu(false),true);
   render();send({type:'ready'});
 })();

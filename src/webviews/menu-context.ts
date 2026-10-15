@@ -21,8 +21,13 @@ export interface MenuPanel {
   /** Set by panels whose rows are commits of one repository (History, Compare, Conflicts); the commit menu commands need it. */
   readonly repositoryId?: string;
   knowsCommit?(oid: string): boolean;
-  /** Panel-specific actions (open a diff, select a row…); `context` is already parsed. */
-  handle?(action: string, context: MenuContext): Promise<void> | void;
+  /**
+   * Panel-specific actions (open a diff, select a row…). `context` is already parsed; it is missing when a keyboard shortcut ran the command, which then acts on what the panel
+   * itself has selected.
+   */
+  handle?(action: string, context?: MenuContext): Promise<void> | void;
+  /** Whether this panel is the editor that has focus: the one a keyboard shortcut means. */
+  active?(): boolean;
 }
 const keyPattern = /^[A-Za-z][A-Za-z0-9]{0,31}$/, sessionPattern = /^[A-Za-z0-9-]{8,64}$/, sectionPattern = /^[a-z][a-z-]{0,31}$/, webviewPattern = /^[A-Za-z][A-Za-z0-9.-]{0,63}$/;
 const reserved = new Set(['webview', 'webviewSection', 'session', 'preventDefaultContextMenuItems']);
@@ -62,6 +67,12 @@ export class MenuRouter {
     const panel = this.panels.get(MenuRouter.key(context.webview, context.session));
     if (!panel) throw new Error('This panel is closed. Open it again to use its menu.');
     return { panel, context };
+  }
+  /** The panel of this kind that has focus, for a command run from a keyboard shortcut (which carries no context); throws when none is the active editor. */
+  active(webview: string): MenuPanel {
+    const found = [...this.panels].filter(([key, panel]) => key.startsWith(`${webview}\0`) && panel.active?.() === true).map(([, panel]) => panel);
+    if (found.length !== 1) throw new Error('Use this shortcut while that Git Pro tab is the active editor.');
+    return found[0]!;
   }
   /** A commit menu command: the panel, its repository and a full commit ID that the panel confirms it shows. */
   commit(argument: unknown, webviews?: readonly string[]): { readonly panel: MenuPanel; readonly context: MenuContext; readonly repositoryId: string; readonly oid: string } {

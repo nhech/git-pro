@@ -16,7 +16,6 @@ test('manifest localization and menu commands resolve without duplicate contribu
   for(const command of ['gitPro.branch.checkout','gitPro.branch.rename','gitPro.branch.delete','gitPro.repository.fetch','gitPro.tools.stash.apply','gitPro.tools.tag.push'])assert.ok(itemMenu.some(item=>item.command===command&&item.group!=='inline'),`${command} is in the right-click menu`);
   assert.ok(!itemMenu.some(item=>item.when.includes('view == gitPro.changes')),'Tree-only menu clauses must not remain after the Changes view switch');
   assert.ok(itemMenu.some(item=>item.command==='gitPro.repositoryTools'&&item.when.includes('gitPro.toolsView')&&item.when.includes('gitPro.tools')),'Repository Tools context action is scoped to its own view items');
-  assert.equal(manifest.contributes.keybindings,undefined,'No default shortcuts before collision review');
 });
 
 /** The subset of VS Code when-clause syntax the manifest uses; `seen` collects every context key the clause reads. */
@@ -55,7 +54,7 @@ test('conflict and compare contributions use stable menus, owned context keys, l
     assert.ok(messages[`command.${item.command}.title`]?.trim(),`${item.command} title is localized`);
   }
   for(const [id,title] of Object.entries(titles))assert.equal(messages[`command.${id}.title`],title,`${id} title`);
-  assert.equal(manifest.contributes.keybindings,undefined,'Shortcuts stay inside Git Pro webviews; every action is a bindable command');
+  // Shortcuts are scoped to Git Pro's own tabs and views (see the keybindings test below); every action stays a bindable command.
   assert.equal(manifest.enabledApiProposals,undefined,'No proposed API');
   // Merge-editor and multi-diff menu points other than editor/title are proposed API.
   assert.deepEqual(Object.keys(menus).filter(id=>!['view/title','view/item/context','editor/context','editor/title','editor/title/context','explorer/context','commandPalette','webview/context'].includes(id)),[]);
@@ -162,4 +161,31 @@ test('webview context menus: every item names a panel and a section, is hidden f
     const groups=menu.filter(item=>item.when?.includes(`webviewId == 'gitPro.${panel}'`)&&item.when.includes(`webviewSection == '${section}'`)).map(item=>item.group);
     assert.equal(new Set(groups).size,groups.length,`${panel} ${section} menu groups are unique`);
   }
+});
+
+test('keyboard shortcuts are scoped to Git Pro\'s own tabs and views, name registered commands and never collide',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8')) as {contributes:{commands:{command:string}[];keybindings:{command:string;key:string;mac?:string;when:string}[]}};
+  const commands=new Set(manifest.contributes.commands.map(item=>item.command)),bindings=manifest.contributes.keybindings;
+  assert.ok(bindings.length>=10);
+  const owned=new Set(['gitPro.branchesView.item','gitPro.toolsView.item']),builtIn=new Set(['activeWebviewPanelId','focusedView','sideBarFocus','panelFocus','auxiliaryBarFocus']);
+  const panels=new Set(['gitPro.conflicts','gitPro.rebasePlanner']),views=new Set(['gitPro.branchesView','gitPro.toolsView']);
+  const seen=new Set<string>();
+  for(const binding of bindings){
+    assert.ok(commands.has(binding.command),`${binding.command} is contributed`);
+    // A shortcut never reaches outside a Git Pro tab or view, so it cannot shadow a workbench or editor shortcut elsewhere; a tab's shortcuts also stay off while the keyboard is in the sidebar or the panel.
+    const panel=/^activeWebviewPanelId == '([\w.]+)' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus$/.exec(binding.when),view=/^focusedView == ([\w.]+)(?: && |$)/.exec(binding.when);
+    assert.ok(panel?panels.has(panel[1]!):view&&views.has(view[1]!),`${binding.command} ${binding.key} is scoped to one of Git Pro's tabs or views: ${binding.when}`);
+    const keys=new Set<string>();when(binding.when,{},keys);for(const name of keys)assert.ok(owned.has(name)||builtIn.has(name),`${binding.command} reads unknown context key ${name}`);
+    for(const key of [binding.key,binding.mac].filter((value):value is string=>Boolean(value))){const identity=`${key}\0${binding.when}`;assert.ok(!seen.has(identity),`${key} is bound twice for ${binding.when}`);seen.add(identity);}
+  }
+  // Delete means a different removal in the Repository Tools view for each kind of item, so each binding names its kind and none overlaps another.
+  const deletes=bindings.filter(binding=>binding.key==='delete'&&binding.when.includes('gitPro.toolsView'));
+  assert.deepEqual(deletes.map(binding=>binding.when.split('== ').at(-1)).sort(),['gitPro.tools.row.remote','gitPro.tools.row.stash','gitPro.tools.row.tag','gitPro.tools.row.worktree']);
+  for(const binding of bindings.filter(item=>/^gitPro\.(?:tools|branch)\./.test(item.command)&&item.key!=='ctrl+c'))assert.ok(binding.key==='f2'||binding.key==='delete','Branches and Repository Tools bind only F2 and Delete (and Copy)');
+  // Shortcuts that are already handled inside a tab keep the tab from forwarding the key (see conflicts.js and rebase.js), so a key runs once.
+  const handledInside=readFileSync('media/conflicts.js','utf8')+readFileSync('media/rebase.js','utf8');
+  assert.match(handledInside,/stopPropagation/);
+  // The context keys the views set are the ones the bindings read.
+  const source=readFileSync('src/extension.ts','utf8');
+  for(const key of owned)assert.ok(source.includes(`'${key}'`),`${key} is set by extension.ts`);
 });

@@ -19,6 +19,7 @@ import { GitService } from './git/git.service';
 import { DailyCommands } from './commands/daily.commands';
 import { RevisionProvider } from './documents/revision-provider';
 import { BranchesProvider } from './views/branches/branches.provider';
+import { trackSelection } from './views/view-keys';
 import { CommitComposer } from './webviews/commit/commit-composer';
 import { AutoFetch } from './git/auto-fetch';
 import type { RepositorySnapshot } from './state/repository-store';
@@ -110,7 +111,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const fileActions = new FileActionsCommands(advanced,revisions);
     const tools = new ToolsService(advanced);
     const toolsProvider = new ToolsProvider(tools);
-    context.subscriptions.push(toolsProvider,vscode.window.createTreeView('gitPro.toolsView',{treeDataProvider:toolsProvider}));
+    const toolsView=vscode.window.createTreeView('gitPro.toolsView',{treeDataProvider:toolsProvider});
+    // F2 and Delete in this view are scoped to the kind of item selected (stash, tag, remote, worktree) by a context key.
+    context.subscriptions.push(toolsProvider,toolsView,trackSelection(toolsView,'gitPro.toolsView.item',item=>toolsProvider.getTreeItem(item).contextValue));
     const history = new HistoryService(registry, executor, policy);
     const toolsCommands = new ToolsCommands(tools,new WorktreeService(tools,policy),history,revisions,surfaces);
     const historyPanels = new HistoryPanel(context, history, revisions, surfaces.menus);
@@ -119,6 +122,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
     const daily = new DailyCommands(git, revisions, adapter, changesPanel, logger, surfaces);
     const branches = new BranchesProvider(git);
+    // Ctrl/Shift-click selects two branches for Compare Branches; a click only selects, and the branch's actions are in its menu.
+    const branchesView = vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches, canSelectMany: true });
+    daily.branchesView = branchesView;
     const composer = new CommitComposer(context, git, (id, message, options, push) => daily.commit(id, message, options, push),logger);
     const lifetime = new AbortController();
     context.subscriptions.push({ dispose: () => lifetime.abort() }, executor, store, registry, coordinator,
@@ -127,8 +133,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       changesPanel, vscode.window.registerWebviewViewProvider('gitPro.changes',changesPanel,{webviewOptions:{retainContextWhenHidden:false}}),
       revisions, daily, branches, composer, autoFetch, history, historyPanels, blame,
       vscode.workspace.registerTextDocumentContentProvider('git-pro-revision', revisions),
-      // Ctrl/Shift-click selects two branches for Compare Branches; a plain click still runs the row's Branch Actions.
-      vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches, canSelectMany: true }),
+      branchesView, trackSelection(branchesView, 'gitPro.branchesView.item', item => branches.getTreeItem(item).contextValue),
       vscode.window.registerWebviewViewProvider('gitPro.commitView', composer));
     const command = (id: string, action: (...args: unknown[]) => Promise<unknown>) => {
       context.subscriptions.push(vscode.commands.registerCommand(id, async (...args: unknown[]) => {
@@ -201,7 +206,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
     const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,surfaces};
-    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands});
+    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands,selectedTool:()=>toolsView.selection.length===1?toolsView.selection[0]:undefined});
     let syncTail: Promise<void> = Promise.resolve();
     const synchronize = () => {
       syncTail = syncTail.then(async () => {

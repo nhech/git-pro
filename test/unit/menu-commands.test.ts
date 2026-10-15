@@ -17,12 +17,13 @@ function harness() {
   const source = path.resolve(__dirname, '../../src/commands/menu.commands.js'), load = createRequire(source), exports: Record<string, unknown> = {};
   runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   const menus = new MenuRouter(), repositories = [{ id: 'repo-1', root: '/work/repo' }];
+  const view = { tool: undefined as unknown };
   const record = (name: string) => async (...args: unknown[]) => { calls.push([name, ...args]); };
   const compare = { openRefs: async (...args: unknown[]) => { opened.push(['refs', ...args]); }, openWorktree: async (...args: unknown[]) => { opened.push(['worktree', ...args]); } };
   const deps = { surfaces: { menus, compare }, registry: { list: () => repositories, select: (id: string) => { selected.push(id); } }, history: { message: async () => 'Subject\n\nBody' } };
-  const flows = { advanced: { applyCommit: record('applyCommit'), rebasePlan: record('rebasePlan') }, tools: { checkoutCommit: record('checkoutCommit'), branchFromCommit: record('branchFromCommit'), tagAtCommit: record('tagAtCommit'), menu: record('toolsMenu') } };
+  const flows = { advanced: { applyCommit: record('applyCommit'), rebasePlan: record('rebasePlan') }, tools: { checkoutCommit: record('checkoutCommit'), branchFromCommit: record('branchFromCommit'), tagAtCommit: record('tagAtCommit'), menu: record('toolsMenu') }, selectedTool: () => view.tool };
   (exports.registerMenus as (...args: unknown[]) => void)({}, deps, (id: string, action: (...args: unknown[]) => Promise<unknown>) => { handlers.set(id, action); }, flows);
-  return { handlers, executed, clipboard, selected, calls, opened, menus, run: (id: string, ...args: unknown[]) => handlers.get(id)!(...args) };
+  return { handlers, executed, clipboard, selected, calls, opened, menus, view, run: (id: string, ...args: unknown[]) => handlers.get(id)!(...args) };
 }
 
 test('every menu command the manifest contributes for the panels and views is registered, and nothing else', () => {
@@ -82,10 +83,31 @@ test('commit menu commands act on the commit a live panel confirms, through the 
 
 test('panel menu commands need the section of the element they are for and a live panel that handles them', async () => {
   const h = harness(), handled: string[][] = [];
-  h.menus.register('gitPro.compare', session, { repositoryId: 'repo-1', handle: (action, context) => { handled.push([action, context.section]); } });
+  h.menus.register('gitPro.compare', session, { repositoryId: 'repo-1', handle: (action, context) => { handled.push([action, context!.section]); } });
   const argument = (section: string) => ({ webview: 'gitPro.compare', webviewSection: section, preventDefaultContextMenuItems: true, session, revision: 1, index: 0 });
   await h.run('gitPro.menu.compare.diff', argument('file')); await h.run('gitPro.menu.compare.showFiles', { ...argument('commit'), oid: oid('a') });
   assert.deepEqual(handled, [['diff', 'file'], ['showFiles', 'commit']]);
   await assert.rejects(h.run('gitPro.menu.compare.diff', argument('commit')), /Git Pro panel menu/, 'a file command on a commit row');
   await assert.rejects(h.run('gitPro.menu.conflicts.merge', argument('conflict')), /Git Pro panel menu/, 'a command of another panel');
+});
+
+test('a keyboard shortcut runs a Conflicts or planner command on the active tab\'s own selection, and nothing else', async () => {
+  const h = harness(), handled: [string, string][] = [];
+  let first = true;
+  h.menus.register('gitPro.conflicts', session, { repositoryId: 'repo-1', active: () => first, handle: (action, context) => { handled.push([action, context === undefined ? 'keyboard' : context.section]); } });
+  h.menus.register('gitPro.rebasePlanner', '11111111-0000-4000-8000-000000000000', { active: () => true, handle: (action, context) => { handled.push([`planner:${action}`, context === undefined ? 'keyboard' : context.section]); } });
+  await h.run('gitPro.menu.conflicts.acceptYours'); await h.run('gitPro.menu.rebasePlanner.moveUp');
+  assert.deepEqual(handled, [['acceptYours', 'keyboard'], ['planner:moveUp', 'keyboard']]);
+  first = false; await assert.rejects(h.run('gitPro.menu.conflicts.merge'), /active editor/, 'a tab that is not the active editor is not what the shortcut means');
+  first = true; h.menus.register('gitPro.conflicts', '22222222-0000-4000-8000-000000000000', { repositoryId: 'repo-2', active: () => true, handle: () => undefined });
+  await assert.rejects(h.run('gitPro.menu.conflicts.merge'), /active editor/, 'two active tabs are ambiguous');
+  // Panels whose rows are commits or files have no shortcut: those commands still need the row a menu was opened on.
+  h.menus.register('gitPro.compare', '33333333-0000-4000-8000-000000000000', { repositoryId: 'repo-1', active: () => true, handle: () => undefined });
+  await assert.rejects(h.run('gitPro.menu.compare.diff'), /Git Pro panel menu/); await assert.rejects(h.run('gitPro.menu.commit.copyHash'), /Git Pro panel menu/);
+});
+
+test('a shortcut in the Repository Tools view acts on the selected item, and an item named by a click wins', async () => {
+  const h = harness(), clicked = { kind: 'row', group: 'Stashes', repositoryId: 'repo-1', key: 'a' }, selected = { kind: 'row', group: 'Tags', repositoryId: 'repo-1', key: 'v1' };
+  h.view.tool = selected; await h.run('gitPro.tools.tag.deleteLocal'); await h.run('gitPro.tools.stash.drop', clicked);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls)), [['toolsMenu', selected, 'Delete Local'], ['toolsMenu', clicked, 'Drop']]);
 });

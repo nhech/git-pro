@@ -81,7 +81,7 @@ class ComparePanel {
     this.subscriptions = [this.panel.webview.onDidReceiveMessage(raw => this.receive(raw)), this.panel.onDidDispose(() => this.dispose(true))];
     this.panel.webview.html = compareHtml({ session: this.session, nonce, cspSource: this.panel.webview.cspSource, resource });
     // Stand-in dependencies in tests carry no surfaces, and a tab without the router simply has no native menu.
-    this.menu = owner.deps.surfaces?.menus.register('gitPro.compare', this.session, { repositoryId, knowsCommit: oid => this.knowsCommit(oid), handle: (action, context) => this.menuAction(action, context) });
+    this.menu = owner.deps.surfaces?.menus.register('gitPro.compare', this.session, { repositoryId, knowsCommit: oid => this.knowsCommit(oid), handle: (action, context) => { if (!context) throw new Error('Use this command from a Git Pro panel menu.'); return this.menuAction(action, context); } });
   }
   get key(): string { return panelKey(this.repositoryId, this.mode, this.left.oid, this.right?.oid, this.folder); }
   /** A folder comparison lists only the files inside it (a rename counts when either path is inside). */

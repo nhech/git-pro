@@ -23,6 +23,8 @@ export class DailyCommands implements vscode.Disposable {
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly branchPickers = new Set<vscode.Disposable>();
   readonly diffs: DiffService;
+  /** The Branches view, set once it exists: a keyboard shortcut (F2, Delete) runs a branch command without the branch, so the view's selection is the target. */
+  branchesView: { readonly selection: readonly unknown[] } | undefined;
   constructor(private readonly git: GitService, private readonly revisions: RevisionProvider,
     private readonly adapter: BuiltinGitAdapter, private readonly changesView: { readonly selection: readonly ChangeNode[] }, private readonly logger: Logger,
     private readonly surfaces: Surfaces = createSurfaces()) {
@@ -248,7 +250,7 @@ export class DailyCommands implements vscode.Disposable {
     await this.branchChoice(choice, node);
   }
   private async branchMenu(choice: BranchChoice, arg: unknown, selection?: unknown): Promise<void> {
-    const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined)) as BranchNode | undefined;
+    const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined) ?? (this.branchesView?.selection.length === 1 ? this.branchesView.selection[0] : undefined)) as BranchNode | undefined;
     if (!node || node.kind !== 'branch') throw new Error('Select a branch in the Branches view.');
     await this.branchChoice(choice, node);
   }

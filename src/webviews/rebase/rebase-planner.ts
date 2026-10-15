@@ -13,7 +13,7 @@ export class RebasePlanner implements vscode.Disposable {
   choose(preview:InteractivePreview,root:string,edit:(oid:string,initial?:string)=>Promise<string|undefined>,confirm:(steps:readonly RebaseStep[])=>Promise<boolean>=async()=>true):Promise<PlannerChoice>{
     const panel=vscode.window.createWebviewPanel('gitPro.rebasePlanner','Git Pro: Interactive Rebase',vscode.ViewColumn.Active,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(this.context.extensionUri,'media')],retainContextWhenHidden:false});
     this.panels.add(panel);const session=randomUUID(),nonce=randomUUID().replace(/-/g,'');
-    const steps:RebaseStep[]=preview.commits.map(commit=>({oid:commit.oid,action:'pick'}));let revision=0,busy=false,disposed=false;
+    const steps:RebaseStep[]=preview.commits.map(commit=>({oid:commit.oid,action:'pick'}));let revision=0,busy=false,disposed=false,selectedOid:string|undefined;
     const post=(value:Record<string,unknown>)=>disposed?Promise.resolve(false):panel.webview.postMessage({...value,session});
     const publish=()=>{
       let error:string|undefined;try{validateRebasePlan(preview.commits,steps);}catch(value){error=redact(String(value));}
@@ -26,6 +26,8 @@ export class RebasePlanner implements vscode.Disposable {
         try{
           const request=parsePlannerRequest(raw);if(disposed||request.session!==session)throw new Error('Planner session expired.');
           if(request.type==='ready'){await publish();await post({type:'busy',busy});return;}
+          // Which commit is selected is only remembered, so that a keyboard shortcut knows its target; it changes nothing and needs no revision.
+          if(request.type==='select'){if(steps.some(step=>step.oid===request.oid))selectedOid=request.oid;return;}
           if(busy)throw new Error('Wait for the current planner action.');
           if(request.revision!==revision)throw new Error('Plan changed. Review the current order again.');
           if(request.type==='cancel'||request.type==='native'){finish(request.type==='native'?Object.freeze({native:freeze()}):undefined);return;}
@@ -53,8 +55,9 @@ export class RebasePlanner implements vscode.Disposable {
       };
       const receive=panel.webview.onDidReceiveMessage(receiveMessage);
       // The native right-click menu: each choice becomes the message the planner's own controls send, so the session, revision and captured range are checked the same way.
-      const menu=this.menus?.register('gitPro.rebasePlanner',session,{handle:(action:string,context:MenuContext)=>{
-        const {oid,revision:seen}=context.values,base={session,revision:seen,oid};
+      const menu=this.menus?.register('gitPro.rebasePlanner',session,{active:()=>panel.active,handle:(action:string,context?:MenuContext)=>{
+        // Without a clicked row (a keyboard shortcut) the target is the commit the planner has selected.
+        const oid=context?context.values.oid:selectedOid,seen=context?context.values.revision:revision,base={session,revision:seen,oid};
         if(['pick','reword','edit','squash','fixup','drop'].includes(action))return receiveMessage({...base,type:'action',action});
         if(action==='moveUp'||action==='moveDown')return receiveMessage({...base,type:'step',direction:action==='moveUp'?'up':'down'});
         if(action==='editMessage')return receiveMessage({...base,type:'message'});

@@ -11,6 +11,9 @@ Right-click menus are now VS Code's own, and Compare is quicker to work in.
 - **Compare a folder** with a branch, tag or revision: Compare with Branch or Tag… now works on a folder in the Explorer, and lists only the files inside it.
 - **Enter a revision…** at the end of every Compare list takes a commit ID or an expression such as `HEAD~3`.
 - Ctrl+A (⌘A) selects every file in a working-tree comparison.
+- **Shortcuts that the menus show.** Alt+Y, Alt+T and Alt+M (Accept Yours, Accept Theirs, Merge…) are now real shortcuts of the Conflicts tab, so its menu shows them, and Alt+Up and Alt+Down move the selected commit in the interactive rebase planner; neither runs while the keyboard is in the sidebar or the panel. In the Branches view F2 renames, Delete deletes (after the usual confirmation) and Ctrl+C copies the name of the selected branch; in Repository Tools Delete starts the removal that fits the selected stash, tag, remote or worktree, and F2 renames a remote. Every shortcut works only inside its own tab or view.
+- **Next and Previous File** in Compare (Alt+Down and Alt+Up in the list, or the arrow buttons above it) open the neighbouring file's diff beside the tab.
+- After a right-click menu closes, focus goes back to the row it was opened on.
 - Fixes: the Changes view said "Working tree clean" twice; History showed `refs/heads/…` paths in the filter summary and on commit rows instead of branch and tag names; the Commit pane cut off its staging hint.
 - The Marketplace page has a new description and more search keywords, and the README screenshots are no longer packed into the extension: the package is 332 KB instead of 798 KB, and the README links to them at the commit the package was built from.
 

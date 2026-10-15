@@ -4,6 +4,7 @@ export type PlannerRequest = {session:string;revision:number} & (
   {type:'ready'|'review'|'cancel'|'native'} |
   {type:'action';oid:string;action:RebaseAction} |
   {type:'message';oid:string} |
+  {type:'select';oid:string} |
   {type:'move';oid:string;target:string} |
   {type:'step';oid:string;direction:'up'|'down'});
 export function parsePlannerRequest(value:unknown):PlannerRequest {
@@ -14,6 +15,7 @@ export function parsePlannerRequest(value:unknown):PlannerRequest {
   if(['ready','review','cancel','native'].includes(String(item.type)))return {...base,type:item.type as 'ready'|'review'|'cancel'|'native'};
   if(typeof item.oid!=='string')throw new Error('Select a captured commit.');const oid=validateOid(item.oid);
   if(item.type==='message')return {...base,type:'message',oid};
+  if(item.type==='select')return {...base,type:'select',oid};
   if(item.type==='move'&&typeof item.target==='string')return {...base,type:'move',oid,target:validateOid(item.target)};
   if(item.type==='step'&&(item.direction==='up'||item.direction==='down'))return {...base,type:'step',oid,direction:item.direction};
   if(item.type==='action'&&['pick','reword','edit','squash','fixup','drop'].includes(String(item.action)))return {...base,type:'action',oid,action:item.action as RebaseAction};

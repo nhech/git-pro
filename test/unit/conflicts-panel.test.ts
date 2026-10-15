@@ -7,7 +7,7 @@ import * as path from 'node:path';
 type Message = Record<string, unknown>;
 class FakePanel {
   readonly sent: Message[] = []; readonly reveals: unknown[] = []; private readonly disposers: (() => void)[] = []; receive: (value: unknown) => void = () => undefined;
-  visible = true; iconPath: unknown; disposed = false;
+  visible = true; active = false; iconPath: unknown; disposed = false;
   readonly webview = { html: '', cspSource: 'vscode-resource:', asWebviewUri: (uri: { path: string }) => ({ toString: () => `webview:${uri.path}` }),
     postMessage: async (value: Message) => { this.sent.push(value); return true; }, onDidReceiveMessage: (callback: (value: unknown) => void) => { this.receive = callback; return { dispose: () => undefined }; } };
   constructor(readonly viewType: string, readonly title: string, readonly show: unknown, readonly options: { retainContextWhenHidden?: boolean; localResourceRoots?: { path: string }[] }) {}
@@ -234,4 +234,16 @@ test('native right-click commands reach the tab through the router and are check
   await assert.rejects(run('deleteEverything'), /Unknown Conflicts menu action/);
   assert.throws(() => h.menus.resolve(argument({ webviewSection: 'commit' }), ['gitPro.conflicts'], 'conflict'), /Git Pro panel menu/);
   panel().dispose(); assert.throws(() => h.menus.resolve(argument(), ['gitPro.conflicts']), /closed/, 'a closed tab leaves the router');
+});
+
+test('a keyboard shortcut acts on the selection the tab tracks, and says so when there is none', async () => {
+  const h = harness(); await h.panels.open('repo'); await settle();
+  const a = keyOf('src/a.ts'), b = keyOf('src/b.ts'), keyboard = async (action: string) => { await h.menus.active('gitPro.conflicts').handle!(action); await settle(); };
+  assert.throws(() => h.menus.active('gitPro.conflicts'), /active editor/, 'a tab that is not the active editor is not what the shortcut means');
+  panel().active = true;
+  await keyboard('acceptYours'); assert.equal(panel().last('error')?.message, 'Select conflicted files first.'); assert.equal(h.calls.length, 0);
+  await send({ type: 'select', keys: [a, b] });
+  await keyboard('acceptTheirs'); assert.deepEqual(h.calls.at(-1)!.args.slice(0, 3), ['repo', ['src/a.ts', 'src/b.ts'], 'theirs'], 'the whole selection, as Alt+T does inside the tab');
+  await keyboard('merge'); assert.equal(h.calls.at(-1)!.name, 'openSequence'); assert.deepEqual(h.calls.at(-1)!.args, ['repo', ['src/a.ts', 'src/b.ts']]);
+  await send({ type: 'select', keys: [b] }); await keyboard('openFile'); assert.deepEqual(h.calls.at(-1)!.args, ['repo', 'src/b.ts']);
 });

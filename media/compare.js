@@ -5,7 +5,7 @@
   const title = byId('title'), summary = byId('summary'), moved = byId('moved'), movedText = byId('moved-text'), movedRefresh = byId('moved-refresh'), status = byId('status');
   const workspace = byId('workspace'), commitsPane = byId('commits'), modeGroup = byId('files-mode'), layout = byId('layout'), heading = byId('files-heading'), legend = byId('legend');
   const tree = byId('file-rows'), filesEmpty = byId('files-empty'), pager = byId('files-pager'), footer = byId('files-footer'), worktreeBar = byId('worktree-actions'), getButton = byId('get-from-branch'), selectionHint = byId('selection-hint');
-  const swapButton = byId('swap'), refreshButton = byId('refresh'), openAll = byId('open-all');
+  const swapButton = byId('swap'), refreshButton = byId('refresh'), openAll = byId('open-all'), prevFile = byId('prev-file'), nextFile = byId('next-file');
   const filterRow = byId('files-filter'), filterText = byId('filter-text'), filterStatus = byId('filter-status');
   const saved = (() => { try { const value = api.getState?.(); return value && typeof value === 'object' ? value : {}; } catch { return {}; } })();
   // The tab keeps no renderer while hidden (a diff opened over it): the Get from Branch selection and the focused row come back with the same captured list.
@@ -14,7 +14,8 @@
   let lastTreeKey = own && typeof saved.focusKey === 'string' ? saved.focusKey.slice(0, 200) : '', restoreKey, pendingFocus = lastTreeKey || undefined;
   const chosen = new Set(own && Array.isArray(saved.chosen) ? saved.chosen.filter(isIndex).slice(0, 100) : []), collapsed = new Set(), focusables = new Map();
   let treeRows = [];
-  const fileItems = new Map();
+  const fileItems = new Map(), fileOpeners = new Map();
+  let openedIndex;
   const send = message => { if (session) api.postMessage({ ...message, session }); };
   const act = (type, extra) => {
     if (busy || !state || state.loading || typeof state.revision !== 'number') return;
@@ -37,6 +38,13 @@
   };
   const statusWords = { A: 'Added', M: 'Modified', D: 'Deleted', R: 'Renamed', C: 'Copied', T: 'Type changed', U: 'Unmerged', X: 'Unknown', B: 'Broken pair' };
   const presenceText = item => item.presence === 'branch' ? `Only in ${state.left.name}` : item.presence === 'worktree' ? 'Only in the working tree' : item.presence === 'both' ? 'Changed in both' : '';
+  // A native menu hands focus back to the page, not to the row it was opened on; the first focus or key afterwards puts it back there.
+  let menuReturn;
+  const restoreAfterMenu = () => {
+    const key = menuReturn; menuReturn = undefined; if (!key) return;
+    const target = focusables.get(key) || focusables.get(lastTreeKey);
+    if (target && target.isConnected && !target.disabled && (!document.activeElement || document.activeElement === document.body)) target.focus();
+  };
   const rove = (rows, target) => { for (const row of rows) row.tabIndex = row === target ? 0 : -1; target.focus(); };
 
   // Right-click menus are VS Code's own (contributes.menus["webview/context"]): an element names itself with data-vscode-context, the host re-checks it against what this tab showed.
@@ -112,7 +120,7 @@
           const choose = () => { if (!current) act('selectCommit', { oid: commit.oid }); };
           tag(row, { webviewSection: 'commit', oid: commit.oid, commitShown: current });
           row.addEventListener('click', () => { rove(rows, row); choose(); });
-          row.addEventListener('contextmenu', () => rove(rows, row));
+          row.addEventListener('contextmenu', () => { rove(rows, row); menuReturn = row.dataset.focusKey; });
           row.addEventListener('keydown', event => listKeys(event, rows, row, choose));
           rows.push(row); box.append(row);
         }
@@ -186,7 +194,17 @@
     if (indexes.length > 100) { status.textContent = 'Selected the first 100 files. Get from Branch takes up to 100 at a time.'; status.className = ''; }
     markChosen();
   };
+  // Next File and Previous File open the diff of the file after (or before) the one whose diff was opened last, or the focused row, in the order the list shows; they do not wrap.
+  const stepFile = direction => {
+    const rows = treeRows.filter(row => row.dataset.index !== undefined);
+    if (!rows.length) return;
+    const focused = rows.indexOf(document.activeElement), shown = rows.findIndex(row => Number(row.dataset.index) === openedIndex), from = focused >= 0 ? focused : shown;
+    const to = from < 0 ? (direction > 0 ? 0 : rows.length - 1) : from + direction;
+    if (to < 0 || to >= rows.length) { status.textContent = direction > 0 ? 'This is the last file.' : 'This is the first file.'; status.className = ''; return; }
+    fileOpeners.get(Number(rows[to].dataset.index))?.();
+  };
   const treeKeys = (event, row, entry, activate) => {
+    if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { event.preventDefault(); event.stopPropagation?.(); stepFile(event.key === 'ArrowDown' ? 1 : -1); return; }
     if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && String(event.key).toLowerCase() === 'a' && state.mode === 'worktree') { event.preventDefault(); event.stopPropagation?.(); selectAll(); return; }
     const index = treeRows.indexOf(row); let target;
     if (event.key === 'ArrowDown') target = treeRows[index + 1]; else if (event.key === 'ArrowUp') target = treeRows[index - 1]; else if (event.key === 'Home') target = treeRows[0]; else if (event.key === 'End') target = treeRows.at(-1);
@@ -229,22 +247,23 @@
     }
     row.append(actions);
     const letter = node('span', 'file-status', item.status); letter.setAttribute('aria-hidden', 'true'); row.append(letter);
-    const open = () => act('diff', { index: item.index });
+    const open = () => { openedIndex = item.index; act('diff', { index: item.index }); };
+    // What a plain click does, which Next File and Previous File also run: the row takes focus, becomes the selection and its diff opens.
+    const choose = () => { rove(treeRows, row); if (worktree) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } open(); };
+    fileOpeners.set(item.index, choose);
     row.addEventListener('click', event => {
-      rove(treeRows, row);
-      if (worktree && (event.ctrlKey || event.metaKey || event.shiftKey)) { pick(item.index, event); return; }
-      if (worktree) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); }
-      open();
+      if (worktree && (event.ctrlKey || event.metaKey || event.shiftKey)) { rove(treeRows, row); pick(item.index, event); return; }
+      choose();
     });
     row.addEventListener('focus', () => { lastTreeKey = row.dataset.focusKey; remember(); });
     // As in the Explorer, a right-click on a row outside the selection selects just that row before the menu opens.
-    row.addEventListener('contextmenu', () => { rove(treeRows, row); if (worktree && !chosen.has(item.index)) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } });
+    row.addEventListener('contextmenu', () => { rove(treeRows, row); menuReturn = row.dataset.focusKey; if (worktree && !chosen.has(item.index)) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } });
     tagFile(row, item); fileItems.set(item.index, item);
     row.addEventListener('keydown', event => treeKeys(event, row, entry, open));
     return row;
   };
   const renderFiles = () => {
-    tree.replaceChildren(); heading.replaceChildren(); pager.replaceChildren(); legend.replaceChildren(); treeRows = []; fileItems.clear();
+    tree.replaceChildren(); heading.replaceChildren(); pager.replaceChildren(); legend.replaceChildren(); treeRows = []; fileItems.clear(); fileOpeners.clear();
     const files = state?.files, worktree = state?.mode === 'worktree';
     renderModes(files); renderFilter(files);
     layout.replaceChildren(glyph(flat ? 'list-tree' : 'list-flat')); layout.title = flat ? 'View as Tree' : 'View as List'; layout.setAttribute('aria-label', layout.title); layout.disabled = busy;
@@ -302,6 +321,8 @@
   const renderToolbar = () => {
     const files = state?.files, ready = Boolean(state && !state.loading && files);
     keyed(swapButton, 'toolbar:swap'); keyed(refreshButton, 'toolbar:refresh'); keyed(openAll, 'toolbar:openAll'); keyed(movedRefresh, 'toolbar:moved'); keyed(getButton, 'files:get'); keyed(layout, 'files:layout');
+    const anyFile = treeRows.some(row => row.dataset.index !== undefined);
+    keyed(prevFile, 'toolbar:prevFile'); keyed(nextFile, 'toolbar:nextFile'); prevFile.disabled = busy || !anyFile; nextFile.disabled = busy || !anyFile;
     swapButton.disabled = busy || !ready; refreshButton.disabled = busy || !state; movedRefresh.disabled = busy;
     openAll.disabled = busy || !ready || files.omitted || !files.total || files.binary >= files.total;
     openAll.title = files?.scope === 'commit' && files.commit ? `Open All Changes in ${short(files.commit.oid)}` : 'Open All Changes'; openAll.setAttribute('aria-label', openAll.title);
@@ -323,7 +344,9 @@
     if (target) target.focus(); else title.focus?.();
   };
 
+  window.addEventListener('focus', restoreAfterMenu); document.addEventListener('keydown', restoreAfterMenu, true);
   swapButton.addEventListener('click', () => act('swap'));
+  prevFile.addEventListener('click', () => stepFile(-1)); nextFile.addEventListener('click', () => stepFile(1));
   openAll.addEventListener('click', () => act('openAll'));
   const refresh = () => { if (!busy && state) { status.textContent = ''; status.className = ''; send({ type: 'refresh' }); } };
   refreshButton.addEventListener('click', refresh); movedRefresh.addEventListener('click', refresh);

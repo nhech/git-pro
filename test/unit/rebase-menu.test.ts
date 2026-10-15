@@ -8,23 +8,23 @@ import { MenuRouter } from '../../src/webviews/menu-context';
 
 class Element {
   children: Element[] = []; dataset: Record<string, string> = {}; attributes = new Map<string, string>(); listeners = new Map<string, (event: Record<string, unknown>) => void>();
-  value = ''; draggable = false; id = ''; className = ''; isConnected = true; disabled = false; private text = '';
+  value = ''; draggable = false; id = ''; className = ''; isConnected = true; disabled = false; focused = 0; private text = '';
   get textContent(): string { return this.text + this.children.map(child => child.textContent).join(''); }
   set textContent(value: string) { this.text = value; this.children = []; }
   append(...nodes: Element[]) { this.children.push(...nodes); } prepend(node: Element) { this.children.unshift(node); }
   replaceChildren() { for (const child of this.children) child.isConnected = false; this.children = []; }
   setAttribute(key: string, value: string) { this.attributes.set(key, value); } getAttribute(key: string) { return this.attributes.get(key); }
   addEventListener(type: string, callback: (event: Record<string, unknown>) => void) { this.listeners.set(type, callback); }
-  focus() { /* focus is not observed here */ } scrollIntoView() { /* nor scrolling */ }
+  focus() { this.focused++; } scrollIntoView() { /* scrolling is not observed here */ }
 }
 
 test('planner rows name themselves for the native right-click menu and select before it opens', () => {
   const ids = ['commits', 'action', 'up', 'down', 'message', 'review', 'status', 'cancel', 'native', 'range', 'selected-title', 'subject', 'message-preview', 'action-help'];
   const elements = new Map(ids.map(id => [id, new Element()])), sent: Record<string, unknown>[] = [];
   const body = { dataset: { session: 's' }, attributes: new Map<string, string>(), setAttribute(key: string, value: string) { this.attributes.set(key, value); } };
-  let receive: ((event: { data: unknown }) => void) | undefined;
+  let receive: ((event: { data: unknown }) => void) | undefined; const windowListeners = new Map<string, () => void>();
   runInNewContext(readFileSync('media/rebase.js', 'utf8'), { document: { body, getElementById: (id: string) => elements.get(id), createElement: () => new Element(), createElementNS: () => new Element() },
-    window: { addEventListener: (_type: string, callback: typeof receive) => { receive = callback; } }, acquireVsCodeApi: () => ({ postMessage: (value: Record<string, unknown>) => sent.push(value) }) });
+    window: { addEventListener: (type: string, callback: typeof receive) => { if (type === 'message') receive = callback; else windowListeners.set(type, callback as never); } }, acquireVsCodeApi: () => ({ postMessage: (value: Record<string, unknown>) => sent.push(value) }) });
   const steps = [{ oid: 'a'.repeat(40), action: 'pick', subject: 'First' }, { oid: 'b'.repeat(40), action: 'reword', subject: 'Second', message: 'Second' }, { oid: 'c'.repeat(40), action: 'pick', subject: 'Third' }];
   receive!({ data: { type: 'state', session: 's', revision: 4, range: 'Captured', steps } }); receive!({ data: { type: 'busy', session: 's', busy: false } });
   const rows = elements.get('commits')!.children, context = (index: number) => JSON.parse(rows[index]!.getAttribute('data-vscode-context')!) as Record<string, unknown>;
@@ -34,7 +34,9 @@ test('planner rows name themselves for the native right-click menu and select be
   const before = sent.length;
   rows[2]!.listeners.get('contextmenu')!({});
   assert.equal(elements.get('selected-title')!.textContent, `Selected: ${'c'.repeat(10)}`, 'the row under the pointer is selected first');
-  assert.equal(sent.length, before, 'selecting asks the host for nothing');
+  assert.deepEqual(sent.slice(before).map(value => [value.type, value.oid]), [['select', 'c'.repeat(40)]], 'selecting only tells the host which commit is selected');
+  // The native menu hands focus back to the page: the list gets it again, once.
+  const list = elements.get('commits')!, focusedBefore = list.focused; windowListeners.get('focus')!(); assert.equal(list.focused, focusedBefore + 1); windowListeners.get('focus')!(); assert.equal(list.focused, focusedBefore + 1);
 });
 
 test('native right-click commands reach the planner through the router as its own requests', async () => {
@@ -67,4 +69,25 @@ test('native right-click commands reach the planner through the router as its ow
   assert.throws(() => menus.commit(argument({ oid: a }), ['gitPro.rebasePlanner']), /Git Pro panel menu/, 'the planner has no repository commits to offer');
   planner.dispose(); assert.equal(await result, undefined);
   assert.throws(() => menus.resolve(argument({}), ['gitPro.rebasePlanner']), /closed/, 'a closed planner leaves the router');
+});
+
+test('the planner remembers the selected commit for a keyboard shortcut and moves that commit', async () => {
+  const file = path.resolve(__dirname, '../../src/webviews/rebase/rebase-planner.js'), load = createRequire(file), exports: Record<string, unknown> = {};
+  let receive: (raw: unknown) => Promise<void> = async () => undefined, closed: () => void = () => undefined; const sent: Record<string, unknown>[] = [];
+  const panel = { active: false, webview: { html: '', cspSource: 'vscode-resource:', asWebviewUri: (uri: unknown) => String(uri), postMessage: async (value: Record<string, unknown>) => { sent.push(value); return true; },
+    onDidReceiveMessage: (callback: typeof receive) => { receive = callback; return { dispose: () => undefined }; } }, onDidDispose: (callback: () => void) => { closed = callback; return { dispose: () => undefined }; }, dispose: () => closed() };
+  const vscode = { window: { createWebviewPanel: () => panel }, ViewColumn: { Active: 1 }, Uri: { joinPath: (_uri: unknown, ...parts: string[]) => parts.join('/') } };
+  runInNewContext(readFileSync(file, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  type Planner = { choose(preview: unknown, root: string, edit: () => Promise<string | undefined>): Promise<unknown>; dispose(): void };
+  const menus = new MenuRouter(), Constructor = exports.RebasePlanner as new (context: unknown, menus: MenuRouter) => Planner, planner = new Constructor({ extensionUri: 'owned' }, menus);
+  const a = 'a'.repeat(40), b = 'b'.repeat(40), c = 'c'.repeat(40), commits = [a, b, c].map(oid => ({ oid, parent: 'd'.repeat(40), subject: 'Fixture' }));
+  const result = planner.choose({ commits, base: 'd'.repeat(40), snapshot: { head: c } }, 'fixture', async () => undefined);
+  const session = /data-session="([^"]+)"/.exec(panel.webview.html)![1]!; await receive({ type: 'ready', session, revision: 0 });
+  const order = () => (sent.slice().reverse().find(item => item.type === 'state') as unknown as { steps: { oid: string }[] }).steps.map(step => step.oid), keyboard = async (action: string) => { await menus.active('gitPro.rebasePlanner').handle!(action); };
+  assert.throws(() => menus.active('gitPro.rebasePlanner'), /active editor/); panel.active = true;
+  await keyboard('moveUp'); assert.match(String(sent.at(-1)?.message), /Select a captured commit/, 'nothing selected yet: the planner says so');
+  await receive({ type: 'select', session, revision: 0, oid: c }); await keyboard('moveUp'); assert.deepEqual(order(), [a, c, b], 'the commit the planner reported as selected moves');
+  await receive({ type: 'select', session, revision: 0, oid: 'e'.repeat(40) }); await keyboard('moveUp'); assert.deepEqual(order(), [c, a, b], 'a commit outside the range is not remembered: the earlier one moves again');
+  await receive({ type: 'select', session, revision: 99, oid: a }); await keyboard('moveDown'); assert.deepEqual(order(), [c, b, a], 'selecting needs no revision');
+  planner.dispose(); assert.equal(await result, undefined);
 });

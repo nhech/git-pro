@@ -42,6 +42,10 @@
     text(guidance, 'p', 'Use ↑ / ↓ to move between commits.'); details.append(guidance);
   };
   // The filter summary names the refs the way the rest of the panel does (main, origin/main, v1.0), not by their full ref paths; a long list is cut after three.
+  // A native menu hands focus back to the page, not to the row it was opened on; the first focus or key afterwards puts it back there.
+  let menuReturn = false;
+  const restoreAfterMenu = () => { const wanted = menuReturn; menuReturn = false; if (wanted && (!document.activeElement || document.activeElement === document.body)) viewport.focus(); };
+  window.addEventListener('focus', restoreAfterMenu); document.addEventListener?.('keydown', restoreAfterMenu, true);
   const shortRef = name => String(name).replace(/^refs\/(?:heads|remotes|tags)\//, '');
   const refsLabel = value => {
     const names = String(value || 'HEAD').split(/\r?\n/).map(name => shortRef(name.trim())).filter(Boolean);
@@ -118,7 +122,7 @@
     const view = { row, svg, badge, title, hash, subject, meta, author, date, dot, lines: [], index: -1, revision: -1, laneWidth: -1 };
     row.addEventListener('click', () => { if (row.isConnected) select(view.index); });
     // As in the Source Control Graph, the commit under the pointer becomes the selected one before the menu opens.
-    row.addEventListener('contextmenu', () => { if (row.isConnected && selected !== view.index) select(view.index); }); return view;
+    row.addEventListener('contextmenu', () => { menuReturn = true; if (row.isConnected && selected !== view.index) select(view.index); }); return view;
   };
   const draw = () => {
     const start = Math.max(0, Math.floor(viewport.scrollTop / ROW) - 1), end = Math.min(commits.length, start + Math.ceil(viewport.clientHeight / ROW) + 3);

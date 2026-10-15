@@ -292,3 +292,12 @@ test('the Compare and More Actions menus return focus to their button; Use Colum
   assert.equal(markable(4), true); assert.equal(markable(5), false, 'a modify/delete row with no markers is still a choice of side');
   assert.equal(h.row(key(5)).children[4]!.textContent, 'Choose Yours or Theirs');
 });
+
+test('after a native menu closes, focus returns to the row it was opened on, by focus or by the first key', () => {
+  const h = harness(true); state(h, sample());
+  const focus = h.windowListeners.get('focus')!;
+  h.row(key(2)).fire('contextmenu'); Element.active = undefined; focus(event()); assert.equal(Element.active, h.row(key(2)));
+  Element.active = undefined; focus(event()); assert.equal(Element.active, undefined, 'once');
+  h.row(key(3)).fire('contextmenu'); Element.active = undefined; h.press(undefined, { key: 'Shift' }); assert.equal(Element.active, h.row(key(3)), 'the first key press also brings it back');
+  h.row(key(1)).fire('contextmenu'); Element.active = h.elements.get('accept-yours'); focus(event()); assert.equal(Element.active, h.elements.get('accept-yours'), 'a button the user went to is left alone');
+});

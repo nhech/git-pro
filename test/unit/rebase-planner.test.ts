@@ -8,7 +8,7 @@ import { parsePlannerRequest } from '../../src/webviews/rebase/planner-protocol'
 import { nativeContinueCommand, validateRebasePlan } from '../../src/git/rebase/rebase-plan';
 
 test('planner protocol rejects arbitrary plans and bounds aggregate UTF-8 message data',()=>{
-  const oid='a'.repeat(40);assert.equal(parsePlannerRequest({type:'action',session:'s',revision:1,oid,action:'edit'}).type,'action');
+  const oid='a'.repeat(40);assert.equal(parsePlannerRequest({type:'action',session:'s',revision:1,oid,action:'edit'}).type,'action');assert.deepEqual(parsePlannerRequest({type:'select',session:'s',revision:1,oid,extra:1}),{type:'select',session:'s',revision:1,oid});assert.throws(()=>parsePlannerRequest({type:'select',session:'s',revision:1,oid:'main'}));
   for(const value of [{type:'execute',session:'s',revision:0,steps:[]},{type:'step',session:'s',revision:-1,oid,direction:'up'},{type:'move',session:'s',revision:0,oid,target:'--exec'},{type:'action',session:'s',revision:0,oid,action:'exec'}])assert.throws(()=>parsePlannerRequest(value));
   const commits=Array.from({length:20},(_,index)=>({oid:(index+1).toString(16).padStart(40,'0'),parent:oid,subject:'Fixture'}));
   assert.throws(()=>validateRebasePlan(commits,commits.map(commit=>({oid:commit.oid,action:'reword',message:'😀'.repeat(20000)}))),/Combined reword/);
@@ -46,7 +46,7 @@ class Element {
 test('real planner script uses text, captured drag identities and keyboard equivalents with busy/session checks',()=>{
   const ids=['commits','action','up','down','message','review','status','cancel','native','range','selected-title','subject','message-preview','action-help'],elements=new Map(ids.map(id=>[id,new Element()])),sent:Record<string,unknown>[]=[],tags:string[]=[];
   let receive:((event:{data:unknown})=>void)|undefined;
-  runInNewContext(readFileSync('media/rebase.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:(tag:string)=>{tags.push(tag);return new Element();},createElementNS:(_ns:string,tag:string)=>{tags.push(tag);return new Element();}},window:{addEventListener:(_type:string,callback:typeof receive)=>{receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value)})});
+  runInNewContext(readFileSync('media/rebase.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:(tag:string)=>{tags.push(tag);return new Element();},createElementNS:(_ns:string,tag:string)=>{tags.push(tag);return new Element();}},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value)})});
   const steps=Array.from({length:200},(_,index)=>({oid:(index+1).toString(16).padStart(40,'0'),action:'pick',subject:index?'Fixture':'<img onerror=evil()>'}));
   receive!({data:{type:'state',session:'s',revision:4,range:'Captured',steps}});receive!({data:{type:'busy',session:'s',busy:false}});
   const list=elements.get('commits')!;assert.equal(list.children.length,200);assert.ok(tags.every(tag=>['button','span','svg','path'].includes(tag)));assert.match(list.children[0]!.textContent,/<img/);
@@ -61,7 +61,7 @@ test('planner restores async keyboard focus, falls back to the list and respects
   const elements=new Map(ids.map(id=>[id,new Element()])),body=new Element();let focused=true,receive:((event:{data:unknown})=>void)|undefined;
   const document={body:Object.assign(body,{dataset:{session:'s'}}),activeElement:body,hasFocus:()=>focused,getElementById:(id:string)=>elements.get(id),createElement:()=>new Element(),createElementNS:()=>new Element()};
   for(const [id,node] of elements){node.id=id;node.onFocus=()=>{document.activeElement=node;};node.onDisabled=()=>{if(document.activeElement===node)document.activeElement=body;};}
-  runInNewContext(readFileSync('media/rebase.js','utf8'),{document,window:{addEventListener:(_type:string,callback:typeof receive)=>{receive=callback;}},acquireVsCodeApi:()=>({postMessage:()=>undefined})});
+  runInNewContext(readFileSync('media/rebase.js','utf8'),{document,window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:()=>undefined})});
   const a='a'.repeat(40),b='b'.repeat(40),steps=[a,b].map(oid=>({oid,action:'pick',subject:'Fixture'}));
   const state=(value:unknown=steps)=>receive!({data:{type:'state',session:'s',revision:1,steps:value,range:'Captured'}});
   const busy=(value:boolean,session='s')=>receive!({data:{type:'busy',session,busy:value}});
@@ -79,7 +79,7 @@ test('planner keeps hostile subjects literal and separates action guidance from 
   const ids=['commits','action','up','down','message','review','status','cancel','native','range','selected-title','subject','message-preview','action-help'];
   const elements=new Map(ids.map(id=>[id,new Element()])),sent:Record<string,unknown>[]=[];
   let receive:((event:{data:unknown})=>void)|undefined;
-  runInNewContext(readFileSync('media/rebase.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:()=>new Element(),createElementNS:()=>new Element()},window:{addEventListener:(_type:string,cb:typeof receive)=>{receive=cb;}},acquireVsCodeApi:()=>({postMessage:(v:Record<string,unknown>)=>sent.push(v)})});
+  runInNewContext(readFileSync('media/rebase.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:()=>new Element(),createElementNS:()=>new Element()},window:{addEventListener:(type:string,cb:typeof receive)=>{if(type==='message')receive=cb;}},acquireVsCodeApi:()=>({postMessage:(v:Record<string,unknown>)=>sent.push(v)})});
   const hostile='<svg onload=evil()> & a very long literal subject',actions=['pick','reword','edit','squash','fixup','drop'];
   const steps=actions.map((action,index)=>({oid:(index+1).toString(16).padStart(40,'0'),action,subject:hostile,message:'Subject\n\nExact body'}));
   receive!({data:{type:'state',session:'s',revision:3,steps,range:'Captured'}});receive!({data:{type:'busy',session:'s',busy:false}});
@@ -94,10 +94,10 @@ test('planner keeps hostile subjects literal and separates action guidance from 
     assert.equal(elements.get('message')!.disabled,steps[index]!.action!=='reword');
     const help=elements.get('action-help')!.textContent;assert.ok(help.length>20);if(index===1)assert.match(help,/file content stays unchanged/);if(index===5)assert.match(help,/Remove this commit/);
   }
-  assert.equal(sent.length,before,'Selection, presentation and contextual guidance add no host requests.');
+  assert.deepEqual(sent.slice(before).filter(value=>value.type!=='select'),[],'Selection, presentation and contextual guidance ask the host for nothing: it is only told which commit is selected.');
   const retained=elements.get('action-help')!.textContent;
   receive!({data:{type:'state',session:'expired',revision:4,steps:[steps[0]],range:'Wrong'}});assert.equal(elements.get('action-help')!.textContent,retained);
-  receive!({data:{type:'busy',session:'s',busy:true}});list.children[0]!.listeners.get('click')!({});assert.equal(elements.get('action-help')!.textContent,retained);assert.equal(sent.length,before);
+  receive!({data:{type:'busy',session:'s',busy:true}});list.children[0]!.listeners.get('click')!({});assert.equal(elements.get('action-help')!.textContent,retained);assert.deepEqual(sent.slice(before).filter(value=>value.type!=='select'),[]);
 });
 
 test('the terminal command that continues a rebase carries the plan comment character, quoted for every shell', () => {

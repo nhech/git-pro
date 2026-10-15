@@ -24,7 +24,7 @@ class Element {
   find(predicate: (node: Element) => boolean): Element | undefined { return this.all().find(predicate); }
   key(value: string) { this.fire('keydown', { key: value }); }
 }
-const ids = ['title', 'summary', 'moved', 'moved-text', 'moved-refresh', 'status', 'workspace', 'commits', 'files', 'files-mode', 'layout', 'files-heading', 'legend', 'file-rows', 'files-empty', 'files-pager', 'files-footer', 'worktree-actions', 'get-from-branch', 'selection-hint', 'swap', 'refresh', 'open-all', 'files-filter', 'filter-text', 'filter-status'];
+const ids = ['title', 'summary', 'moved', 'moved-text', 'moved-refresh', 'status', 'workspace', 'commits', 'files', 'files-mode', 'layout', 'files-heading', 'legend', 'file-rows', 'files-empty', 'files-pager', 'files-footer', 'worktree-actions', 'get-from-branch', 'selection-hint', 'swap', 'refresh', 'open-all', 'files-filter', 'filter-text', 'filter-status', 'prev-file', 'next-file'];
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const commit = (value: number, subject = `Commit ${value}`) => ({ oid: oid(value), subject, author: 'Fixture', timestamp: 1700000000, refs: [] as string[] });
 
@@ -243,4 +243,40 @@ test('The file filter sends a trimmed name fragment after a pause and the change
     assert.equal(h.get('files-empty').textContent, 'No files match the filter.'); assert.equal(h.get('files-filter').hidden, false);
     h.post(commitsState({ revision: 8, files: { scope: 'fork', from: oid(3), to: oid(1), total: 0, offset: 0, omitted: false, binary: 0, items: [] } })); assert.equal(h.get('files-filter').hidden, true, 'no files at all: nothing to filter');
   }
+});
+
+test('Next and Previous File open the neighbouring diff in the order the list shows, from the last opened file or the focused row, and stop at the ends', () => {
+  const h = harness({ flat: true }); h.post(commitsState());
+  const rows = h.get('file-rows').children, next = h.get('next-file'), previous = h.get('prev-file'), opened = () => h.sent.filter(message => message.type === 'diff').map(message => message.index);
+  assert.equal(next.disabled, false); assert.equal(previous.disabled, false);
+  next.fire('click'); assert.deepEqual(opened(), [0], 'with nothing opened yet, Next File starts at the first file');
+  assert.equal(Element.active, rows[0], 'and the row takes focus, as after a click');
+  rows[0]!.fire('keydown', { key: 'ArrowDown', altKey: true }); assert.deepEqual(opened(), [0, 1], 'Alt+Down in the list is Next File');
+  next.fire('click'); assert.deepEqual(opened(), [0, 1, 2]); next.fire('click');
+  assert.deepEqual(opened(), [0, 1, 2], 'the last file has no next'); assert.equal(h.get('status').textContent, 'This is the last file.');
+  previous.fire('click'); previous.fire('click'); assert.deepEqual(opened(), [0, 1, 2, 1, 0]); previous.fire('click');
+  assert.equal(opened().length, 5); assert.equal(h.get('status').textContent, 'This is the first file.');
+  // From a row that was not the last one opened, the focused row is the starting point.
+  rows[2]!.focus(); rows[2]!.fire('keydown', { key: 'ArrowUp', altKey: true }); assert.equal(opened().at(-1), 1);
+  const plainArrow = opened().length; rows[1]!.fire('keydown', { key: 'ArrowDown' }); assert.equal(opened().length, plainArrow, 'a plain arrow only moves focus');
+  h.post({ type: 'busy', busy: true }); assert.equal(next.disabled, true); assert.equal(previous.disabled, true);
+  const before = h.sent.length; rows[1]!.fire('keydown', { key: 'ArrowDown', altKey: true }); assert.equal(h.sent.length, before, 'busy blocks it like every other request');
+  h.post({ type: 'busy', busy: false });
+  // A new list starts over: the file opened last may not be in it.
+  h.post(commitsState({ revision: 9, files: { scope: 'fork', from: oid(3), to: oid(1), total: 1, offset: 0, omitted: false, binary: 0, items: [{ index: 5, status: 'M', path: 'only.ts', added: 1, removed: 0, binary: false }] } }));
+  Element.active = undefined; next.fire('click'); assert.equal(opened().at(-1), 5);
+  h.post(commitsState({ revision: 10, files: { scope: 'fork', from: oid(3), to: oid(1), total: 0, offset: 0, omitted: false, binary: 0, items: [] } })); assert.equal(next.disabled, true, 'no files, nothing to step through');
+});
+
+test('After a native menu closes, focus goes back to the row it was opened on, once, and never over something else that has it', () => {
+  const h = harness({ flat: true }); h.post(commitsState());
+  const focus = h.windowListeners.get('focus')!, rows = h.get('file-rows').children, commitRow = h.get('commits').children[0]!.find(node => node.className === 'commit-rows')!.children[3]!;
+  rows[1]!.fire('contextmenu'); assert.equal(Element.active, rows[1], 'the row under the pointer takes focus as the menu opens');
+  Element.active = undefined; focus({}); assert.equal(Element.active, rows[1], 'the page has the focus back and nothing in it: the row gets it');
+  Element.active = undefined; focus({}); assert.equal(Element.active, undefined, 'once: a later focus change is not undone');
+  commitRow.fire('contextmenu'); Element.active = undefined; focus({}); assert.equal(Element.active, commitRow, 'commit rows too');
+  rows[0]!.fire('contextmenu'); Element.active = undefined; h.post(commitsState({ revision: 5 })); focus({});
+  const restored = Element.active as Element | undefined;
+  assert.equal(restored?.dataset.focusKey, 'file:0', 'rows drawn again in between are found by their key'); assert.notEqual(restored, rows[0]);
+  h.get('file-rows').children[0]!.fire('contextmenu'); Element.active = h.get('refresh'); focus({}); assert.equal(Element.active, h.get('refresh'), 'a button the user went to is left alone');
 });

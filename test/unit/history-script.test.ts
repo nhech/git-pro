@@ -60,8 +60,8 @@ test('History commit rows name their commit for the native context menu, select 
   const ids=['viewport','rows','spacer','details','status','filters','compare','more','pagination','filter-disclosure','filter-summary','snapshot','zoom','workspace','cancel-read'];
   const elements=new Map(ids.map(id=>[id,new Element()]));let receive!:(event:{data:unknown})=>void;const sent:Record<string,unknown>[]=[];
   const create=(tag:string)=>{const n=new Element();n.tag=tag;return n;};
-  const input=new Element(),body=new Element();body.dataset={session:'s'};
-  runInNewContext(readFileSync('media/history.js','utf8'),{document:{body,getElementById:(id:string)=>elements.get(id),createElement:create,createElementNS:(_ns:string,tag:string)=>create(tag),querySelectorAll:()=>[input]},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value),getState:()=>undefined,setState:()=>undefined})});
+  const input=new Element(),body=new Element();body.dataset={session:'s'};let focusBack:()=>void=()=>undefined;
+  runInNewContext(readFileSync('media/history.js','utf8'),{document:{body,getElementById:(id:string)=>elements.get(id),createElement:create,createElementNS:(_ns:string,tag:string)=>create(tag),querySelectorAll:()=>[input]},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;else if(type==='focus')focusBack=callback as unknown as ()=>void;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value),getState:()=>undefined,setState:()=>undefined})});
   assert.deepEqual(JSON.parse(body.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:true},'outside a commit nothing offers Cut, Copy and Paste');
   assert.deepEqual(JSON.parse(input.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:false},'a text box keeps its edit menu');
   const commits=Array.from({length:5},(_,index)=>({oid:(index+1).toString(16).padStart(40,'0'),parents:index<4?[(index+2).toString(16).padStart(40,'0')]:[],subject:`Subject ${index}`,author:'A',timestamp:1700000000+index}));
@@ -74,6 +74,8 @@ test('History commit rows name their commit for the native context menu, select 
   const before=sent.length;rows[2]!.listeners.get('contextmenu')!({});
   assert.equal(sent.at(-1)?.type,'select');assert.equal(sent.at(-1)?.oid,commits[2]!.oid,'the row under the pointer is selected as the menu opens');assert.equal(sent.length,before+1);
   rows[2]!.listeners.get('contextmenu')!({});assert.equal(sent.length,before+1,'an already selected commit is not requested again');
+  // The native menu hands focus back to the page: the commit list gets it again, once.
+  Element.active=undefined;focusBack();assert.equal(Element.active,elements.get('viewport'));Element.active=undefined;focusBack();assert.equal(Element.active,undefined);
 });
 
 test('History row slots rebind actions, refs, merge geometry and labels without retaining detached pages',()=>{

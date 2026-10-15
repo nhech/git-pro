@@ -1735,6 +1735,79 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "gitPro.menu.conflicts.acceptYours",
+        "key": "alt+y",
+        "when": "activeWebviewPanelId == 'gitPro.conflicts' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "gitPro.menu.conflicts.acceptTheirs",
+        "key": "alt+t",
+        "when": "activeWebviewPanelId == 'gitPro.conflicts' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "gitPro.menu.conflicts.merge",
+        "key": "alt+m",
+        "when": "activeWebviewPanelId == 'gitPro.conflicts' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.moveUp",
+        "key": "alt+up",
+        "when": "activeWebviewPanelId == 'gitPro.rebasePlanner' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.moveDown",
+        "key": "alt+down",
+        "when": "activeWebviewPanelId == 'gitPro.rebasePlanner' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "gitPro.branch.rename",
+        "key": "f2",
+        "when": "focusedView == gitPro.branchesView && gitPro.branchesView.item =~ /^gitPro\\.branch\\.(?:local|current)$/"
+      },
+      {
+        "command": "gitPro.branch.delete",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == gitPro.branchesView && gitPro.branchesView.item == gitPro.branch.local"
+      },
+      {
+        "command": "gitPro.branch.copyName",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "focusedView == gitPro.branchesView && gitPro.branchesView.item =~ /^gitPro\\.branch\\./"
+      },
+      {
+        "command": "gitPro.tools.stash.drop",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == gitPro.toolsView && gitPro.toolsView.item == gitPro.tools.row.stash"
+      },
+      {
+        "command": "gitPro.tools.tag.deleteLocal",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == gitPro.toolsView && gitPro.toolsView.item == gitPro.tools.row.tag"
+      },
+      {
+        "command": "gitPro.tools.remote.remove",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == gitPro.toolsView && gitPro.toolsView.item == gitPro.tools.row.remote"
+      },
+      {
+        "command": "gitPro.tools.worktree.remove",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == gitPro.toolsView && gitPro.toolsView.item == gitPro.tools.row.worktree"
+      },
+      {
+        "command": "gitPro.tools.remote.rename",
+        "key": "f2",
+        "when": "focusedView == gitPro.toolsView && gitPro.toolsView.item == gitPro.tools.row.remote"
+      }
+    ],
     "colors": [
       {
         "id": "gitPro.accent",

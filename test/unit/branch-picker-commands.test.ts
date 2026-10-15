@@ -134,6 +134,18 @@ test('the Branches view menu runs the same choices as the Branch Actions Quick P
   h.instance.dispose();
 });
 
+test('a shortcut in the Branches view acts on the one branch that is selected there, and a click on another branch wins', async () => {
+  const h = harness(), local = branch('feature/ux'), other = branch('other'), node = (info: BranchInfo) => ({ kind: 'branch', repositoryId: 'owned', branch: info });
+  const view = { selection: [node(local)] as unknown[] };
+  (h.instance as unknown as { branchesView: typeof view }).branchesView = view;
+  await h.run('gitPro.branch.checkout'); assert.deepEqual(h.operations, [['checkout', 'owned', 'feature/ux']]);
+  await h.run('gitPro.branch.copyName'); assert.deepEqual(h.copied, ['feature/ux']);
+  await h.run('gitPro.branch.copyName', node(other)); assert.deepEqual(h.copied, ['feature/ux', 'other'], 'a menu names the branch it was opened on');
+  const before = h.errors.length; view.selection = [node(local), node(other)];
+  await h.run('gitPro.branch.rename'); assert.equal(h.errors.length, before + 1, 'two selected branches: a shortcut has no single target'); assert.match(h.errors.at(-1)!, /Select a branch in the Branches view/);
+  h.instance.dispose();
+});
+
 test('closing branch picker settles without waiting for read; late success/rejection never changes disposed UI', async () => {
   for (const reject of [false, true]) {
     const h = harness(); let settled = false;
