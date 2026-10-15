@@ -2,7 +2,7 @@
   "name": "git-pro",
   "displayName": "Git Pro",
   "description": "%extension.description%",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "longtd",
   "private": true,
   "license": "MIT",
@@ -35,7 +35,15 @@
     "blame",
     "rebase",
     "stash",
-    "worktree"
+    "worktree",
+    "merge",
+    "conflict",
+    "merge conflicts",
+    "compare",
+    "diff",
+    "branch",
+    "cherry-pick",
+    "scm"
   ],
   "main": "./dist/extension.js",
   "extensionKind": [

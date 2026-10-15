@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-10-15
+
+- Added search keywords (merge, conflict, compare, diff, branch, cherry-pick) so the extension is easier to find on the Marketplace.
+- No functional changes since 0.2.0.
+
 ## 0.2.0 — 2026-10-15
 
 - Git Pro is no longer labelled a preview on the Marketplace, on the website or in the docs. Requirements and known limits, such as Remote WSL and Dev Containers not having completed release validation, stay listed in Compatibility and limitations.
