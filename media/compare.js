@@ -74,8 +74,8 @@
     const words = value => node('span', 'title-words', value);
     if (state.mode === 'worktree') {
       const on = state.head ? ` on ${state.head}` : '';
-      if (state.swapped) title.append(words(`Difference between the current working tree${on} and files in `), refChip(state.left));
-      else title.append(words('Difference between files in '), refChip(state.left), words(` and the current working tree${on}`));
+      if (state.swapped) title.append(words(`The working tree${on} compared with files in `), refChip(state.left));
+      else title.append(words('Files in '), refChip(state.left), words(` compared with the working tree${on}`));
     } else if (state.right) title.append(words('Compare '), refChip(state.left), words(' with '), refChip(state.right));
   };
   const renderSummary = () => {
@@ -119,7 +119,7 @@
       const label = `Commits in ${from.name}, not in ${to.name}`, section = node('section', 'commit-side'); section.setAttribute('aria-label', label);
       const header = node('h2', 'pane-heading'); header.append(node('span', 'heading-text', label), node('span', 'count', list.count.toLocaleString())); section.append(header);
       // WebStorm's wording: nothing here means the other side already has all of these commits.
-      if (!list.commits.length) section.append(node('p', 'empty', `${to.name} contains all commits from ${from.name}`));
+      if (!list.commits.length) section.append(node('p', 'empty', `Every commit of ${from.name} is already in ${to.name}`));
       else {
         const box = node('div', 'commit-rows'), rows = []; box.setAttribute('role', 'listbox'); box.setAttribute('aria-label', label);
         for (const commit of list.commits) {

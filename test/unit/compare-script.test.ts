@@ -62,7 +62,7 @@ test('Compare renders the WebStorm header, directional lists and empty text as t
   assert.equal(h.get('summary').textContent, `Fork point ${oid(3).slice(0, 8)} · feature +30 · main +0`);
   const [left, right] = h.get('commits').children;
   assert.equal(left!.getAttribute('aria-label'), 'Commits in feature, not in main'); assert.equal(right!.getAttribute('aria-label'), 'Commits in main, not in feature');
-  assert.equal(right!.find(node => node.className === 'empty')?.textContent, 'feature contains all commits from main');
+  assert.equal(right!.find(node => node.className === 'empty')?.textContent, 'Every commit of main is already in feature');
   const rows = left!.find(node => node.className === 'commit-rows')!.children;
   assert.equal(rows.length, 25); assert.equal(rows[0]!.find(node => node.className === 'subject-text')?.textContent, '<img src=x onerror=alert(1)>');
   assert.equal(h.created.includes('img') || h.created.includes('script'), false, 'Repository text never becomes markup');
@@ -158,7 +158,7 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
     files: { scope: 'worktree', from: oid(1), total: 3, offset: 0, omitted: false, binary: 0, items: [
       { index: 0, status: 'M', path: 'src/app.ts', added: 1, removed: 1, binary: false, presence: 'both' }, { index: 1, status: 'D', path: 'only-branch.txt', added: 0, removed: 4, binary: false, presence: 'branch' }, { index: 2, status: 'A', path: 'local.txt', added: 2, removed: 0, binary: false, presence: 'worktree' }] } };
   h.post(state);
-  assert.equal(h.get('title').textContent, 'Difference between files in feature and the current working tree on main');
+  assert.equal(h.get('title').textContent, 'Files in feature compared with the working tree on main');
   assert.equal(h.get('commits').hidden, true); assert.equal(h.get('workspace').className, 'files-only'); assert.equal(h.get('files-mode').hidden, true);
   assert.deepEqual(h.get('legend').children.map(chip => [chip.dataset.presence, chip.textContent]), [['branch', 'Only in feature'], ['worktree', 'Only in the working tree'], ['both', 'Changed in both']]);
   const rows = h.get('file-rows').children; assert.equal(h.get('file-rows').getAttribute('aria-multiselectable'), 'true');
@@ -176,7 +176,7 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
   assert.deepEqual(h.sent.at(-1), { type: 'getFromBranch', revision: 2, indexes: [1, 2], session: 'session-1' });
   rows[0]!.focus(); rows[0]!.key(' '); assert.equal(rows[0]!.getAttribute('aria-selected'), 'true', 'Space toggles a row into the selection');
   h.post({ ...state, revision: 3 }); assert.equal(h.get('get-from-branch').disabled, true, 'A new revision clears the selection: its indexes belong to the old list');
-  h.post({ ...state, revision: 3, swapped: true }); assert.equal(h.get('title').textContent, 'Difference between the current working tree on main and files in feature');
+  h.post({ ...state, revision: 3, swapped: true }); assert.equal(h.get('title').textContent, 'The working tree on main compared with files in feature');
   h.post({ ...state, revision: 4, files: { ...state.files, total: 0, items: [] } }); assert.equal(h.get('files-empty').textContent, 'No differences between feature and the working tree.');
   assert.equal(h.get('file-rows').hidden, true);
   h.post({ ...state, revision: 5 }); assert.equal(h.get('file-rows').hidden, false); assert.equal(h.get('files-empty').hidden, true);
