@@ -9,6 +9,7 @@ import { mergeBlocker, parseConflictsRequest, type ConflictsOperationState, type
 import { fileKey } from '../../editor/merge-editor-bridge';
 import { redact } from '../../security/redaction';
 import type { Logger } from '../../utils/logging';
+import type { MenuContext, MenuRouter } from '../menu-context';
 
 type Group = 'unresolved' | 'resolved';
 interface Captured { readonly group: Group; readonly row: ConflictRow }
@@ -33,6 +34,8 @@ export interface ConflictsPanelDeps {
   readonly actions: Pick<ConflictActions, 'accept' | 'markResolved' | 'compare' | 'openFile' | 'dropStash'>;
   readonly checkTrust: () => void;
   readonly logger: Logger;
+  /** Where a tab registers its session so that the native right-click menu can reach it; a tab without it has no menu. */
+  readonly menus?: MenuRouter;
 }
 const count = (value: number) => `${value} ${value === 1 ? 'file' : 'files'}`;
 const message = (error: unknown) => redact(error instanceof Error ? error.message : String(error));
@@ -71,8 +74,9 @@ export class ConflictsPanels implements ConflictsSurface, vscode.Disposable {
       stash: undefined, selection: [], select, busy: false, disposed: false, loading: undefined, generation: 0, timer: undefined, loaded: undefined, state: undefined };
     this.tabs.set(repositoryId, tab);
     const receive = panel.webview.onDidReceiveMessage(raw => { void this.receive(tab, raw); });
+    const menu = this.deps.menus?.register('gitPro.conflicts', tab.session, { repositoryId, handle: (action, context) => this.menuAction(tab, action, context) });
     const disposed = panel.onDidDispose(() => {
-      tab.disposed = true; tab.loading?.abort(); if (tab.timer) clearTimeout(tab.timer); receive.dispose(); disposed.dispose();
+      tab.disposed = true; tab.loading?.abort(); if (tab.timer) clearTimeout(tab.timer); receive.dispose(); disposed.dispose(); menu?.dispose();
       tab.rows.clear(); tab.previous.clear(); tab.resolved.clear(); tab.list = undefined; tab.state = undefined;
       if (this.tabs.get(repositoryId) === tab) this.tabs.delete(repositoryId);
     });
@@ -161,6 +165,21 @@ export class ConflictsPanels implements ConflictsSurface, vscode.Disposable {
     const found = tab.rows.get(key);
     if (!found || group && found.group !== group) throw new Error(group === 'unresolved' && found ? 'Select unresolved files only.' : 'Conflicts changed. Review again.');
     return found.row;
+  }
+  /**
+   * A native right-click menu command, turned into the request the tab itself would send. The row's key and revision come from the element, the files from the selection this
+   * tab already tracks (the row is selected first), so a stale or forged menu is refused like any other request.
+   */
+  private async menuAction(tab: Tab, action: string, context: MenuContext): Promise<void> {
+    const { key, revision } = context.values, base = { session: tab.session, revision };
+    const keys = typeof key === 'string' && tab.selection.length > 1 && tab.selection.includes(key) ? [...tab.selection] : [key];
+    switch (action) {
+      case 'merge': return this.receive(tab, { ...base, type: 'open', action, key, ...(keys.length > 1 ? { keys } : {}) });
+      case 'acceptYours': case 'acceptTheirs': case 'markResolved': return this.receive(tab, { ...base, type: 'resolve', action, keys });
+      case 'openFile': return this.receive(tab, { ...base, type: 'open', action: 'file', key });
+      case 'compareBaseYours': case 'compareBaseTheirs': case 'compareYoursTheirs': return this.receive(tab, { ...base, type: 'open', action, key });
+    }
+    throw new Error('Unknown Conflicts menu action.');
   }
   private async receive(tab: Tab, raw: unknown): Promise<void> {
     let owned = false, mutated = false;

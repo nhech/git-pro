@@ -57,7 +57,7 @@ export function registerConflicts(context: vscode.ExtensionContext, deps: Featur
     stageWithMarkers: async (id, file) => deps.conflicts.resolve(await deps.conflicts.preview(id, file), 'mark', true),
     locate: file => locate(deps, file), active: () => deps.registry.active?.id });
   const actions = new ConflictActions({ api, revisions: deps.revisions, tools: deps.tools, summary, checkTrust, authorize, root: id => deps.git.repository(id).root });
-  const panels = new ConflictsPanels(context, { registry: deps.registry, api, bridge, actions, checkTrust, logger: deps.logger });
+  const panels = new ConflictsPanels(context, { registry: deps.registry, api, bridge, actions, checkTrust, logger: deps.logger, menus: deps.surfaces.menus });
   deps.surfaces.conflicts = panels; deps.surfaces.mergeBridge = bridge;
   context.subscriptions.push(snapshots, vscode.workspace.registerTextDocumentContentProvider(CONFLICT_SCHEME, snapshots), bridge, panels,
     { dispose: () => { if (deps.surfaces.conflicts === panels) delete deps.surfaces.conflicts; if (deps.surfaces.mergeBridge === bridge) delete deps.surfaces.mergeBridge; } });

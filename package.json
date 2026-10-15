@@ -378,6 +378,176 @@
         "command": "gitPro.rebaseCurrentOnto",
         "title": "%command.gitPro.rebaseCurrentOnto.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.checkoutDetached",
+        "title": "%command.gitPro.menu.commit.checkoutDetached.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.createBranch",
+        "title": "%command.gitPro.menu.commit.createBranch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.createTag",
+        "title": "%command.gitPro.menu.commit.createTag.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.cherryPick",
+        "title": "%command.gitPro.menu.commit.cherryPick.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.revert",
+        "title": "%command.gitPro.menu.commit.revert.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.rebaseFromHere",
+        "title": "%command.gitPro.menu.commit.rebaseFromHere.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.compareWithCurrent",
+        "title": "%command.gitPro.menu.commit.compareWithCurrent.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.compareWithWorkingTree",
+        "title": "%command.gitPro.menu.commit.compareWithWorkingTree.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.copyHash",
+        "title": "%command.gitPro.menu.commit.copyHash.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.copyMessage",
+        "title": "%command.gitPro.menu.commit.copyMessage.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.showFiles",
+        "title": "%command.gitPro.menu.compare.showFiles.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.showInHistory",
+        "title": "%command.gitPro.menu.compare.showInHistory.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.diff",
+        "title": "%command.gitPro.menu.compare.diff.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.localDiff",
+        "title": "%command.gitPro.menu.compare.localDiff.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.openFile",
+        "title": "%command.gitPro.menu.compare.openFile.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.getFromBranch",
+        "title": "%command.gitPro.menu.compare.getFromBranch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.copyPath",
+        "title": "%command.gitPro.menu.compare.copyPath.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.merge",
+        "title": "%command.gitPro.menu.conflicts.merge.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.acceptYours",
+        "title": "%command.gitPro.menu.conflicts.acceptYours.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.acceptTheirs",
+        "title": "%command.gitPro.menu.conflicts.acceptTheirs.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.markResolved",
+        "title": "%command.gitPro.menu.conflicts.markResolved.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.openFile",
+        "title": "%command.gitPro.menu.conflicts.openFile.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.compareBaseYours",
+        "title": "%command.gitPro.menu.conflicts.compareBaseYours.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.compareBaseTheirs",
+        "title": "%command.gitPro.menu.conflicts.compareBaseTheirs.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.conflicts.compareYoursTheirs",
+        "title": "%command.gitPro.menu.conflicts.compareYoursTheirs.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.pick",
+        "title": "%command.gitPro.menu.rebasePlanner.pick.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.reword",
+        "title": "%command.gitPro.menu.rebasePlanner.reword.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.edit",
+        "title": "%command.gitPro.menu.rebasePlanner.edit.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.squash",
+        "title": "%command.gitPro.menu.rebasePlanner.squash.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.fixup",
+        "title": "%command.gitPro.menu.rebasePlanner.fixup.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.drop",
+        "title": "%command.gitPro.menu.rebasePlanner.drop.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.editMessage",
+        "title": "%command.gitPro.menu.rebasePlanner.editMessage.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.moveUp",
+        "title": "%command.gitPro.menu.rebasePlanner.moveUp.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.rebasePlanner.moveDown",
+        "title": "%command.gitPro.menu.rebasePlanner.moveDown.title%",
+        "category": "%command.category%"
       }
     ],
     "viewsContainers": {
@@ -664,6 +834,314 @@
         {
           "command": "gitPro.operation.skip",
           "when": "gitPro.operation =~ /^(rebasing|cherry-picking|reverting)$/"
+        },
+        {
+          "command": "gitPro.menu.commit.checkoutDetached",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.createBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.createTag",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.cherryPick",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.revert",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.rebaseFromHere",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.compareWithCurrent",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.compareWithWorkingTree",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.copyHash",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.copyMessage",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.showFiles",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.showInHistory",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.diff",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.localDiff",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.openFile",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.getFromBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.merge",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.acceptYours",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.acceptTheirs",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.markResolved",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.openFile",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareBaseYours",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareBaseTheirs",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareYoursTheirs",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.pick",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.reword",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.edit",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.squash",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.fixup",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.drop",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.editMessage",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.moveUp",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.moveDown",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "gitPro.menu.commit.checkoutDetached",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "gitPro.menu.commit.createBranch",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "1_checkout@2"
+        },
+        {
+          "command": "gitPro.menu.commit.createTag",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "1_checkout@3"
+        },
+        {
+          "command": "gitPro.menu.commit.cherryPick",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "gitPro.menu.commit.revert",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "gitPro.menu.commit.rebaseFromHere",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "2_modify@3"
+        },
+        {
+          "command": "gitPro.menu.commit.compareWithCurrent",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "3_compare@1"
+        },
+        {
+          "command": "gitPro.menu.commit.compareWithWorkingTree",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "3_compare@2"
+        },
+        {
+          "command": "gitPro.menu.commit.copyHash",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitPro.menu.commit.copyMessage",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "gitPro.menu.compare.showFiles",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'commit' && !commitShown",
+          "group": "0_view@1"
+        },
+        {
+          "command": "gitPro.menu.compare.showInHistory",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'commit'",
+          "group": "0_view@2"
+        },
+        {
+          "command": "gitPro.menu.compare.diff",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file'",
+          "group": "0_open@1"
+        },
+        {
+          "command": "gitPro.menu.compare.localDiff",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file' && !compareWorktree",
+          "group": "0_open@2"
+        },
+        {
+          "command": "gitPro.menu.compare.openFile",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file' && !fileOnlyInBranch",
+          "group": "0_open@3"
+        },
+        {
+          "command": "gitPro.menu.compare.getFromBranch",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file' && compareWorktree",
+          "group": "1_restore@1"
+        },
+        {
+          "command": "gitPro.menu.compare.copyPath",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file'",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitPro.menu.conflicts.merge",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "0_resolve@1"
+        },
+        {
+          "command": "gitPro.menu.conflicts.acceptYours",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "0_resolve@2"
+        },
+        {
+          "command": "gitPro.menu.conflicts.acceptTheirs",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "0_resolve@3"
+        },
+        {
+          "command": "gitPro.menu.conflicts.markResolved",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictMarkable",
+          "group": "0_resolve@4"
+        },
+        {
+          "command": "gitPro.menu.conflicts.openFile",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictFile",
+          "group": "1_open@1"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareBaseYours",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "2_compare@1"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareBaseTheirs",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "2_compare@2"
+        },
+        {
+          "command": "gitPro.menu.conflicts.compareYoursTheirs",
+          "when": "webviewId == 'gitPro.conflicts' && webviewSection == 'conflict' && conflictUnresolved",
+          "group": "2_compare@3"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.pick",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && stepAction != 'pick'",
+          "group": "0_action@1"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.reword",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && stepAction != 'reword'",
+          "group": "0_action@2"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.edit",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && stepAction != 'edit'",
+          "group": "0_action@3"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.squash",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && !stepFirst && stepAction != 'squash'",
+          "group": "0_action@4"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.fixup",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && !stepFirst && stepAction != 'fixup'",
+          "group": "0_action@5"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.drop",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && stepAction != 'drop'",
+          "group": "0_action@6"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.editMessage",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && stepAction == 'reword'",
+          "group": "1_message@1"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.moveUp",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && !stepFirst",
+          "group": "2_move@1"
+        },
+        {
+          "command": "gitPro.menu.rebasePlanner.moveDown",
+          "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && !stepLast",
+          "group": "2_move@2"
         }
       ]
     },

@@ -162,19 +162,15 @@ test('Enter merges a mergeable row and otherwise moves to Accept with the reason
   h.row(key(2)).fire('dblclick');
   assert.equal(h.sent.filter(value => value.type === 'open').length, before);
   assert.equal(h.elements.get('status')!.textContent, 'Deleted by them — choose Accept Yours or Accept Theirs.'); assert.equal(Element.active, h.elements.get('accept-yours'));
-  const menuOf = (index: number) => { h.row(key(index)).fire('contextmenu', { clientX: 20, clientY: 20 }); return h.body.children.find(node => node.className === 'context-menu')!; };
-  const actions = (menu: Element) => menu.children.filter(node => node.getAttribute('role') === 'menuitem').map(node => node.dataset.menuAction);
-  assert.deepEqual(actions(menuOf(1)), ['merge', 'acceptYours', 'acceptTheirs', 'file', 'compareBaseYours', 'compareBaseTheirs', 'compareYoursTheirs'], 'no Mark Resolved while markers remain');
-  assert.deepEqual(actions(menuOf(4)), ['merge', 'acceptYours', 'acceptTheirs', 'file', 'markResolved', 'compareBaseYours', 'compareBaseTheirs', 'compareYoursTheirs']);
-  assert.equal(actions(menuOf(3)).includes('markResolved'), false, 'a binary row is resolved by choosing a side (N13)');
-  const binaryMenu = h.body.children.find(node => node.className === 'context-menu')!;
-  assert.equal(binaryMenu.children.find(node => node.dataset.menuAction === 'merge')!.getAttribute('aria-disabled'), 'true');
-  h.press(binaryMenu, { key: 'Escape' }); assert.equal(h.body.children.some(node => node.className === 'context-menu'), false); assert.equal(Element.active, h.row(key(3)));
-  h.press(h.row(key(4)), { key: 'F10', shiftKey: true });
-  const menu = h.body.children.find(node => node.className === 'context-menu')!;
-  assert.equal(Element.active, menu.children.find(node => node.getAttribute('role') === 'menuitem'), 'the keyboard menu takes focus');
-  menu.children.find(node => node.dataset.menuAction === 'markResolved')!.fire('click');
-  assert.deepEqual(h.last('resolve'), { type: 'resolve', revision: 7, action: 'markResolved', keys: [key(4)], session });
+  // Right-click is VS Code's own menu: each row names itself and the revision it was drawn for, and the menu's items come from `when` clauses on these values.
+  const tagged = (index: number) => JSON.parse(h.row(key(index)).getAttribute('data-vscode-context')!) as Record<string, unknown>, menuDrawn = () => h.body.children.some(node => node.className === 'context-menu');
+  assert.deepEqual(tagged(1), { preventDefaultContextMenuItems: true, session, revision: 7, webviewSection: 'conflict', key: key(1), conflictUnresolved: true, conflictFile: true, conflictMarkable: false }, 'no Mark Resolved while markers remain');
+  assert.equal(tagged(4).conflictMarkable, true); assert.equal(tagged(3).conflictMarkable, false, 'a binary row is resolved by choosing a side (N13)'); assert.equal(tagged(2).conflictMarkable, false, 'so is a modify/delete row');
+  const selects = () => h.sent.filter(value => value.type === 'select').length, count = selects();
+  h.row(key(4)).fire('contextmenu'); assert.equal(selects(), count + 1); assert.deepEqual(h.last('select'), { type: 'select', keys: [key(4)], session }, 'a right-click outside the selection selects that row first'); assert.equal(menuDrawn(), false, 'no menu of ours is drawn');
+  h.row(key(4)).fire('contextmenu'); assert.equal(selects(), count + 1, 'a row already selected is not selected again');
+  h.press(h.row(key(4)), { key: 'F10', shiftKey: true }); assert.equal(menuDrawn(), false, 'the menu key is left to the browser, which asks for the native menu');
+  assert.equal(h.body.getAttribute('data-vscode-context'), JSON.stringify({ preventDefaultContextMenuItems: true }), 'outside a row nothing offers Cut, Copy and Paste');
   h.row(key(4)).fire('click'); h.elements.get('compare')!.fire('click');
   h.body.children.find(node => node.className === 'context-menu')!.children.find(node => node.dataset.menuAction === 'compareYoursTheirs')!.fire('click');
   assert.deepEqual(h.last('open'), { type: 'open', revision: 7, action: 'compareYoursTheirs', key: key(4), session });
@@ -285,7 +281,7 @@ test('the Compare and More Actions menus return focus to their button; Use Colum
   assert.deepEqual(more.children.map(node => node.textContent), ['Use Column Layout in Merge Editor']);
   more.children[0]!.fire('click');
   assert.deepEqual(h.last('columnLayout'), { type: 'columnLayout', session }); assert.equal(Element.active, overflow);
-  const markable = (index: number) => { h.row(key(index)).fire('contextmenu', { clientX: 1, clientY: 1 }); const found = h.body.children.find(node => node.className === 'context-menu')!; const has = found.children.some(node => node.dataset.menuAction === 'markResolved'); h.press(found, { key: 'Escape' }); return has; };
+  const markable = (index: number) => (JSON.parse(h.row(key(index)).getAttribute('data-vscode-context')!) as { conflictMarkable: boolean }).conflictMarkable;
   state(h, [...sample(), conflict(4, { path: 'clean.txt', markers: 'none', blocks: 0 }), conflict(5, { path: 'kept.txt', kind: 'deletedByThem', theirs: 'deleted', markers: 'none', blocks: 0, mergeable: false })]);
   assert.equal(markable(4), true); assert.equal(markable(5), false, 'a modify/delete row with no markers is still a choice of side');
   assert.equal(h.row(key(5)).children[4]!.textContent, 'Choose Yours or Theirs');

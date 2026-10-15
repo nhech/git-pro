@@ -12,6 +12,7 @@ import type { HistoryPanel } from '../webviews/graph/history-panel';
 import type { RevisionProvider } from '../documents/revision-provider';
 import type { ToolsService } from '../git/tools/tools.service';
 import type { Logger } from '../utils/logging';
+import { MenuRouter } from '../webviews/menu-context';
 
 /**
  * Late-bound feature surfaces: extension.ts creates one holder, hands it to the constructors that need it, and the register* functions fill it in,
@@ -26,8 +27,10 @@ export interface Surfaces {
   operation?: OperationSummaryProvider;
   /** Per repository id. WP5 records a stash pop/apply and WP1 a squash merge that stopped on conflicts; WP3's watcher deletes the entry when the count reaches 0 or the repository closes. */
   readonly conflictSources: Map<string, ConflictSource>;
+  /** Which panel a native context-menu command came from; panels register their session here while they are open. */
+  readonly menus: MenuRouter;
 }
-export function createSurfaces(): Surfaces { return { conflictSources: new Map() }; }
+export function createSurfaces(): Surfaces { return { conflictSources: new Map(), menus: new MenuRouter() }; }
 /** The trusted wrapper from extension.ts (trust and built-in Git checks, recovery toast, conflict auto-open); registrations belong to context.subscriptions. */
 export type TrustedCommand = (id: string, action: (...args: unknown[]) => Promise<unknown>) => void;
 /** What every register* function receives besides the extension context and the trusted wrapper. */

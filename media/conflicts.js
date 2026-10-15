@@ -11,6 +11,7 @@
   const session=document.body.dataset.session||'',selected=new Set(),collapsed=new Set();
   let state={rows:[],operation:null,message:'Loading conflicts…',groupByDirectory:false,truncated:false,columnLayout:false},revision=0,items=[],byKey=new Map(),elements=new Map();
   let busy=false,menu,menuOwner,focusedKey='',anchorKey='',visibleCount=200,identity='',hintSide='yours',swallow=false,unresolvedBefore=-1,initial=true;
+  document.body.setAttribute?.('data-vscode-context',JSON.stringify({preventDefaultContextMenuItems:true}));
   const send=message=>{if(session)vscode.postMessage({...message,session});};
   const create=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
   const icon=name=>{const node=create('span',`codicon codicon-${name}`);node.setAttribute('aria-hidden','true');return node;};
@@ -99,16 +100,15 @@
   };
   // Focus goes back to what opened the menu: the Compare or overflow button (menu-button pattern), otherwise the row.
   const closeMenu=restore=>{if(!menu)return;menu.remove();menu=undefined;const owner=menuOwner;menuOwner=undefined;if(restore){if(owner)owner.focus();else focusRow(focusedKey);}};
-  const rowEntries=item=>item.group==='resolved'?[['file','Open File']]:[['merge','Merge…'],['acceptYours','Accept Yours'],['acceptTheirs','Accept Theirs'],null,
-    ...(item.workingFile?[['file','Open File']]:[]),...(item.markers!=='present'&&!item.binary&&!item.unsupported&&item.workingFile&&bothSides(item)?[['markResolved','Mark Resolved']]:[]),null,...compareEntries];
-  const showMenu=(item,point,entries,owner)=>{
-    closeMenu(false);menuOwner=owner;if(item)focusedKey=item.key;
-    if(item&&item.type==='file'&&!selected.has(item.key))selectOnly(item);
-    const list=entries||(item&&item.type==='file'?rowEntries(item):[]);if(!list.length)return;
-    menu=create('div','context-menu');menu.setAttribute('role','menu');menu.setAttribute('aria-label',item?`${item.path} actions`:'Compare');
+  // Right-click on a row is VS Code's own menu (contributes.menus["webview/context"]); the host knows the selection, the row names itself and the revision it was drawn for.
+  // The Compare and overflow buttons still open a menu of ours: a native menu cannot be opened from a button.
+  const showMenu=(point,entries,owner,label)=>{
+    closeMenu(false);menuOwner=owner;
+    const list=entries;if(!list.length)return;
+    menu=create('div','context-menu');menu.setAttribute('role','menu');menu.setAttribute('aria-label',label);
     for(const entry of list){
       if(!entry){if(menu.children.length&&menu.children[menu.children.length-1].className!=='menu-separator'){const separator=create('div','menu-separator');separator.setAttribute('role','separator');menu.append(separator);}continue;}
-      const [action,text]=entry,single=action==='file'||action.startsWith('compare')||action==='columnLayout',targets=single?[item||selection()[0]].filter(Boolean):selection();
+      const [action,text]=entry,single=action==='file'||action.startsWith('compare')||action==='columnLayout',targets=single?[selection()[0]].filter(Boolean):selection();
       const reason=blocker(action.startsWith('compare')?'compare':action,targets),button=create('button','menu-item');
       button.type='button';button.setAttribute('role','menuitem');button.dataset.menuAction=action;button.append(icon(menuIcons[action]),create('span','menu-label',!single&&targets.length>1?`${text} (${targets.length})`:text));
       if(reason){button.setAttribute('aria-disabled','true');button.title=reason;}
@@ -125,6 +125,8 @@
     menu.style.left=`${Math.max(4,Math.min(point.clientX,innerWidth-rect.width-4))}px`;menu.style.top=`${Math.max(4,Math.min(point.clientY,innerHeight-rect.height-4))}px`;
     [...menu.children].find(node=>node.getAttribute('role')==='menuitem')?.focus();
   };
+  const tagRow=(node,item)=>node.setAttribute('data-vscode-context',JSON.stringify({preventDefaultContextMenuItems:true,session,revision,webviewSection:'conflict',key:item.key,conflictUnresolved:item.group==='unresolved',conflictFile:item.workingFile===true,
+    conflictMarkable:item.group==='unresolved'&&item.markers!=='present'&&!item.binary&&!item.unsupported&&item.workingFile===true&&bothSides(item)}));
   const cell=(className,text)=>{const node=create('span',`cell ${className}`,text);node.setAttribute('role','gridcell');return node;};
   const fileNode=item=>{
     const node=create('div',`row file ${item.group} depth-${Math.min(item.depth,4)}${item.mergeOpen?' merge-open':''}`),status=stateText(item);
@@ -139,7 +141,9 @@
     node.addEventListener('focus',()=>{focusedKey=item.key;for(const [other,element] of elements)element.tabIndex=other===item.key?0:-1;});
     node.addEventListener('click',event=>{closeMenu(false);focusRow(item.key);selectRow(item,event);});
     node.addEventListener('dblclick',()=>enter(item));
-    node.addEventListener('contextmenu',event=>{event.preventDefault();showMenu(item,event);});
+    // A right-click outside the selection selects just that row before the native menu opens, as in the Explorer.
+    node.addEventListener('contextmenu',()=>{focusedKey=item.key;if(!selected.has(item.key))selectOnly(item);});
+    tagRow(node,item);
     node.addEventListener('keydown',event=>keydown(item,node,event));
     return node;
   };
@@ -154,7 +158,6 @@
     return node;
   };
   const keydown=(item,node,event)=>{
-    if(event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey){event.preventDefault();const rect=node.getBoundingClientRect();showMenu(item,{clientX:rect.left+24,clientY:rect.top+20});return;}
     // Select All belongs to the table: stopped here so the workbench does not also run it on the page.
     if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&String(event.key).toLowerCase()==='a'){event.preventDefault();event.stopPropagation();selectAll();return;}
     if(event.altKey||event.ctrlKey||event.metaKey)return;
@@ -252,7 +255,7 @@
     if(data.type==='state'){
       if(Number.isSafeInteger(data.revision))revision=data.revision;
       const next={rows:Array.isArray(data.rows)?data.rows:[],operation:data.operation&&typeof data.operation==='object'?data.operation:null,message:typeof data.message==='string'?data.message:'',groupByDirectory:data.groupByDirectory===true,truncated:data.truncated===true,columnLayout:data.columnLayout===true};
-      const nextIdentity=JSON.stringify(next);if(nextIdentity===identity)return;identity=nextIdentity;
+      const nextIdentity=JSON.stringify([revision,next]);if(nextIdentity===identity)return;identity=nextIdentity;
       // Focus returns to the unresolved row now at the focused row's place: the next one after an action resolved it (§3.18).
       const previous=items.filter(item=>item.type==='file'&&item.group==='unresolved'),index=previous.findIndex(item=>item.key===focusedKey),focusSelected=selected.has(focusedKey);
       state=next;items=build();byKey=new Map(items.map(item=>[item.key,item]));
@@ -283,11 +286,11 @@
     if(data.type==='error'||data.type==='notice')announce(typeof data.message==='string'?data.message:'Action failed.',data.type==='error');
   });
   for(const [action,button] of Object.entries(buttons)){
-    button.addEventListener('click',()=>{if(action==='compare'){const reason=blocker('compare',selection());if(reason){announce(reason);return;}const rect=button.getBoundingClientRect();showMenu(undefined,{clientX:rect.left,clientY:rect.top+rect.height},compareEntries,button);return;}run(action);});
+    button.addEventListener('click',()=>{if(action==='compare'){const reason=blocker('compare',selection());if(reason){announce(reason);return;}const rect=button.getBoundingClientRect();showMenu({clientX:rect.left,clientY:rect.top+rect.height},compareEntries,button,'Compare');return;}run(action);});
     if(action==='acceptYours'||action==='acceptTheirs')for(const type of ['focus','mouseenter'])button.addEventListener(type,()=>{hintSide=action==='acceptYours'?'yours':'theirs';renderHint(selection());});
   }
   buttons.compare.setAttribute('aria-haspopup','menu');
-  overflow.addEventListener('click',()=>{const rect=overflow.getBoundingClientRect();showMenu(undefined,{clientX:rect.left,clientY:rect.top+rect.height},overflowEntries,overflow);});
+  overflow.addEventListener('click',()=>{const rect=overflow.getBoundingClientRect();showMenu({clientX:rect.left,clientY:rect.top+rect.height},overflowEntries,overflow,'More actions');});
   toggle.addEventListener('change',()=>send({type:'setting',groupByDirectory:toggle.checked===true}));
   more.addEventListener('click',()=>{visibleCount+=200;renderRows();if(!more.hidden)more.focus();else focusRow(focusedKey);});
   const mnemonics={KeyY:'acceptYours',KeyT:'acceptTheirs',KeyM:'merge'},letters={y:'acceptYours',t:'acceptTheirs',m:'merge'};

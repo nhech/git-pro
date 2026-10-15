@@ -31,6 +31,7 @@ loader._load = function (request: string, ...rest: unknown[]) { return request =
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ConflictsPanels } = require('../../src/webviews/conflicts/conflicts-panel') as typeof import('../../src/webviews/conflicts/conflicts-panel');
 loader._load = original;
+import { MenuRouter } from '../../src/webviews/menu-context';
 
 const root = path.resolve('conflict-fixture'), settle = async (rounds = 8) => { for (let index = 0; index < rounds; index++) await new Promise(resolve => setImmediate(resolve)); };
 const summary = (extra: Record<string, unknown> = {}) => ({ repositoryId: 'repo', operation: 'merging', title: 'Merging feature into main', yours: { label: 'Yours', ref: 'main', oid: '1'.repeat(40), detail: 'main' },
@@ -50,8 +51,9 @@ function harness() {
   const bridge = { isOpen: async () => false, openResults: async () => new Set<string>(), open: async () => true, openSequence: record('openSequence', true), preferColumnLayout: () => { calls.push({ name: 'preferColumnLayout', args: [] }); },
     onDidChange: () => ({ dispose: () => undefined }) };
   const actions = { accept: record('accept', () => answer), markResolved: record('markResolved'), compare: record('compare'), openFile: record('openFile'), dropStash: record('dropStash', true) };
-  const panels = new ConflictsPanels({ extensionUri: { path: '/extension' } } as never, { registry: registry as never, api: api as never, bridge: bridge as never, actions: actions as never, checkTrust: () => undefined, logger: { info: () => undefined, error: () => undefined } });
-  return { panels, registry, reads, calls, selected, fireRegistry: () => { for (const listener of listeners) listener(); },
+  const menus = new MenuRouter();
+  const panels = new ConflictsPanels({ extensionUri: { path: '/extension' } } as never, { registry: registry as never, api: api as never, bridge: bridge as never, actions: actions as never, checkTrust: () => undefined, logger: { info: () => undefined, error: () => undefined }, menus });
+  return { panels, menus, registry, reads, calls, selected, fireRegistry: () => { for (const listener of listeners) listener(); },
     setList: (value: unknown) => { next = value; }, setAnswer: (value: typeof answer) => { answer = value; } };
 }
 const panel = () => host.panels[0]!;
@@ -207,4 +209,29 @@ test('Merge…, compares, operation buttons, Drop Stash and the directory settin
   assert.deepEqual(stash.calls.at(-1), { name: 'dropStash', args: ['repo', { selector: 'stash@{0}', oid: '4'.repeat(40) }] });
   assert.equal((state().operation as { stash?: unknown }).stash, undefined);
   stash.panels.dispose();
+});
+
+test('native right-click commands reach the tab through the router and are checked like its own requests', async () => {
+  const h = harness(); await h.panels.open('repo'); await settle();
+  const revision = state().revision, a = keyOf('src/a.ts'), b = keyOf('src/b.ts');
+  const argument = (extra: Record<string, unknown> = {}) => ({ webview: 'gitPro.conflicts', webviewSection: 'conflict', preventDefaultContextMenuItems: true, session: session(), revision, key: a, ...extra });
+  const run = async (action: string, given: Record<string, unknown> = argument()) => { const { panel: target, context } = h.menus.resolve(given, ['gitPro.conflicts'], 'conflict'); await target.handle!(action, context); await settle(); };
+  assert.equal(h.menus.resolve(argument(), ['gitPro.conflicts']).panel.repositoryId, 'repo');
+  await run('acceptTheirs'); assert.deepEqual(h.calls.at(-1)!.args.slice(0, 3), ['repo', ['src/a.ts'], 'theirs'], 'one row names itself');
+  await run('merge'); assert.deepEqual(h.calls.at(-1)!.args, ['repo', ['src/a.ts']]); assert.equal(h.calls.at(-1)!.name, 'openSequence');
+  // The selection the tab tracks is the target when the clicked row belongs to it.
+  await send({ type: 'select', keys: [a, b] });
+  await run('acceptYours'); assert.deepEqual(h.calls.at(-1)!.args.slice(0, 3), ['repo', ['src/a.ts', 'src/b.ts'], 'yours'], 'a row of the selection acts for the whole selection');
+  await run('merge', argument({ key: b })); assert.deepEqual(h.calls.at(-1)!.args, ['repo', ['src/a.ts', 'src/b.ts']], 'Merge… opens them in sequence');
+  await send({ type: 'select', keys: [b] });
+  await run('markResolved'); assert.deepEqual(h.calls.at(-1)!.args, ['repo', ['src/a.ts']], 'a row outside the selection acts alone');
+  await run('openFile'); assert.equal(h.calls.at(-1)!.name, 'openFile'); assert.deepEqual(h.calls.at(-1)!.args, ['repo', 'src/a.ts']);
+  await run('compareYoursTheirs'); assert.equal(h.calls.at(-1)!.name, 'compare'); assert.deepEqual(h.calls.at(-1)!.args.slice(0, 3), ['repo', 'src/a.ts', 'compareYoursTheirs']);
+  const before = h.calls.length, errors = () => panel().sent.filter(message => message.type === 'error').length, failures = errors();
+  await run('acceptYours', argument({ revision: revision - 1 })); assert.match(String(panel().last('error')?.message), /Conflicts changed/, 'a menu drawn for older rows is stale');
+  await run('acceptYours', argument({ key: 'Z'.repeat(43) })); assert.match(String(panel().last('error')?.message), /Conflicts changed/, 'a key the tab never listed');
+  await run('acceptYours', argument({ key: 12 })); assert.equal(errors(), failures + 3); assert.equal(h.calls.length, before, 'none of them reached an action');
+  await assert.rejects(run('deleteEverything'), /Unknown Conflicts menu action/);
+  assert.throws(() => h.menus.resolve(argument({ webviewSection: 'commit' }), ['gitPro.conflicts'], 'conflict'), /Git Pro panel menu/);
+  panel().dispose(); assert.throws(() => h.menus.resolve(argument(), ['gitPro.conflicts']), /closed/, 'a closed tab leaves the router');
 });

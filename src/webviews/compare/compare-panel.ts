@@ -11,9 +11,10 @@ import { compareHtml } from './compare-html';
 import { redact } from '../../security/redaction';
 import { historyPath } from '../../git/history/history-builders';
 import { LinkOutsideError, refuseGitMetadata } from '../../security/paths';
+import type { MenuContext } from '../menu-context';
 
 /** What the Compare tab reads from the feature dependencies; a narrow type keeps the panel testable with stand-ins. */
-export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools'>;
+export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools' | 'surfaces'>;
 export interface CompareFileEntry { readonly status: string; readonly path: string; readonly originalPath?: string }
 /** Working-tree mode's Get from Branch, run by WP5 (preview, modal, dirty-buffer guard, GitService.restoreFromSource). A rename row carries both paths. Resolves true when files changed. */
 export interface GetFromBranchRequest { readonly repositoryId: string; readonly root: string; readonly ref: PinnedRef; readonly files: readonly CompareFileEntry[] }
@@ -65,6 +66,7 @@ class ComparePanel {
   private gone: readonly string[] = []; private expired = false;
   private refs = new Map<string, string[]>();
   private filesMode: CompareFilesMode;
+  private readonly menu: { dispose(): void } | undefined;
   constructor(private readonly owner: ComparePanels, readonly repositoryId: string, readonly root: string, readonly mode: 'commits' | 'worktree', private left: Side, private right: Side | undefined) {
     const configured = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(root)).get('compare.defaultFilesMode');
     this.filesMode = configured === 'tips' ? 'tips' : 'fork';
@@ -76,6 +78,8 @@ class ComparePanel {
     // receive() never rejects; returning its promise lets a caller await one message, as the History panel's listener does.
     this.subscriptions = [this.panel.webview.onDidReceiveMessage(raw => this.receive(raw)), this.panel.onDidDispose(() => this.dispose(true))];
     this.panel.webview.html = compareHtml({ session: this.session, nonce, cspSource: this.panel.webview.cspSource, resource });
+    // Stand-in dependencies in tests carry no surfaces, and a tab without the router simply has no native menu.
+    this.menu = owner.deps.surfaces?.menus.register('gitPro.compare', this.session, { repositoryId, knowsCommit: oid => this.knowsCommit(oid), handle: (action, context) => this.menuAction(action, context) });
   }
   get key(): string { return panelKey(this.repositoryId, this.mode, this.left.oid, this.right?.oid); }
   get isDisposed(): boolean { return this.disposed; }
@@ -124,6 +128,19 @@ class ComparePanel {
       this.busy = false;
       if (!this.disposed) { await this.post({ type: 'busy', busy: false }); if (this.stale) this.schedule(0); }
     }
+  }
+  /** A commit this tab lists: one of the two sides' loaded pages, or the commit whose files are shown. */
+  private knowsCommit(oid: string): boolean { const loaded = this.loaded; return Boolean(loaded) && (this.sideCommits(loaded!).some(commit => commit.oid === oid) || loaded!.view.commit?.oid === oid); }
+  /** A native context-menu command. It becomes the message the tab itself would send, so the session, the revision and the loaded rows are checked the same way and a stale menu fails with the same words. */
+  private async menuAction(action: string, context: MenuContext): Promise<void> {
+    const { revision, index, oid, indexes } = context.values, base = { session: this.session, revision };
+    switch (action) {
+      case 'showFiles': return this.receive({ ...base, type: 'selectCommit', oid });
+      case 'showInHistory': return this.receive({ ...base, type: 'showInHistory', oid });
+      case 'diff': case 'localDiff': case 'openFile': case 'copyPath': return this.receive({ ...base, type: action, index });
+      case 'getFromBranch': return this.receive({ ...base, type: 'getFromBranch', indexes: typeof indexes === 'string' && /^\d{1,7}(?:,\d{1,7}){0,99}$/.test(indexes) ? indexes.split(',').map(Number) : undefined });
+    }
+    throw new Error('Unknown Compare menu action.');
   }
   private async receive(raw: unknown): Promise<void> {
     try {
@@ -176,6 +193,7 @@ class ComparePanel {
         this.loaded = { ...loaded, offset: action.offset }; return true;
       }
       case 'diff': case 'localDiff': case 'openFile': await this.open(action.type, loaded, this.file(loaded, action.index), signal); return false;
+      case 'copyPath': await vscode.env.clipboard.writeText(this.file(loaded, action.index).path); return false;
       case 'openAll': await this.openAll(loaded); return false;
       case 'getFromBranch': return this.getFromBranch(loaded, action.indexes, signal);
       case 'copyRevision': case 'showInHistory': {
@@ -320,7 +338,7 @@ class ComparePanel {
     this.disposed = true; this.generation++; this.controller?.abort(); this.controller = undefined;
     if (this.timer) clearTimeout(this.timer); this.timer = undefined;
     for (const subscription of this.subscriptions) subscription.dispose();
-    this.loaded = undefined; this.refs.clear(); this.owner.forget(this);
+    this.menu?.dispose(); this.loaded = undefined; this.refs.clear(); this.owner.forget(this);
     if (!closed) this.panel.dispose();
   }
 }

@@ -56,10 +56,12 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   assert.equal(manifest.contributes.keybindings,undefined,'Shortcuts stay inside Git Pro webviews; every action is a bindable command');
   assert.equal(manifest.enabledApiProposals,undefined,'No proposed API');
   // Merge-editor and multi-diff menu points other than editor/title are proposed API.
-  assert.deepEqual(Object.keys(menus).filter(id=>!['view/title','view/item/context','editor/context','editor/title','editor/title/context','explorer/context','commandPalette'].includes(id)),[]);
+  assert.deepEqual(Object.keys(menus).filter(id=>!['view/title','view/item/context','editor/context','editor/title','editor/title/context','explorer/context','commandPalette','webview/context'].includes(id)),[]);
   const views=new Set((manifest.contributes.views.gitPro as {id:string}[]).map(view=>view.id));
   const owned=new Set(['gitPro.hasRepositories','gitPro.hasConflicts','gitPro.conflictResources','gitPro.operation']);
-  const builtIn=new Set(['view','viewItem','resource','resourceScheme','isMergeEditor','mergeEditorResultUri','listMultiSelection','listDoubleSelection','explorerResourceIsFolder']);
+  const builtIn=new Set(['view','viewItem','resource','resourceScheme','isMergeEditor','mergeEditorResultUri','listMultiSelection','listDoubleSelection','explorerResourceIsFolder','webviewId','webviewSection',
+    // Plain values a panel puts on its elements (data-vscode-context) for its own menu items to read.
+    'commitShown','compareWorktree','fileOnlyInBranch','conflictUnresolved','conflictFile','conflictMarkable','stepAction','stepFirst','stepLast']);
   for(const [menu,items] of Object.entries(menus))for(const item of items){
     if(item.when===undefined)continue;const seen=new Set<string>();when(item.when,{},seen);
     for(const name of seen)assert.ok(owned.has(name)||builtIn.has(name),`${menu} ${item.command} reads unknown context key ${name}`);
@@ -69,7 +71,9 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   const palette=(command:string,context:Record<string,unknown>)=>{const item=menus.commandPalette!.find(entry=>entry.command===command);return !item?.when||when(item.when,context);};
   const argumentOnly=['gitPro.conflicts.acceptYours','gitPro.conflicts.acceptTheirs','gitPro.conflicts.merge','gitPro.compareBranches','gitPro.mergeIntoCurrent','gitPro.rebaseCurrentOnto',
     // Menu-only: each needs the tree item or folder it was invoked on, so from the palette it would do nothing useful.
-    'gitPro.openFile','gitPro.stageFolder','gitPro.unstageFolder','gitPro.discardFolder'];
+    'gitPro.openFile','gitPro.stageFolder','gitPro.unstageFolder','gitPro.discardFolder',
+    // Webview menu commands take the object the panel's context menu passes, so the palette has nothing to give them.
+    ...(manifest.contributes.menus['webview/context'] as Item[]).map(item=>item.command)];
   assert.deepEqual(menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command).sort(),[...argumentOnly].sort(),'argument-only commands are hidden from the palette');
   for(const id of ['gitPro.conflicts.open','gitPro.operation.menu','gitPro.compareWithCurrent','gitPro.diffWithWorkingTree','gitPro.compareWithRef'])assert.ok(palette(id,{}),`${id} stays in the palette`);
   const merging={'gitPro.operation':'merging','gitPro.hasConflicts':true},rebasing={'gitPro.operation':'rebasing'},idle={'gitPro.operation':'idle'};
@@ -134,4 +138,24 @@ test('the welcome text and the workspace capability notes are localizable, not l
   const texts=[...Object.values(manifest.capabilities).map(entry=>entry.description??''),...manifest.contributes.viewsWelcome.map(entry=>entry.contents)];
   assert.equal(texts.length,3);
   for(const text of texts){assert.match(text,/^%[\w.]+%$/,`${text} is an nls reference`);assert.ok(messages[text.slice(1,-1)]?.trim());}
+});
+
+test('webview context menus: every item names a panel and a section, is hidden from the palette and sorts into the same groups as the Source Control Graph',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8')) as {contributes:{commands:{command:string;title:string}[];menus:Record<string,{command:string;when?:string;group?:string}[]>}};
+  const messages=JSON.parse(readFileSync('package.nls.json','utf8')) as Record<string,string>;
+  const menu=manifest.contributes.menus['webview/context']!,hidden=new Set(manifest.contributes.menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command));
+  assert.ok(menu.length>=10,'the commit menu exists');
+  for(const item of menu){
+    assert.match(item.when??'',/webviewId == 'gitPro\.[A-Za-z]+'/,`${item.command} names its panel`);assert.match(item.when??'',/webviewSection == '[a-z-]+'/,`${item.command} names its section`);
+    assert.match(item.group??'',/^\d_[a-z]+@\d+$/,`${item.command} has a group@order`);assert.ok(hidden.has(item.command),`${item.command} is hidden from the palette`);
+    assert.ok(messages[`command.${item.command}.title`],`${item.command} has a localized title`);
+  }
+  const commit=menu.filter(item=>item.when?.includes("webviewSection == 'commit'")&&item.command.startsWith('gitPro.menu.commit.'));
+  assert.deepEqual(commit.map(item=>item.group).sort(),['1_checkout@1','1_checkout@2','1_checkout@3','2_modify@1','2_modify@2','2_modify@3','3_compare@1','3_compare@2','9_copy@1','9_copy@2'],'groups never collide, so the order is stable');
+  assert.ok(commit.every(item=>item.when?.includes("webviewId == 'gitPro.history'")&&item.when.includes("webviewId == 'gitPro.compare'")),'History and Compare share the commit menu');
+  // Whatever one panel adds to its own rows takes a group of its own, so the order of a menu never depends on how VS Code breaks a tie.
+  for(const panel of ['history','compare','conflicts','rebasePlanner'])for(const section of ['commit','file','conflict','step']){
+    const groups=menu.filter(item=>item.when?.includes(`webviewId == 'gitPro.${panel}'`)&&item.when.includes(`webviewSection == '${section}'`)).map(item=>item.group);
+    assert.equal(new Set(groups).size,groups.length,`${panel} ${section} menu groups are unique`);
+  }
 });

@@ -6,6 +6,7 @@ import { RevisionProvider } from '../documents/revision-provider';
 import type { AdvancedMutation } from '../git/advanced/advanced-builders';
 import { canonicalFilePath } from '../security/paths';
 import { redact } from '../security/redaction';
+import { validateOid } from '../security/refs';
 import * as path from 'node:path';
 import { LeaseService } from '../git/advanced/lease.service';
 import { InteractiveService } from '../git/rebase/interactive.service';
@@ -84,9 +85,7 @@ export class AdvancedCommands {
     if(action==='Cherry-pick'||action==='Revert'){
       const value=await vscode.window.showInputBox({title:`Git Pro: ${action} commits in application order`,prompt:'Full commit IDs separated by spaces; first listed is applied first (maximum 100).'});if(!value)return;
       const oids=value.trim().split(/\s+/);let parent:number|undefined;
-      if(oids.length===1){const result=(await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'history',tips:oids,offset:0,limit:1})).stdout;
-        const {parseHistory}=await import('../git/history/history-parser');const commit=parseHistory(result)[0];
-        if(commit&&commit.parents.length>1){const selected=await vscode.window.showQuickPick(commit.parents.map((oid,index)=>({label:`Parent ${index+1}`,description:oid,index:index+1})),{title:'Choose merge mainline parent'});if(!selected)return;parent=selected.index;}}
+      if(oids.length===1){const chosen=await this.mainlineParent(id,oids[0]!);if(chosen===null)return;parent=chosen;}
       command={kind:action==='Cherry-pick'?'cherryPick':'revert',oids,...(parent!==undefined?{parent}:{})};
     }else{
       const ref=await vscode.window.showInputBox({title:`Git Pro: ${action} target`,value:action==='Reset'?'HEAD~1':'',prompt:'Branch, full commit ID, or bounded numeric ancestry (for example HEAD~1).'});if(!ref)return;
@@ -95,6 +94,23 @@ export class AdvancedCommands {
       else if(action==='Rebase')command={kind:'rebase',oid};
       else{const mode=await vscode.window.showQuickPick([{label:'Soft — move HEAD, keep index and working files',value:'soft' as const},{label:'Mixed — move HEAD/reset index, keep working files',value:'mixed' as const},{label:'Hard — discard tracked index and working changes',value:'hard' as const},{label:'Keep — abort if local working changes would be overwritten',value:'keep' as const}],{title:'Reset mode'});if(!mode)return;command={kind:'reset',oid,mode:mode.value};}
     }
+    await this.review(id,command,action);
+  }
+  /** For a merge commit, asks which parent is the mainline: undefined for an ordinary commit, null when the user cancels. */
+  private async mainlineParent(id:string,oid:string):Promise<number|undefined|null>{
+    const result=(await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'history',tips:[oid],offset:0,limit:1})).stdout;
+    const {parseHistory}=await import('../git/history/history-parser');const commit=parseHistory(result)[0];
+    if(!commit||commit.parents.length<2)return undefined;
+    const selected=await vscode.window.showQuickPick(commit.parents.map((parent,index)=>({label:`Parent ${index+1}`,description:parent,index:index+1})),{title:'Choose merge mainline parent'});
+    return selected?selected.index:null;
+  }
+  /** Cherry-pick or revert one commit chosen in History or Compare: the same review as Advanced Actions, with the commit already picked. */
+  async applyCommit(id:string,kind:'cherryPick'|'revert',oid:string):Promise<void>{
+    const parent=await this.mainlineParent(id,validateOid(oid));if(parent===null)return;
+    await this.review(id,{kind,oids:[oid],...(parent!==undefined?{parent}:{})},kind==='cherryPick'?'Cherry-pick':'Revert');
+  }
+  /** Reviews a fresh, pinned preview of an advanced command and applies it after a modal confirmation. Shared by Advanced Actions and the commit menus of History and Compare. */
+  async review(id:string,command:AdvancedMutation,action:string):Promise<void>{
     const preview=await this.advanced.preview(id,command),label=action==='Reset'?`${action} (${command.kind==='reset'?command.mode:''})`:action;
     const target='oid' in command?command.oid:command.kind==='cherryPick'||command.kind==='revert'?command.oids.join('\n'):'';
     const warning=command.kind==='reset'&&command.mode==='hard'?'\nHard reset can also remove untracked files that obstruct tracked target paths. Reviewed content will be discarded.':'';
@@ -111,8 +127,9 @@ export class AdvancedCommands {
     }
     if(command.kind==='merge'&&command.strategy==='squash'){await vscode.window.showInformationMessage('Squash changes are staged. Review and commit them in the composer.');await vscode.commands.executeCommand('gitPro.commitView.focus');}
   }
-  async rebasePlan():Promise<void>{
-    const id=this.active(),ref=await vscode.window.showInputBox({title:'Git Pro: Interactive Rebase base',value:'HEAD~1',prompt:'Rewrite commits after this ancestor. Initial planner supports 1–200 linear commits.'});if(!ref)return;
+  /** `from` skips the question when the base is already chosen (Interactive Rebase from Here in History and Compare). */
+  async rebasePlan(from?:{readonly repositoryId:string;readonly base:string}):Promise<void>{
+    const id=from?.repositoryId??this.active(),ref=from?.base??await vscode.window.showInputBox({title:'Git Pro: Interactive Rebase base',value:'HEAD~1',prompt:'Rewrite commits after this ancestor. Initial planner supports 1–200 linear commits.'});if(!ref)return;
     const preview=await this.interactive.preview(id,ref),steps:RebaseStep[]=preview.commits.map(commit=>({oid:commit.oid,action:'pick'}));
     const chosen=await this.planner.choose(preview,this.advanced.git.repository(id).root,async(oid,initial)=>this.editMessage(initial??(await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'commitMessage',oid})).stdout.toString('utf8'),'Reword commit'),steps=>this.confirmRebasePlan(preview,steps));
     if(!chosen)return;if(!('native' in chosen)){await this.applyRebasePlan(preview,chosen);return;}

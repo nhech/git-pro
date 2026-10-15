@@ -2,6 +2,10 @@
   // Virtual row height in px; CSS .commit uses the same 24px.
   const ROW = 24;
   const api = acquireVsCodeApi(), session = document.body.dataset.session;
+  // Right-click uses VS Code's own menu (contributes.menus["webview/context"]): a commit row names its commit, and nothing else offers the webview's Cut/Copy/Paste, except text boxes.
+  const commitContext = oid => JSON.stringify({ webviewSection: 'commit', preventDefaultContextMenuItems: true, session, oid });
+  document.body.setAttribute?.('data-vscode-context', JSON.stringify({ preventDefaultContextMenuItems: true }));
+  for (const field of document.querySelectorAll?.('input, textarea, select') ?? []) field.setAttribute('data-vscode-context', JSON.stringify({ preventDefaultContextMenuItems: false }));
   const viewport = document.getElementById('viewport'), rows = document.getElementById('rows'), spacer = document.getElementById('spacer'), details = document.getElementById('details'), status = document.getElementById('status'), workspace = document.getElementById('workspace');
   const stored = api.getState?.();
   const saved = stored && typeof stored === 'object' ? stored : {};
@@ -106,7 +110,9 @@
     const author = text(meta, 'span', ''); author.className = 'commit-author'; text(meta, 'span', '·'); const date = text(meta, 'span', ''); date.className = 'commit-date'; row.append(meta);
     const dot = document.createElementNS(ns, 'circle'); dot.setAttribute('cy', String(ROW / 2)); dot.setAttribute('r', '4'); dot.setAttribute('fill', 'currentColor'); svg.append(dot);
     const view = { row, svg, badge, title, hash, subject, meta, author, date, dot, lines: [], index: -1, revision: -1, laneWidth: -1 };
-    row.addEventListener('click', () => { if (row.isConnected) select(view.index); }); return view;
+    row.addEventListener('click', () => { if (row.isConnected) select(view.index); });
+    // As in the Source Control Graph, the commit under the pointer becomes the selected one before the menu opens.
+    row.addEventListener('contextmenu', () => { if (row.isConnected && selected !== view.index) select(view.index); }); return view;
   };
   const draw = () => {
     const start = Math.max(0, Math.floor(viewport.scrollTop / ROW) - 1), end = Math.min(commits.length, start + Math.ceil(viewport.clientHeight / ROW) + 3);
@@ -142,6 +148,7 @@
         updateRowTitle(view.title, `${commit.oid.slice(0, 8)}  ${commit.subject}`); updateRowText(view.hash, `${commit.oid.slice(0, 8)}  `); updateRowText(view.subject, commit.subject);
         const date = displayDate(commit.timestamp); updateRowTitle(view.meta, `${commit.author} · ${date}`); updateRowText(view.author, commit.author); updateRowText(view.date, date);
         row.setAttribute('aria-label', `${commit.subject}, ${commit.author}, ${commit.oid.slice(0, 8)}, ${commit.parents.length} parents${decorations ? ', refs ' + decorations : ''}, ${date}`);
+        updateGraphAttribute(row, 'data-vscode-context', commitContext(commit.oid));
         view.index = i; view.revision = pageRevision; view.laneWidth = laneWidth;
       }
       const chosen = String(selected === i); if (row.getAttribute('aria-selected') !== chosen) row.setAttribute('aria-selected', chosen);
@@ -153,7 +160,7 @@
   const showSide = (parent, label, side, commits, count, offset = 0) => {
     const shown = (commits || []).slice(0, 25); text(parent, 'h3', `${label}: ${count || 0} unique commit${count === 1 ? '' : 's'}`);
     if (!shown.length) text(parent, 'p', 'No unique commits.');
-    const list = document.createElement('ul'); for (const commit of shown) { const li = document.createElement('li'), button = text(li, 'button', `${commit.oid.slice(0, 8)} ${commit.subject}`); button.dataset.focusKey = `compare:commit:${commit.oid}`; button.disabled = busy; button.addEventListener('click', () => { if (!busy) send({ type: 'select', oid: commit.oid, parent: 0 }); }); list.append(li); } parent.append(list);
+    const list = document.createElement('ul'); for (const commit of shown) { const li = document.createElement('li'), button = text(li, 'button', `${commit.oid.slice(0, 8)} ${commit.subject}`); li.setAttribute('data-vscode-context', commitContext(commit.oid)); button.dataset.focusKey = `compare:commit:${commit.oid}`; button.disabled = busy; button.addEventListener('click', () => { if (!busy) send({ type: 'select', oid: commit.oid, parent: 0 }); }); list.append(li); } parent.append(list);
     if (!count) return;
     const navigation = document.createElement('div'), previous = text(navigation, 'button', `Previous ${side} commits`), next = text(navigation, 'button', `Next ${side} commits`), caption = text(navigation, 'span', ` Commits ${offset + 1}–${offset + shown.length} of ${count}`); caption.setAttribute('aria-live', 'polite');
     navigation.className = 'file-pager'; previous.dataset.focusKey = `compare:${side}:previous`; next.dataset.focusKey = `compare:${side}:next`;

@@ -28,6 +28,8 @@ const ids = ['title', 'summary', 'moved', 'moved-text', 'moved-refresh', 'status
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const commit = (value: number, subject = `Commit ${value}`) => ({ oid: oid(value), subject, author: 'Fixture', timestamp: 1700000000, refs: [] as string[] });
 
+const context = (element: Element) => JSON.parse(element.getAttribute('data-vscode-context') ?? 'null') as Record<string, unknown>;
+
 function harness(saved?: unknown) {
   Element.active = undefined;
   const elements = new Map(ids.map(id => { const element = new Element(['moved-refresh', 'get-from-branch', 'swap', 'refresh', 'open-all', 'layout'].includes(id) ? 'button' : 'div'); element.id = id; return [id, element]; }));
@@ -69,10 +71,11 @@ test('Compare renders the WebStorm header, directional lists and empty text as t
   assert.equal(rows[0]!.tabIndex, 0); assert.equal(rows[1]!.tabIndex, -1, 'Each list is one tab stop with a roving tabindex');
   rows[1]!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'selectCommit', revision: 4, oid: oid(11), session: 'session-1' });
   rows[1]!.key('ArrowDown'); assert.equal(Element.active, rows[2]); rows[2]!.key('Enter'); assert.equal(h.sent.at(-1)?.oid, oid(12));
-  rows[2]!.fire('keydown', { key: 'F10', shiftKey: true });
-  const menu = h.body.children.find(node => node.className === 'context-menu')!;
-  assert.deepEqual(menu.children.map(item => item.textContent), ['Show Changed Files', 'Copy Revision Number', 'Show in History']);
-  menu.children[1]!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'copyRevision', revision: 4, oid: oid(12), session: 'session-1' }); assert.equal(h.body.children.length, 0, 'The menu closes after a choice');
+  // Right-click is VS Code's own menu: each row names its commit and the revision it showed, and the row under the pointer takes focus first.
+  assert.deepEqual(context(h.body), { preventDefaultContextMenuItems: true }, 'outside a row nothing offers Cut, Copy and Paste');
+  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'commit', oid: oid(12), commitShown: false });
+  rows[0]!.fire('contextmenu'); assert.equal(Element.active, rows[0], 'a right-click moves focus to the row it opens the menu for'); assert.equal(h.body.children.length, 0, 'no menu of ours is drawn');
+  rows[2]!.fire('keydown', { key: 'F10', shiftKey: true }); assert.equal(h.body.children.length, 0, 'the keyboard menu key is left to the browser, which asks for the native menu');
   const pager = left!.find(node => node.className === 'pager')!, [previous, next] = pager.children;
   assert.equal(previous!.disabled, true); next!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'page', revision: 4, side: 'left', offset: 25, session: 'session-1' });
   assert.match(pager.textContent, /1–25 of 30/);
@@ -88,8 +91,9 @@ test('Compare files show a directory tree with status, stats and inline actions,
   assert.equal(rows[2]!.find(node => node.className === 'file-origin')?.textContent, '← src/old.ts'); assert.equal(rows[3]!.find(node => node.className === 'file-stat')?.textContent, 'Binary');
   app.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 4, index: 0, session: 'session-1' });
   app.find(node => node.dataset.inlineAction === 'localDiff')!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'localDiff', revision: 4, index: 0, session: 'session-1' });
-  app.fire('contextmenu', { clientX: 20, clientY: 30 });
-  assert.deepEqual(h.body.children[0]!.children.map(item => item.textContent), ['Open Diff', 'Compare with Local', 'Open File']); h.body.children[0]!.fire('keydown', { key: 'Escape' }); assert.equal(h.body.children.length, 0);
+  assert.deepEqual(context(app), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 0, indexes: '0', compareWorktree: false, fileOnlyInBranch: false });
+  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 2, indexes: '2', compareWorktree: false, fileOnlyInBranch: false });
+  app.fire('contextmenu'); assert.equal(h.body.children.length, 0, 'no menu of ours is drawn');
   rows[0]!.focus(); rows[0]!.key('ArrowLeft'); assert.equal(tree.children.length, 2, 'Collapsing a directory hides its files'); assert.equal(Element.active?.dataset.focusKey, 'dir:src', 'Focus stays on the collapsed directory');
   tree.children[0]!.key('ArrowRight'); assert.equal(tree.children.length, 4); tree.children[0]!.key('ArrowDown'); assert.equal(Element.active?.dataset.focusKey, 'file:0'); Element.active!.key('ArrowLeft'); assert.equal(Element.active?.dataset.focusKey, 'dir:src');
   h.get('layout').fire('click'); assert.equal((h.states.at(-1) as { flat?: boolean }).flat, true);
@@ -171,10 +175,12 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
   assert.equal(h.get('get-from-branch').textContent, 'Get 2 Files from feature'); assert.equal(h.get('get-from-branch').disabled, false);
   h.get('get-from-branch').fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'getFromBranch', revision: 2, indexes: [0, 1], session: 'session-1' });
   rows[2]!.fire('click', { shiftKey: true }); assert.equal(h.get('selection-hint').textContent, '2 files selected', 'Shift-click selects the range from the anchor');
-  rows[2]!.fire('contextmenu', { clientX: 1, clientY: 1 });
-  assert.deepEqual(h.body.children[0]!.children.map(item => item.textContent), ['Open Diff', 'Open File', 'Get 2 Files from feature']); h.body.children[0]!.children[2]!.fire('click');
-  assert.deepEqual(h.sent.at(-1), { type: 'getFromBranch', revision: 2, indexes: [1, 2], session: 'session-1' });
-  rows[0]!.focus(); rows[0]!.key(' '); assert.equal(rows[0]!.getAttribute('aria-selected'), 'true', 'Space toggles a row into the selection');
+  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 2, webviewSection: 'file', index: 2, indexes: '1,2', compareWorktree: true, fileOnlyInBranch: false }, 'a row of the selection names the whole selection');
+  assert.equal(context(rows[1]!).fileOnlyInBranch, true, 'a file only in the branch has no local file to open'); assert.equal(context(rows[0]!).indexes, '0', 'a row outside the selection names only itself');
+  const before = h.sent.length; rows[2]!.fire('contextmenu'); assert.equal(h.sent.length, before, 'a right-click opens no diff'); assert.equal(h.get('selection-hint').textContent, '2 files selected', 'a right-click inside the selection keeps it');
+  rows[0]!.fire('contextmenu'); assert.equal(h.get('selection-hint').textContent, '1 file selected', 'as in the Explorer, a right-click outside the selection selects just that row');
+  assert.equal(context(rows[0]!).indexes, '0'); assert.equal(context(rows[1]!).indexes, '1'); assert.equal(context(rows[2]!).indexes, '2');
+  rows[1]!.focus(); rows[1]!.key(' '); assert.equal(rows[1]!.getAttribute('aria-selected'), 'true', 'Space toggles a row into the selection'); assert.equal(context(rows[0]!).indexes, '0,1', 'and the menu names it too');
   h.post({ ...state, revision: 3 }); assert.equal(h.get('get-from-branch').disabled, true, 'A new revision clears the selection: its indexes belong to the old list');
   h.post({ ...state, revision: 3, swapped: true }); assert.equal(h.get('title').textContent, 'The working tree on main compared with files in feature');
   h.post({ ...state, revision: 4, files: { ...state.files, total: 0, items: [] } }); assert.equal(h.get('files-empty').textContent, 'No differences between feature and the working tree.');

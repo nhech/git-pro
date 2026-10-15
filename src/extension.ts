@@ -43,6 +43,7 @@ import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfte
 import { registerConflicts } from './commands/conflicts.commands';
 import { registerOperation } from './commands/operation.commands';
 import { registerCompare } from './commands/compare.commands';
+import { registerMenus } from './commands/menu.commands';
 
 export interface ExtensionDiagnostics {
   repositories: () => number;
@@ -104,7 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const interactive = new InteractiveService(advanced,vscode.Uri.joinPath(context.globalStorageUri,'rebase-jobs').fsPath,{node:process.execPath,helper:vscode.Uri.joinPath(context.extensionUri,'media','helpers','rebase-editor.cjs').fsPath},
       workspaceRebaseJournal(context.workspaceState));
     advanced.setEditorJobs(interactive);
-    const planner=new RebasePlanner(context);context.subscriptions.push(planner);
+    const planner=new RebasePlanner(context,surfaces.menus);context.subscriptions.push(planner);
     const advancedCommands = new AdvancedCommands(advanced,revisions,interactive,planner,context.extensionUri,surfaces);
     const fileActions = new FileActionsCommands(advanced,revisions);
     const tools = new ToolsService(advanced);
@@ -112,7 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     context.subscriptions.push(toolsProvider,vscode.window.createTreeView('gitPro.toolsView',{treeDataProvider:toolsProvider}));
     const history = new HistoryService(registry, executor, policy);
     const toolsCommands = new ToolsCommands(tools,new WorktreeService(tools,policy),history,revisions,surfaces);
-    const historyPanels = new HistoryPanel(context, history, revisions);
+    const historyPanels = new HistoryPanel(context, history, revisions, surfaces.menus);
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
@@ -200,7 +201,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
     const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,surfaces};
-    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);
+    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands});
     let syncTail: Promise<void> = Promise.resolve();
     const synchronize = () => {
       syncTail = syncTail.then(async () => {

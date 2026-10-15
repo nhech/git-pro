@@ -5,10 +5,11 @@ import { validateRebasePlan, type RebaseStep } from '../../git/rebase/rebase-pla
 import { redact } from '../../security/redaction';
 import { parsePlannerRequest } from './planner-protocol';
 import { plannerHtml } from './planner-html';
+import type { MenuContext, MenuRouter } from '../menu-context';
 export type PlannerChoice=readonly RebaseStep[]|{readonly native:readonly RebaseStep[]}|undefined;
 export class RebasePlanner implements vscode.Disposable {
   private readonly panels=new Set<vscode.WebviewPanel>();
-  constructor(private readonly context:Pick<vscode.ExtensionContext,'extensionUri'>){}
+  constructor(private readonly context:Pick<vscode.ExtensionContext,'extensionUri'>,private readonly menus?:MenuRouter){}
   choose(preview:InteractivePreview,root:string,edit:(oid:string,initial?:string)=>Promise<string|undefined>,confirm:(steps:readonly RebaseStep[])=>Promise<boolean>=async()=>true):Promise<PlannerChoice>{
     const panel=vscode.window.createWebviewPanel('gitPro.rebasePlanner','Git Pro: Interactive Rebase',vscode.ViewColumn.Active,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(this.context.extensionUri,'media')],retainContextWhenHidden:false});
     this.panels.add(panel);const session=randomUUID(),nonce=randomUUID().replace(/-/g,'');
@@ -20,7 +21,7 @@ export class RebasePlanner implements vscode.Disposable {
     };
     return new Promise(resolve=>{
       let settled=false;const freeze=()=>Object.freeze(steps.map(step=>Object.freeze({...step})));const finish=(result:PlannerChoice)=>{if(settled)return;settled=true;resolve(result);panel.dispose();};
-      const receive=panel.webview.onDidReceiveMessage(async raw=>{
+      const receiveMessage=async(raw:unknown)=>{
         let ownedBusy=false;
         try{
           const request=parsePlannerRequest(raw);if(disposed||request.session!==session)throw new Error('Planner session expired.');
@@ -49,8 +50,17 @@ export class RebasePlanner implements vscode.Disposable {
           revision++;await publish();
         }catch(error){await post({type:'error',message:redact(error instanceof Error?error.message:String(error))});}
         finally{if(ownedBusy){busy=false;await post({type:'busy',busy:false});}}
-      });
-      const close=panel.onDidDispose(()=>{disposed=true;this.panels.delete(panel);receive.dispose();close.dispose();if(!settled){settled=true;resolve(undefined);}});
+      };
+      const receive=panel.webview.onDidReceiveMessage(receiveMessage);
+      // The native right-click menu: each choice becomes the message the planner's own controls send, so the session, revision and captured range are checked the same way.
+      const menu=this.menus?.register('gitPro.rebasePlanner',session,{handle:(action:string,context:MenuContext)=>{
+        const {oid,revision:seen}=context.values,base={session,revision:seen,oid};
+        if(['pick','reword','edit','squash','fixup','drop'].includes(action))return receiveMessage({...base,type:'action',action});
+        if(action==='moveUp'||action==='moveDown')return receiveMessage({...base,type:'step',direction:action==='moveUp'?'up':'down'});
+        if(action==='editMessage')return receiveMessage({...base,type:'message'});
+        throw new Error('Unknown planner menu action.');
+      }});
+      const close=panel.onDidDispose(()=>{disposed=true;this.panels.delete(panel);receive.dispose();menu?.dispose();close.dispose();if(!settled){settled=true;resolve(undefined);}});
       const resource=(name:string)=>panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri,'media',name)).toString();
       panel.webview.html=plannerHtml(session,nonce,panel.webview.cspSource,resource);
     });

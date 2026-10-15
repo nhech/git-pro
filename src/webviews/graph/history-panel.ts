@@ -7,16 +7,19 @@ import { RevisionProvider } from '../../documents/revision-provider';
 import { parseHistoryAction } from './history-protocol';
 import { layoutGraph, type GraphRow } from './graph-layout';
 import { redact } from '../../security/redaction';
+import type { MenuRouter } from '../menu-context';
 
 export class HistoryPanel implements vscode.Disposable {
   private readonly panels = new Set<vscode.WebviewPanel>();
-  constructor(private readonly context: vscode.ExtensionContext, private readonly history: HistoryService, private readonly revisions: RevisionProvider) {}
+  constructor(private readonly context: vscode.ExtensionContext, private readonly history: HistoryService, private readonly revisions: RevisionProvider, private readonly menus?: MenuRouter) {}
   get activePanelCount():number{return this.panels.size;}
   open(repositoryId: string, path?: string,initialRef='HEAD',selectTip=false): void {
     const panel = vscode.window.createWebviewPanel('gitPro.history', path ? 'Git Pro: File History' : 'Git Pro: History & Compare', vscode.ViewColumn.Active,
       { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')], retainContextWhenHidden: false });
     this.panels.add(panel);
     const session = randomUUID(), nonce = randomUUID().replace(/-/g, '');
+    // The commit menu's commands act only on a commit this panel really shows: a loaded row, one of the two comparison lists, or the selection.
+    const menu = this.menus?.register('gitPro.history', session, { repositoryId, knowsCommit: oid => selected === oid || comparisonCommits.has(oid) || commits.some(commit => commit.oid === oid) });
     const resource = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', name)).toString();
     let query: PinnedHistory | undefined, offset = 0, hasMore = false, commits: HistoryCommit[] = [], rows: GraphRow[] = [], continuation: readonly (string | null)[] = [];
     let selected: string | undefined, comparison: { from?: string; to: string; files: readonly ChangedFile[] } | undefined;
@@ -200,7 +203,7 @@ export class HistoryPanel implements vscode.Disposable {
       } catch (error) { if (!disposed && current === generation) await post({ type: 'error', message: redact(error instanceof Error ? error.message : String(error)) }); }
       finally { if (ownedDiff) diffBusy = false;if(ownedRequest&&current===generation)requestBusy=false; if (!disposed && !requestBusy&&!diffBusy&&(ownedDiff||ownedRequest)&&(ownedDiff||current===generation)) await post({ type: 'busy', busy: false, canCancel: false, selected }); }
     });
-    const dispose = panel.onDidDispose(() => { disposed = true; generation++; request?.abort();refsLookup?.abort();initialController?.abort();initialController=undefined;initialAcquisition=undefined;buffered=undefined; receive.dispose(); dispose.dispose(); this.panels.delete(panel); commits = []; rows = []; comparison = undefined;detailMessage=undefined;sidePages=undefined;comparisonInputs=undefined;comparisonCommits.clear();historicalPaths.clear();followQuery=undefined;query=undefined; });
+    const dispose = panel.onDidDispose(() => { menu?.dispose(); disposed = true; generation++; request?.abort();refsLookup?.abort();initialController?.abort();initialController=undefined;initialAcquisition=undefined;buffered=undefined; receive.dispose(); dispose.dispose(); this.panels.delete(panel); commits = []; rows = []; comparison = undefined;detailMessage=undefined;sidePages=undefined;comparisonInputs=undefined;comparisonCommits.clear();historicalPaths.clear();followQuery=undefined;query=undefined; });
     if (!path) {
       initialController = new AbortController();
       const signal = initialController.signal;

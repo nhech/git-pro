@@ -56,6 +56,23 @@ test('real history script bounds mounted rows, renders hostile labels as text, s
   receive!({data:{type:'busy',session:'s',busy:true}});elements.get('viewport')!.disabled=false;elements.get('viewport')!.focus();receive!({data:{type:'busy',session:'s',busy:false}});assert.equal(Element.active,elements.get('viewport'),'A deliberate focus move during loading must remain intact');
 });
 
+test('History commit rows name their commit for the native context menu, select it on right-click, and keep the default menu for text boxes only',()=>{
+  const ids=['viewport','rows','spacer','details','status','filters','compare','more','pagination','filter-disclosure','filter-summary','snapshot','zoom','workspace','cancel-read'];
+  const elements=new Map(ids.map(id=>[id,new Element()]));let receive!:(event:{data:unknown})=>void;const sent:Record<string,unknown>[]=[];
+  const create=(tag:string)=>{const n=new Element();n.tag=tag;return n;};
+  const input=new Element(),body=new Element();body.dataset={session:'s'};
+  runInNewContext(readFileSync('media/history.js','utf8'),{document:{body,getElementById:(id:string)=>elements.get(id),createElement:create,createElementNS:(_ns:string,tag:string)=>create(tag),querySelectorAll:()=>[input]},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value),getState:()=>undefined,setState:()=>undefined})});
+  assert.deepEqual(JSON.parse(body.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:true},'outside a commit nothing offers Cut, Copy and Paste');
+  assert.deepEqual(JSON.parse(input.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:false},'a text box keeps its edit menu');
+  const commits=Array.from({length:5},(_,index)=>({oid:(index+1).toString(16).padStart(40,'0'),parents:index<4?[(index+2).toString(16).padStart(40,'0')]:[],subject:`Subject ${index}`,author:'A',timestamp:1700000000+index}));
+  receive({data:{type:'page',session:'s',commits,rows:layoutGraph(commits).rows,tips:[commits[0]!.oid],refs:[],filters:{},hasMore:false}});
+  const rows=elements.get('rows')!.children;assert.equal(rows.length,5);
+  rows.forEach((row,index)=>assert.deepEqual(JSON.parse(row.getAttribute('data-vscode-context')!),{webviewSection:'commit',preventDefaultContextMenuItems:true,session:'s',oid:commits[index]!.oid}));
+  const before=sent.length;rows[2]!.listeners.get('contextmenu')!({});
+  assert.equal(sent.at(-1)?.type,'select');assert.equal(sent.at(-1)?.oid,commits[2]!.oid,'the row under the pointer is selected as the menu opens');assert.equal(sent.length,before+1);
+  rows[2]!.listeners.get('contextmenu')!({});assert.equal(sent.length,before+1,'an already selected commit is not requested again');
+});
+
 test('History row slots rebind actions, refs, merge geometry and labels without retaining detached pages',()=>{
   const ids=['viewport','rows','spacer','details','status','filters','compare','more','pagination','filter-disclosure','filter-summary','snapshot','zoom','workspace','cancel-read'];
   const elements=new Map(ids.map(id=>[id,new Element()]));let receive!:(event:{data:unknown})=>void;const sent:Record<string,unknown>[]=[],tags:string[]=[];

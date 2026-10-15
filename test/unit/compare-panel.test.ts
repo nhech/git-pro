@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { loadWithVscode } from './compare-loader';
 import { NonUtf8Error } from '../../src/git/history/history-parser';
 import { LinkOutsideError } from '../../src/security/paths';
+import { MenuRouter } from '../../src/webviews/menu-context';
 
 const oid = (value: number) => value.toString(16).padStart(40, '0');
 const LEFT = oid(1), RIGHT = oid(2), BASE = oid(3), MOVED = oid(4);
@@ -62,7 +63,9 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
     worktreeFiles: async (_id: string, value: string) => { calls.push(`worktree:${value}`); return options.worktree ?? files('worktree', value, undefined, [{ status: 'M', path: 'src/app.ts' }, { status: 'D', path: 'only-branch.txt' }, { status: 'R090', originalPath: 'before.txt', path: 'README.md' }]); },
     revision: async (_id: string, value: string | undefined, file: string) => { calls.push(`revision:${value ?? 'none'}:${file}`); return Buffer.from(`${value ?? 'none'}:${file}`); }
   };
+  const menus = new MenuRouter();
   const deps = {
+    surfaces: { menus },
     registry: { list: () => [...open], store: { get: () => ({ head: options.head ?? 'main' }) }, onDidInvalidate: (listener: () => void) => { invalidate = listener; return { dispose: () => undefined }; }, resolveFile: async () => repo },
     history, policy: { authorizeFile: async (base: string, relative: string) => { if (relative === 'outlink') throw new LinkOutsideError(); return path.join(base, ...relative.split('/')); } },
     revisions: { add: (content: Buffer, label: string) => ({ ...uri('git-pro-revision', `/${label}`), label, content: content.toString() }) },
@@ -75,7 +78,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   const Blobs = blobs.BlobProvider as new (history: unknown) => unknown;
   const surface = new Panels({ extensionUri: uri('file', '/extension') }, deps, new Blobs(history));
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-  return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files,
+  return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, menus, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files,
     /** registry.sync without this repository, and with it again. */
     close: () => { open.length = 0; }, reopen: () => { open.splice(0, open.length, repo); },
     cleanup: async () => { surface.dispose(); await rm(root, { recursive: true, force: true }); } };
@@ -369,4 +372,46 @@ test('Open All Changes shows a blob side that is not UTF-8 as a read-only notice
     assert.equal(await surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'plain.txt')), 'text\n');
     await assert.rejects(surface.blobs.provideTextDocumentContent(surface.blobs.add('repo', LEFT, 'big.txt')), /5 MiB/);
   } finally { surface.dispose(); }
+});
+
+test('Native menu commands reach the tab through the router and are checked like its own messages', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, state = panel.state, listed = state.sides.leftOnly.commits[1]!.oid;
+    const argument = (section: string, extra: Record<string, unknown> = {}) => ({ webview: 'gitPro.compare', webviewSection: section, preventDefaultContextMenuItems: true, session: panel.session, revision: state.revision, ...extra });
+    const errors = () => panel.sent.filter(message => message.type === 'error').length;
+    const run = async (name: string, section: string, extra: Record<string, unknown> = {}, given = argument(section, extra)) => { const { panel: target, context } = h.menus.resolve(given, ['gitPro.compare'], section); await target.handle!(name, context); };
+    assert.equal(h.menus.commit(argument('commit', { oid: listed }), ['gitPro.history', 'gitPro.compare']).repositoryId, 'repo', 'the commit menu of History works on a commit this tab lists');
+    assert.throws(() => h.menus.commit(argument('commit', { oid: oid(77) }), ['gitPro.compare']), /no longer shown/, 'and refuses a commit it never listed');
+    assert.throws(() => h.menus.commit(argument('file', { oid: listed }), ['gitPro.compare']), /Git Pro panel menu/, 'a file row is not a commit');
+    const revision = state.revision;
+    await run('copyPath', 'file', { index: 2, indexes: '2', revision }); assert.deepEqual(h.clipboard, ['README.md']);
+    await run('diff', 'file', { index: 0, indexes: '0', revision }); assert.equal(h.executed.at(-1)![0], 'vscode.diff');
+    await run('localDiff', 'file', { index: 0, indexes: '0', revision }); assert.equal((h.executed.at(-1)![2] as Uri).scheme, 'file');
+    await run('openFile', 'file', { index: 0, indexes: '0', revision }); assert.equal(h.executed.at(-1)![0], 'vscode.open');
+    const failures = errors();
+    await run('diff', 'file', { index: 0, indexes: '0', revision: revision - 1 }); assert.match(String(panel.last('error')?.message), /changed/, 'a menu opened before the list changed is stale');
+    await run('diff', 'file', { index: 9, indexes: '9', revision }); assert.match(String(panel.last('error')?.message), /current comparison/);
+    await run('getFromBranch', 'file', { index: 0, indexes: '0,0', revision }); assert.match(String(panel.last('error')?.message), /Unknown Compare action/, 'a repeated index is not a selection');
+    await run('getFromBranch', 'file', { index: 0, indexes: '0, 1', revision }); assert.equal(errors(), failures + 4, 'a malformed list never reaches the handler');
+    await run('getFromBranch', 'file', { index: 0, indexes: '0', revision }); assert.match(String(panel.last('error')?.message), /comparing a branch with the working tree/, 'Get from Branch belongs to working-tree comparisons');
+    await run('showFiles', 'commit', { oid: listed }); await h.settle();
+    assert.equal(panel.state.files.scope, 'commit'); assert.equal(h.menus.commit(argument('commit', { oid: listed, revision: panel.state.revision }), ['gitPro.compare']).oid, listed, 'the shown commit stays known');
+    await run('showInHistory', 'commit', { oid: listed, revision: panel.state.revision }); assert.deepEqual(h.histories.at(-1)!.slice(2), [listed, true]);
+    const before = errors(); await run('showFiles', 'commit', { oid: oid(77), revision: panel.state.revision }); assert.equal(errors(), before + 1); assert.match(String(panel.last('error')?.message), /loaded lists/);
+    await assert.rejects(run('diff', 'file', { index: 0, revision }, argument('file', { index: 0, revision, session: 'x'.repeat(65) })), /Git Pro panel menu/);
+    assert.throws(() => h.menus.resolve(argument('commit', { index: 0 }), ['gitPro.compare'], 'file'), /Git Pro panel menu/, 'a command for file rows refuses a commit row');
+    panel.dispose(); assert.throws(() => h.menus.resolve(argument('file'), ['gitPro.compare']), /closed/, 'a closed tab leaves the router');
+  } finally { await h.cleanup(); }
+});
+
+test('Get from Branch from a native menu names the selection the row carried', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openWorktree('repo', 'feature'); const panel = h.panels[0]!, revision = panel.state.revision;
+    const requests: unknown[] = []; (h.surface as { getFromBranch: unknown }).getFromBranch = async (request: unknown) => { requests.push(request); return true; };
+    const { panel: target, context } = h.menus.resolve({ webview: 'gitPro.compare', webviewSection: 'file', session: panel.session, revision, index: 2, indexes: '2,0' }, ['gitPro.compare'], 'file');
+    await target.handle!('getFromBranch', context);
+    assert.deepEqual((JSON.parse(JSON.stringify(requests)) as { files: { path: string }[] }[])[0]!.files.map(file => file.path), ['README.md', 'src/app.ts']);
+  } finally { await h.cleanup(); }
 });

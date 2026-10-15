@@ -7,7 +7,7 @@ export type CompareAction = { type: 'ready'; session: string } | { type: 'refres
   { type: 'selectCommit' | 'copyRevision' | 'showInHistory'; session: string; revision: number; oid: string } |
   { type: 'filesMode'; session: string; revision: number; mode: 'fork' | 'tips' } |
   { type: 'filesPage'; session: string; revision: number; offset: number } |
-  { type: 'diff' | 'localDiff' | 'openFile'; session: string; revision: number; index: number } |
+  { type: 'diff' | 'localDiff' | 'openFile' | 'copyPath'; session: string; revision: number; index: number } |
   { type: 'getFromBranch'; session: string; revision: number; indexes: number[] };
 const index = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) < 1_000_000;
 /** Strict: unknown types and malformed fields throw; fields a type does not name are dropped. */
@@ -34,7 +34,7 @@ export function parseCompareAction(value: unknown): CompareAction {
     case 'filesPage':
       if (index(item.offset) && item.offset % 200 === 0) return { type: 'filesPage', session, revision, offset: item.offset };
       break;
-    case 'diff': case 'localDiff': case 'openFile':
+    case 'diff': case 'localDiff': case 'openFile': case 'copyPath':
       if (index(item.index)) return { type: item.type, session, revision, index: item.index };
       break;
     case 'getFromBranch': {

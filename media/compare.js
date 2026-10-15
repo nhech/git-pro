@@ -9,10 +9,11 @@
   const saved = (() => { try { const value = api.getState?.(); return value && typeof value === 'object' ? value : {}; } catch { return {}; } })();
   // The tab keeps no renderer while hidden (a diff opened over it): the Get from Branch selection and the focused row come back with the same captured list.
   const own = saved.session === session && Number.isSafeInteger(saved.revision), isIndex = value => Number.isSafeInteger(value) && value >= 0;
-  let state, busy = false, flat = saved.flat === true, menu, revision = own ? saved.revision : undefined, anchor = own && isIndex(saved.anchor) ? saved.anchor : undefined;
+  let state, busy = false, flat = saved.flat === true, revision = own ? saved.revision : undefined, anchor = own && isIndex(saved.anchor) ? saved.anchor : undefined;
   let lastTreeKey = own && typeof saved.focusKey === 'string' ? saved.focusKey.slice(0, 200) : '', restoreKey, pendingFocus = lastTreeKey || undefined;
   const chosen = new Set(own && Array.isArray(saved.chosen) ? saved.chosen.filter(isIndex).slice(0, 100) : []), collapsed = new Set(), focusables = new Map();
   let treeRows = [];
+  const fileItems = new Map();
   const send = message => { if (session) api.postMessage({ ...message, session }); };
   const act = (type, extra) => {
     if (busy || !state || state.loading || typeof state.revision !== 'number') return;
@@ -37,30 +38,9 @@
   const presenceText = item => item.presence === 'branch' ? `Only in ${state.left.name}` : item.presence === 'worktree' ? 'Only in the working tree' : item.presence === 'both' ? 'Changed in both' : '';
   const rove = (rows, target) => { for (const row of rows) row.tabIndex = row === target ? 0 : -1; target.focus(); };
 
-  const closeMenu = restore => { if (!menu) return; const owner = menu.owner; menu.element.remove(); menu = undefined; if (restore && owner?.isConnected) owner.focus(); };
-  const position = (row, event) => {
-    if (event && typeof event.clientX === 'number') return { x: event.clientX, y: event.clientY };
-    const rect = row.getBoundingClientRect?.() || { left: 0, top: 0 }; return { x: rect.left + 24, y: rect.top + 20 };
-  };
-  const openMenu = (owner, label, items, at) => {
-    closeMenu(false); if (!items.length) return;
-    const element = node('div', 'context-menu'); element.setAttribute('role', 'menu'); element.setAttribute('aria-label', label);
-    const entries = items.map(([text, run, disabled]) => {
-      const entry = button('', text); entry.setAttribute('role', 'menuitem'); entry.disabled = busy || Boolean(disabled);
-      entry.addEventListener('click', () => { if (entry.disabled) return; closeMenu(true); run(); }); element.append(entry); return entry;
-    });
-    element.addEventListener('keydown', event => {
-      const enabled = entries.filter(entry => !entry.disabled), index = enabled.indexOf(document.activeElement); let next;
-      if (event.key === 'ArrowDown') next = enabled[(index + 1) % enabled.length]; else if (event.key === 'ArrowUp') next = enabled[(index - 1 + enabled.length) % enabled.length];
-      else if (event.key === 'Home') next = enabled[0]; else if (event.key === 'End') next = enabled.at(-1);
-      else if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); event.stopPropagation?.(); closeMenu(true); return; } else return;
-      event.preventDefault(); next?.focus();
-    });
-    document.body.append(element); menu = { element, owner };
-    const rect = element.getBoundingClientRect?.() || { width: 0, height: 0 }, width = window.innerWidth || 0, height = window.innerHeight || 0;
-    element.style.left = `${Math.max(4, Math.min(at.x, width - rect.width - 4))}px`; element.style.top = `${Math.max(4, Math.min(at.y, height - rect.height - 4))}px`;
-    entries.find(entry => !entry.disabled)?.focus();
-  };
+  // Right-click menus are VS Code's own (contributes.menus["webview/context"]): an element names itself with data-vscode-context, the host re-checks it against what this tab showed.
+  document.body.setAttribute?.('data-vscode-context', JSON.stringify({ preventDefaultContextMenuItems: true }));
+  const tag = (element, values) => { element.setAttribute('data-vscode-context', JSON.stringify({ preventDefaultContextMenuItems: true, session, revision: state?.revision, ...values })); return element; };
 
   const refChip = side => {
     const chip = node('span', side.current ? 'ref current' : 'ref'); chip.title = side.oid ? `${side.name} · ${side.oid}` : side.name;
@@ -94,11 +74,10 @@
     movedRefresh.hidden = Boolean(state.expired) || gone.length > 0 || !moves.length;
   };
 
-  const listKeys = (event, rows, row, activate, contextMenu) => {
+  const listKeys = (event, rows, row, activate) => {
     const index = rows.indexOf(row); let target;
     if (event.key === 'ArrowDown') target = rows[index + 1]; else if (event.key === 'ArrowUp') target = rows[index - 1]; else if (event.key === 'Home') target = rows[0]; else if (event.key === 'End') target = rows.at(-1);
-    else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); return; }
-    else if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); contextMenu(); return; } else return;
+    else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); return; } else return;
     event.preventDefault(); if (target) rove(rows, target);
   };
   const commitPager = (section, side, list) => {
@@ -130,10 +109,10 @@
           const when = node('span', 'commit-date', relative(commit.timestamp)); when.title = date.toLocaleString();
           row.append(node('span', 'commit-hash', short(commit.oid)), subject, node('span', 'commit-author', commit.author), when);
           const choose = () => { if (!current) act('selectCommit', { oid: commit.oid }); };
-          const actions = event => openMenu(row, `${short(commit.oid)} actions`, [['Show Changed Files', choose, current], ['Copy Revision Number', () => act('copyRevision', { oid: commit.oid })], ['Show in History', () => act('showInHistory', { oid: commit.oid })]], position(row, event));
-          row.addEventListener('click', () => { closeMenu(false); rove(rows, row); choose(); });
-          row.addEventListener('contextmenu', event => { event.preventDefault(); rove(rows, row); actions(event); });
-          row.addEventListener('keydown', event => listKeys(event, rows, row, choose, () => actions()));
+          tag(row, { webviewSection: 'commit', oid: commit.oid, commitShown: current });
+          row.addEventListener('click', () => { rove(rows, row); choose(); });
+          row.addEventListener('contextmenu', () => rove(rows, row));
+          row.addEventListener('keydown', event => listKeys(event, rows, row, choose));
           rows.push(row); box.append(row);
         }
         (rows.find(row => row.getAttribute('aria-selected') === 'true') || rows[0]).tabIndex = 0; section.append(box);
@@ -156,7 +135,7 @@
     }
   };
   const markChosen = () => {
-    for (const row of treeRows) if (row.dataset.index !== undefined) row.setAttribute('aria-selected', String(chosen.has(Number(row.dataset.index))));
+    for (const row of treeRows) if (row.dataset.index !== undefined) { const index = Number(row.dataset.index); row.setAttribute('aria-selected', String(chosen.has(index))); if (state && fileItems.has(index)) tagFile(row, fileItems.get(index)); }
     if (!state?.left) return;
     const total = chosen.size, name = state.left.name;
     getButton.textContent = total > 1 ? `Get ${total} Files from ${name}` : `Get from ${name}`; getButton.disabled = busy || !total;
@@ -172,11 +151,10 @@
     else if (chosen.size < 100) chosen.add(index); else { status.textContent = 'Select up to 100 files at a time.'; status.className = ''; }
     if (!event.shiftKey) anchor = index; markChosen();
   };
-  const fileMenu = (row, item, event) => {
-    const worktree = state.mode === 'worktree', targets = worktree && chosen.has(item.index) ? [...chosen] : [item.index], name = state.left.name;
-    openMenu(row, `${item.path} actions`, [['Open Diff', () => act('diff', { index: item.index })], ...(worktree ? [] : [['Compare with Local', () => act('localDiff', { index: item.index })]]),
-      ['Open File', () => act('openFile', { index: item.index }), worktree && item.presence === 'branch'],
-      ...(worktree ? [[targets.length > 1 ? `Get ${targets.length} Files from ${name}` : `Get from ${name}`, () => act('getFromBranch', { indexes: targets })]] : [])], position(row, event));
+  // A row names the files a menu command acts on: its own, or the whole selection when it is part of it (the native menu only sees the clicked element).
+  const tagFile = (row, item) => {
+    const worktree = state.mode === 'worktree', picked = worktree && chosen.has(item.index) ? [...chosen] : [item.index];
+    tag(row, { webviewSection: 'file', index: item.index, indexes: picked.join(','), compareWorktree: worktree, fileOnlyInBranch: item.presence === 'branch' });
   };
   const treeKeys = (event, row, entry, activate) => {
     const index = treeRows.indexOf(row); let target;
@@ -185,7 +163,6 @@
     else if (event.key === 'ArrowLeft') { if (entry.dir && !collapsed.has(entry.dir)) { event.preventDefault(); activate(); return; } if (entry.parent) target = focusables.get(`dir:${entry.parent}`); }
     else if (event.key === 'Enter') { event.preventDefault(); activate(); return; }
     else if (event.key === ' ') { event.preventDefault(); if (entry.item && state.mode === 'worktree') pick(entry.item.index, { ctrlKey: true }); else activate(); return; }
-    else if (entry.item && (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey)) { event.preventDefault(); fileMenu(row, entry.item); return; }
     else return;
     event.preventDefault(); if (target) rove(treeRows, target);
   };
@@ -195,7 +172,7 @@
     const twisty = glyph(open ? 'chevron-down' : 'chevron-right'); twisty.className += ' twisty';
     row.append(twisty, glyph('folder'), node('span', 'dir-name', entry.dir), node('span', 'dir-count', String(entry.count)));
     const toggle = () => { if (collapsed.has(entry.dir)) collapsed.delete(entry.dir); else collapsed.add(entry.dir); lastTreeKey = row.dataset.focusKey; restoreKey = lastTreeKey; render(); };
-    row.addEventListener('click', () => { closeMenu(false); toggle(); });
+    row.addEventListener('click', toggle);
     row.addEventListener('focus', () => { lastTreeKey = row.dataset.focusKey; remember(); });
     row.addEventListener('keydown', event => treeKeys(event, row, entry, toggle));
     return row;
@@ -217,24 +194,26 @@
     for (const [type, label, icon] of [...(worktree ? [] : [['localDiff', 'Compare with Local', 'git-compare']]), ['openFile', 'Open File', 'go-to-file']]) {
       if (type === 'openFile' && item.presence === 'branch') continue;
       const inline = button('icon-button', undefined); inline.tabIndex = -1; inline.title = label; inline.setAttribute('aria-label', label); inline.dataset.inlineAction = type; inline.disabled = busy; inline.append(glyph(icon));
-      inline.addEventListener('click', event => { event.stopPropagation(); closeMenu(false); act(type, { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
+      inline.addEventListener('click', event => { event.stopPropagation(); act(type, { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
     }
     row.append(actions);
     const letter = node('span', 'file-status', item.status); letter.setAttribute('aria-hidden', 'true'); row.append(letter);
     const open = () => act('diff', { index: item.index });
     row.addEventListener('click', event => {
-      closeMenu(false); rove(treeRows, row);
+      rove(treeRows, row);
       if (worktree && (event.ctrlKey || event.metaKey || event.shiftKey)) { pick(item.index, event); return; }
       if (worktree) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); }
       open();
     });
     row.addEventListener('focus', () => { lastTreeKey = row.dataset.focusKey; remember(); });
-    row.addEventListener('contextmenu', event => { event.preventDefault(); rove(treeRows, row); fileMenu(row, item, event); });
+    // As in the Explorer, a right-click on a row outside the selection selects just that row before the menu opens.
+    row.addEventListener('contextmenu', () => { rove(treeRows, row); if (worktree && !chosen.has(item.index)) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } });
+    tagFile(row, item); fileItems.set(item.index, item);
     row.addEventListener('keydown', event => treeKeys(event, row, entry, open));
     return row;
   };
   const renderFiles = () => {
-    tree.replaceChildren(); heading.replaceChildren(); pager.replaceChildren(); legend.replaceChildren(); treeRows = [];
+    tree.replaceChildren(); heading.replaceChildren(); pager.replaceChildren(); legend.replaceChildren(); treeRows = []; fileItems.clear();
     const files = state?.files, worktree = state?.mode === 'worktree';
     renderModes(files);
     layout.replaceChildren(glyph(flat ? 'list-tree' : 'list-flat')); layout.title = flat ? 'View as Tree' : 'View as List'; layout.setAttribute('aria-label', layout.title); layout.disabled = busy;
@@ -299,7 +278,7 @@
     if (pendingFocus && state?.files && !busy) { restoreKey = restoreKey || pendingFocus; pendingFocus = undefined; }
     const active = document.activeElement, owned = active && active !== document.body && active.dataset?.focusKey;
     const key = owned || (!busy ? restoreKey : undefined), focused = typeof document.hasFocus !== 'function' || document.hasFocus();
-    closeMenu(false); focusables.clear();
+    focusables.clear();
     renderHeader(); renderSummary(); renderCommits(); renderFiles(); renderToolbar();
     if (busy) return;
     restoreKey = undefined;
@@ -316,8 +295,6 @@
   refreshButton.addEventListener('click', refresh); movedRefresh.addEventListener('click', refresh);
   layout.addEventListener('click', () => { flat = !flat; remember(); restoreKey = 'files:layout'; render(); });
   getButton.addEventListener('click', () => { if (chosen.size) act('getFromBranch', { indexes: [...chosen] }); });
-  document.addEventListener('pointerdown', event => { if (menu && !menu.element.contains(event.target)) closeMenu(false); });
-  window.addEventListener('keydown', event => { if (event.key === 'Escape' && menu) { event.preventDefault(); closeMenu(true); } });
   window.addEventListener('message', event => {
     const data = event.data; if (!data || typeof data !== 'object' || data.session !== session) return;
     if (data.type === 'state') {

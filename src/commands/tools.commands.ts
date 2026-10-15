@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ToolsService, type ToolPreview } from '../git/tools/tools.service';
 import { WorktreeService, type WorktreePreview } from '../git/tools/worktree.service';
 import { redact } from '../security/redaction';
-import { validateBranchName } from '../security/refs';
+import { validateBranchName, validateOid } from '../security/refs';
 import { HistoryService } from '../git/history/history.service';
 import { RevisionProvider } from '../documents/revision-provider';
 import { editMessage } from './message-editor';
@@ -23,6 +23,18 @@ export class ToolsCommands {
     const group=typeof category==='string'&&['Stashes','Tags','Remotes','Worktrees'].includes(category)?category:await this.pick('Repository Tools',['Stashes','Tags','Remotes','Worktrees']);
     const key=typeof selectedKey==='string'?selectedKey:undefined;
     if(group==='Stashes')await this.stashes(repo.id,key);else if(group==='Tags')await this.tags(repo.id,key);else if(group==='Remotes')await this.remotes(repo.id,key);else if(group==='Worktrees')await this.worktreeActions(repo.id,key);
+  }
+  /** Checkout, branch or tag at a commit chosen in History or Compare: the same review as the tag actions, with the commit already picked. */
+  async checkoutCommit(id:string,oid:string):Promise<void>{validateOid(oid);await this.apply(id,{kind:'tagCheckout',oid},`Checkout ${oid.slice(0,12)} in detached HEAD?`);}
+  async branchFromCommit(id:string,oid:string):Promise<void>{
+    validateOid(oid);const name=await this.input(`New branch from ${oid.slice(0,12)}`);if(!name)return;validateBranchName(name);
+    await this.apply(id,{kind:'tagBranch',name,oid},`Create and checkout ${name} at ${oid.slice(0,12)}?`);
+  }
+  async tagAtCommit(id:string,oid:string):Promise<void>{
+    validateOid(oid);const name=await this.input(`New tag at ${oid.slice(0,12)}`);if(!name)return;validateBranchName(name);
+    const type=await this.pick('Tag type',['Lightweight','Annotated']);if(!type)return;
+    const message=type==='Annotated'?await editMessage('','Tag annotation'):undefined;if(type==='Annotated'&&!message)return;
+    await this.apply(id,{kind:'tagCreate',name,oid,...(message?{message}:{})},`Create ${type.toLowerCase()} tag ${name} at ${oid.slice(0,12)}? Configured signing applies.`);
   }
   private async apply(id:string,command:ToolPreview['command'],description:string){const preview=await this.tools.preview(id,command);await this.confirm(preview,description,()=>this.tools.execute(preview));}
   private async stashes(id:string,key?:string){
