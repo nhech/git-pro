@@ -7,7 +7,6 @@ import type { RepositorySnapshot } from '../../state/repository-store';
 import type { FileChange } from '../../git/git-parser';
 import type { ChangeNode, ChangesProvider } from './changes.provider';
 import { parseChangesAction } from './changes-protocol';
-import { unlistedChanges } from './unlisted';
 import { redact } from '../../security/redaction';
 import { createSurfaces, type Surfaces } from '../../conflicts/surfaces';
 import { operationBanner, type BannerActionId, type OperationBanner } from '../../conflicts/operation-text';
@@ -194,7 +193,7 @@ export class ChangesPanel implements vscode.WebviewViewProvider,vscode.Disposabl
     for(const node of this.provider.getChildren())visit(node,0);
     const retained=this.currentSelection.map(item=>this.identity(item)).filter(key=>this.rows.has(key));this.currentSelection=retained.map(key=>this.rows.get(key)!);
     this.banner=banner&&{repositoryId:repo.id,value:banner};
-    return view.webview.postMessage({type:'state',session,repository:redact(path.basename(repo.root)),total:snapshot.changes.length,rows,operation:banner??null,message:snapshot.changes.length?'':snapshot.omitted?.length?unlistedChanges:'Working tree clean'});
+    return view.webview.postMessage({type:'state',session,repository:redact(path.basename(repo.root)),total:snapshot.changes.length,rows,operation:banner??null,message:''});
   }
   dispose():void{for(const subscription of this.subscriptions)subscription.dispose();this.lastState=undefined;this.view=undefined;this.rows.clear();this.currentSelection=[];this.session='';this.busy=false;this.banner=undefined;}
 }

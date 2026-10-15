@@ -8,6 +8,6 @@ export function commitHtml(resources: { session: string; nonce: string; style: s
 <p id="option-flags" class="option-flags" hidden></p>
 <div class="context"><p id="repository">Choose a repository</p><p id="staged" aria-live="polite"></p></div>
 <p id="result" role="status"></p>
-<p id="stagingHelp" class="helper">Selection does not stage files. Use Stage Selected in Changes. Partial staging opens native Source Control.</p>
+<p id="stagingHelp" class="helper">Selecting does not stage. Use Stage Selected in Changes; partial staging opens Source Control.</p>
 <script nonce="${nonce}" src="${script}"></script></body></html>`;
 }

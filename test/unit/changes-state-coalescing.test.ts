@@ -43,7 +43,7 @@ test('Changes invalidates grouping, error presence, loading and repository trans
   f.registry.errors.delete(f.repo.id);f.fire();await settle();assert.equal(v.view.badge!.value,1);
   f.registry.store.delete(f.repo.id);f.fire();await settle();assert.match(v.sent.at(-1)!.message!,/Loading/);
   f.registry.active=undefined;f.fire();await settle();assert.equal(v.sent.at(-1)!.repository,'No repository');
-  f.registry.active={id:'repo-C',root:'fixture/C'};f.registry.store.set('repo-C',{version:1,changes:[]});f.fire();await settle();assert.equal(v.sent.at(-1)!.repository,'C');assert.equal(v.sent.at(-1)!.message,'Working tree clean');f.panel.dispose();
+  f.registry.active={id:'repo-C',root:'fixture/C'};f.registry.store.set('repo-C',{version:1,changes:[]});f.fire();await settle();assert.equal(v.sent.at(-1)!.repository,'C');assert.equal(v.sent.at(-1)!.message,'','the clean state is a row of the real provider (changes-provider.test.ts); it is not repeated in the status line');f.panel.dispose();
 });
 
 test('Changes retries false and rejected posts and forces renderer ready/new-view delivery',async()=>{

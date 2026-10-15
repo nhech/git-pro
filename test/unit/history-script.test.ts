@@ -65,8 +65,11 @@ test('History commit rows name their commit for the native context menu, select 
   assert.deepEqual(JSON.parse(body.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:true},'outside a commit nothing offers Cut, Copy and Paste');
   assert.deepEqual(JSON.parse(input.getAttribute('data-vscode-context')!),{preventDefaultContextMenuItems:false},'a text box keeps its edit menu');
   const commits=Array.from({length:5},(_,index)=>({oid:(index+1).toString(16).padStart(40,'0'),parents:index<4?[(index+2).toString(16).padStart(40,'0')]:[],subject:`Subject ${index}`,author:'A',timestamp:1700000000+index}));
-  receive({data:{type:'page',session:'s',commits,rows:layoutGraph(commits).rows,tips:[commits[0]!.oid],refs:[],filters:{},hasMore:false}});
+  receive({data:{type:'page',session:'s',commits,rows:layoutGraph(commits).rows,tips:[commits[0]!.oid],refs:[{name:'refs/heads/main',oid:commits[0]!.oid},{name:'refs/tags/v1.0',oid:commits[0]!.oid}],ref:'refs/heads/main\nrefs/remotes/origin/main\nrefs/tags/v1.0\nrefs/heads/x',filters:{},hasMore:false}});
   const rows=elements.get('rows')!.children;assert.equal(rows.length,5);
+  // Refs read as main, origin/main and v1.0 everywhere in the panel; the full ref stays in the tooltip.
+  const badge=(function find(node:Element):Element|undefined{return node.className==='refs'?node:node.children.map(find).find(Boolean);})(rows[0]!);
+  assert.equal(badge?.textContent,'main, v1.0');assert.equal(elements.get('filter-summary')!.textContent,'main, origin/main, v1.0 +1 · All commits');
   rows.forEach((row,index)=>assert.deepEqual(JSON.parse(row.getAttribute('data-vscode-context')!),{webviewSection:'commit',preventDefaultContextMenuItems:true,session:'s',oid:commits[index]!.oid}));
   const before=sent.length;rows[2]!.listeners.get('contextmenu')!({});
   assert.equal(sent.at(-1)?.type,'select');assert.equal(sent.at(-1)?.oid,commits[2]!.oid,'the row under the pointer is selected as the menu opens');assert.equal(sent.length,before+1);
