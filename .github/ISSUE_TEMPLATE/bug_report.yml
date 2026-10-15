@@ -1,0 +1,92 @@
+name: Bug report
+description: Something in Git Pro does not work as documented.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The details below let a maintainer reproduce the problem.
+        Known limits are listed in [Compatibility and limitations](https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md).
+  - type: input
+    id: version
+    attributes:
+      label: Git Pro version
+      description: Extensions view, then Git Pro. The Marketplace page shows it as well.
+      placeholder: "0.2.1"
+    validations:
+      required: true
+  - type: input
+    id: vscode
+    attributes:
+      label: VS Code version
+      description: Help, then About.
+      placeholder: "1.141.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: git
+    attributes:
+      label: Git version
+      description: The output of `git --version`.
+      placeholder: "git version 2.46.0"
+  - type: dropdown
+    id: workspace
+    attributes:
+      label: Where is the workspace?
+      options:
+        - Local folder
+        - Remote - WSL
+        - Remote - SSH
+        - Dev Container
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that lead to the problem, starting from a repository state you can describe.
+      placeholder: |
+        1. Open a repository with two conflicting branches
+        2. Merge one into the other
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead. Screenshots are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Git Pro output
+      description: |
+        View, then Output, then choose Git Pro. Git Pro redacts credentials, but please review the text before posting it.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: This report contains no passwords, tokens or private repository contents.
+          required: true

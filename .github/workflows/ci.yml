@@ -1,5 +1,10 @@
 name: CI
 on: [push, pull_request]
+
+# The jobs only read the repository.
+permissions:
+  contents: read
+
 jobs:
   core:
     timeout-minutes: 15

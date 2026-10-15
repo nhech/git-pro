@@ -1,0 +1,35 @@
+name: Issue bot
+
+# Triage for new issues and maintainer slash commands (/resolve, /duplicate, /needs-info, /triaged, /reopen, /label,
+# /unlabel); the logic and its tests live in .github/scripts/issue-bot.cjs. Issue text is never expanded into a shell.
+on:
+  issues:
+    types: [opened, closed]
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: issue-bot-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    if: github.repository == 'nhech/git-pro' && github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const bot = require('./.github/scripts/issue-bot.cjs');
+            await bot.run({ github, context });

@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and what makes it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you would like it to work.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways you handle this today, including other tools.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues.
+          required: true

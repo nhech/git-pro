@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Compatibility and limitations
+    url: https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md
+    about: Requirements, supported workspaces and known limits.
+  - name: Website and FAQ
+    url: https://git-pro.longtd.me/
+    about: Features, setup steps and common questions.

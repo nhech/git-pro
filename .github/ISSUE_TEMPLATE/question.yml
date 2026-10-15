@@ -1,0 +1,20 @@
+name: Question
+description: Ask how something in Git Pro works.
+title: "[Question]: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [website](https://git-pro.longtd.me/) and the [user guides](https://github.com/nhech/git-pro/tree/main/docs/user-guide) may already answer this.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Git Pro version
+      placeholder: "0.2.1"

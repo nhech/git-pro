@@ -1,0 +1,35 @@
+name: Close unanswered issues
+
+# Only issues that wait for the reporter (label needs-info) are touched: marked stale after 14 days without a reply,
+# closed 7 days later. A reply from the reporter removes both labels (see .github/scripts/issue-bot.cjs).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  stale:
+    if: github.repository == 'nhech/git-pro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/stale@v11
+        with:
+          only-labels: needs-info
+          days-before-issue-stale: 14
+          days-before-issue-close: 7
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: stale
+          close-issue-reason: not_planned
+          remove-stale-when-updated: true
+          operations-per-run: 100
+          stale-issue-message: >
+            This issue has been waiting for more information for 14 days. If there is no reply in the next 7 days it will be closed;
+            it can be reopened when the details are available.
+          close-issue-message: >
+            Closing because the requested information did not arrive. Reply here with the details and a maintainer can reopen this issue.
