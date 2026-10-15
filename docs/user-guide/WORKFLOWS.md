@@ -6,19 +6,23 @@ Use Changes to review the diff and stage or unstage files or folders. Hover or s
 
 The composer uses the current index and preserves partial staging performed in native Source Control. Hooks run by default. Amend and Skip Hooks require explicit review. A signing failure retains the draft; Git Pro does not disable signing or automatically retry a commit. If Commit & Push commits successfully but push fails, the result reports these outcomes separately. Inspect the successful commit before retrying the push.
 
+## File review
+
 **Hunk Actions** checks a reviewed text patch before applying only that hunk. Unsaved files or stale reviews block the action. Binary, new/deleted, rename and mode-change cases use native SCM guidance. **Commit File** commits the full saved version of one file with Git's `commit --only`, preserving unrelated staged files.
+
+Enable active-line blame to see author, UTC author date, hash and summary. Dirty buffers suppress on-disk attribution; uncommitted lines have no commit link. Optional CodeLens opens File History for saved regular files in open trusted repositories.
 
 ## Sync and branches
 
 Fetch reads remote updates. Pull requires a clean tree and defaults to fast-forward only; choose merge or rebase explicitly in [settings](SETTINGS.md). Ordinary push confirmations are optional. Force Push with Lease always requires a fresh exact-lease preview and confirmation; there is no setting to disable this review.
+
+The **Branches** view lists local and remote branches of the selected repository (the first 200 of each group; search for the rest). Click a branch for Branch Actions: checkout (a remote branch becomes a tracking branch), rename, set or unset the upstream, copy the name, delete, and the compare, merge and rebase actions. The **Remote** group lists the remote branches Git already has, with **Fetch** and **Refresh** in the view title; a repository with no remote says so instead of offering a fetch.
 
 ## History and comparison
 
 History stays pinned to its repository. Choose branch/tag scope and filters; select a commit to inspect Details, parent choice and changed files. Compare exact revisions through History's Compare form, or branches in the Compare tab (below). File History follows renames across parents with explicit continuation when traversal reaches its bound.
 
 History loads 25–100 commits per page and stops at 2,000 loaded commits. Load more explains whether the history ended or the load cap was reached. Refresh starts a new snapshot. Details mounts 200 files per page; comparison sides use 25 entries per page. Containing refs load after the rest of Details; in very large repositories they can take a while or be reported as unavailable without affecting the details. A commit whose file list or message exceeds the read bound shows its metadata with a note to use native Git. Text revisions require UTF-8 and at most 5 MiB; unsupported binary/submodule/symlink cases show guidance.
-
-Enable active-line blame to see author, UTC author date, hash and summary. Dirty buffers suppress on-disk attribution; uncommitted lines have no commit link. Optional CodeLens opens File History for saved regular files in open trusted repositories.
 
 ## Compare branches
 
@@ -43,10 +47,22 @@ The Changes view shows a banner such as "Merging feature into main · 3 conflict
 
 ## Advanced operations and tools
 
-Advanced actions review fresh merge/rebase/cherry-pick/revert/reset previews. Branch Actions also offers **Merge into Current…** and **Rebase Current onto This…** with the same review. Continue, Skip and Abort depend on actual Git operation state. Interactive rebase supports 1–200 linear commits; merge ranges use native Git guidance. Resolve conflicts, save the intended content and review staging before continuing. If no merge editor can open, Git Pro opens the file with its conflict markers.
+Advanced actions review fresh merge/rebase/cherry-pick/revert/reset previews. Branch Actions also offers **Merge into Current…** and **Rebase Current onto This…** with the same review. Continue, Skip and Abort depend on actual Git operation state. Resolve conflicts, save the intended content and review staging before continuing. If no merge editor can open, Git Pro opens the file with its conflict markers.
 
 Canceling an operation may leave Git state changed. Refresh and inspect the repository before retrying. Git Pro coordinates its own mutations in one extension host; other tools can still change the repository concurrently.
 
-Repository Tools exposes stashes, tags, remotes and worktrees. Tag pushes/deletions and worktree destinations are explicit. External worktree create/remove requires approval of the exact path. Stash pop conflicts retain the stash. No automatic destructive retry is performed.
+No automatic destructive retry is performed.
+
+## Interactive rebase
+
+Run **Interactive Rebase Planner** from the Command Palette (or Advanced Actions → Interactive Rebase) and enter the ancestor to rewrite after; the default is `HEAD~1`. The planner lists the commits after it, oldest first, for a linear range of 1–200 commits. A range that contains merges needs native Git.
+
+Choose Pick, Reword, Edit, Squash, Fixup or Drop for each commit, and reorder with Move Up and Move Down or by dragging. Reword opens a message editor, and the message is used as you type it, including lines that start with `#`. **Review plan** shows the whole plan, and nothing is rewritten until you confirm it. **Use native planner** offers the same plan as a quick pick.
+
+If the rebase stops on a conflict or at an Edit step, the Changes banner, the status bar and the Conflicts tab follow it, and Continue, Skip and Abort act on the real Git state. A plan that rewords commits runs with a comment character of its own so that those `#` lines survive; Git Pro's Continue uses it automatically, and when the plan stops Git Pro shows the exact `git -c 'core.commentChar=…' rebase --continue` command for a terminal. Rewriting commits you already pushed needs Force Push with Lease afterwards, which is reviewed like any other force push.
+
+## Stashes, tags, remotes and worktrees
+
+Repository Tools groups four lists. **Stashes**: create one (tracked files only, or tracked and untracked), inspect its files, apply, pop, create a branch from it or drop it; a pop that stops on conflicts keeps the stash. **Tags**: create, view the message, compare with HEAD, check out detached, create a branch, push, delete locally or on the remote; tag pushes and deletions are explicit. **Remotes**: add, fetch, push a local branch, set a branch upstream, rename, set the fetch or push URL, prune and remove. **Worktrees**: add, open in a new window, remove and prune stale metadata; creating or removing an external worktree needs approval of the exact path.
 
 [Getting started](GETTING_STARTED.md) · [Settings](SETTINGS.md) · [Compatibility](RELEASE_STATUS.md)

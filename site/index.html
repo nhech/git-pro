@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Git Pro — Git workflows for VS Code, from one sidebar</title>
+  <title>Git Pro for VS Code: conflicts, branch compare and interactive rebase</title>
   <meta name="description" content="Git Pro is a VS Code extension to review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
   <link rel="canonical" href="https://git-pro.longtd.me/">
   <meta name="robots" content="index, follow">
@@ -15,7 +15,7 @@
   <meta property="og:site_name" content="Git Pro">
   <meta property="og:locale" content="en_US">
   <meta property="og:url" content="https://git-pro.longtd.me/">
-  <meta property="og:title" content="Git Pro — Git workflows for VS Code, from one sidebar">
+  <meta property="og:title" content="Git Pro for VS Code: conflicts, branch compare and interactive rebase">
   <meta property="og:description" content="Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
   <meta property="og:image" content="https://git-pro.longtd.me/og.jpg">
   <meta property="og:image:type" content="image/jpeg">
@@ -23,7 +23,7 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Git Pro — Git workflows for VS Code, from one sidebar">
+  <meta name="twitter:title" content="Git Pro for VS Code: conflicts, branch compare and interactive rebase">
   <meta name="twitter:description" content="Review and stage changes, write commits, explore History and recover rebases, merges and stashes from one Git sidebar.">
   <meta name="twitter:image" content="https://git-pro.longtd.me/og.jpg">
   <meta name="twitter:image:alt" content="Git Pro: Git workflows for VS Code, from one sidebar, beside a screenshot of its History panel.">
@@ -54,11 +54,15 @@
     "softwareRequirements": "Visual Studio Code 1.100.0 or newer, Git 2.32 or newer and the VS Code built-in Git extension",
     "url": "https://git-pro.longtd.me/",
     "image": "https://git-pro.longtd.me/og.jpg",
-    "screenshot": "https://git-pro.longtd.me/images/changes-and-commit.jpg",
+    "screenshot": [
+      "https://git-pro.longtd.me/images/changes-and-commit.jpg",
+      "https://git-pro.longtd.me/images/history.jpg",
+      "https://git-pro.longtd.me/images/file-actions.jpg"
+    ],
     "license": "https://github.com/nhech/git-pro/blob/main/LICENSE",
     "codeRepository": "https://github.com/nhech/git-pro",
     "programmingLanguage": "TypeScript",
-    "keywords": "git, source control, commit, stage, history, graph, blame, rebase, stash, worktree",
+    "keywords": "{{KEYWORDS}}",
     "operatingSystem": "Windows, macOS, Linux",
     "dateModified": "{{RELEASE_DATE_ISO}}",
     "releaseNotes": "https://github.com/nhech/git-pro/blob/main/CHANGELOG.md",
@@ -67,6 +71,16 @@
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "sameAs": ["{{MARKETPLACE_URL}}", "https://github.com/nhech/git-pro"],
     "author": { "@type": "Person", "name": "longtd", "url": "https://longtd.me" }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Git Pro",
+    "alternateName": ["Git Pro for VS Code", "longtd.git-pro"],
+    "url": "https://git-pro.longtd.me/",
+    "inLanguage": "en"
   }
   </script>
 </head>
@@ -181,6 +195,7 @@
               <li>Commit box with Ctrl+Enter (⌘Enter on macOS), plus Commit &amp; Push, Amend, Sign-off, Skip hooks and message history</li>
               <li>Commits the current index, including partial staging from native Source Control</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#review-stage-and-commit">Read the guide <span aria-hidden="true">→</span></a></p>
           </article>
 
           <article class="card feature reveal" style="--i: 1">
@@ -192,6 +207,7 @@
               <li>Force Push with Explicit Lease always shows a fresh exact-lease preview and confirmation</li>
               <li>Optional auto-fetch with per-repository schedules and backoff after failures</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#sync-and-branches">Read the guide <span aria-hidden="true">→</span></a></p>
           </article>
 
           <article class="card feature reveal" style="--i: 2">
@@ -205,6 +221,7 @@
               <li>Show Diff with Working Tree, with Get from Branch for the files you choose</li>
               <li>File History follows renames across parents</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#history-and-comparison">History guide <span aria-hidden="true">→</span></a> <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#compare-branches">Compare guide <span aria-hidden="true">→</span></a></p>
           </article>
 
           <article class="card feature reveal">
@@ -216,6 +233,7 @@
               <li>Commit File commits the full saved version of one file and preserves unrelated staged files</li>
               <li>Active-line blame and a read-only File History CodeLens, both off by default</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#file-review">Read the guide <span aria-hidden="true">→</span></a></p>
           </article>
 
           <article class="card feature reveal" style="--i: 1">
@@ -228,6 +246,7 @@
               <li>The Changes banner and status bar follow the operation, with Resolve, Continue and Abort</li>
               <li>Interactive Rebase Planner for linear ranges of 1–200 commits</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#resolve-conflicts">Conflicts guide <span aria-hidden="true">→</span></a> <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#interactive-rebase">Rebase guide <span aria-hidden="true">→</span></a></p>
           </article>
 
           <article class="card feature reveal" style="--i: 2">
@@ -239,6 +258,7 @@
               <li>Creating or removing an external worktree needs approval of the exact path</li>
               <li>A stash pop conflict keeps the stash</li>
             </ul>
+            <p class="feature-link"><a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md#stashes-tags-remotes-and-worktrees">Read the guide <span aria-hidden="true">→</span></a></p>
           </article>
         </div>
 

@@ -32,7 +32,9 @@ if (!gitFloor || !vscodeFloor) throw new Error('The Git or VS Code minimum could
 const placeholders = {
   MARKETPLACE_URL, VERSION: version, SETTINGS_COUNT: String(Object.keys(manifest.contributes.configuration.properties).length),
   RELEASE_DATE: `${Number(released[3])} ${MONTHS[Number(released[2]) - 1]} ${released[1]}`, RELEASE_DATE_ISO: `${released[1]}-${released[2]}-${released[3]}`,
-  GIT_MINIMUM: `${gitFloor[1]}.${gitFloor[2]}`, VSCODE_MINIMUM: vscodeFloor[1]
+  GIT_MINIMUM: `${gitFloor[1]}.${gitFloor[2]}`, VSCODE_MINIMUM: vscodeFloor[1],
+  // The structured data names the same keywords as the Marketplace listing.
+  KEYWORDS: manifest.keywords.join(', ')
 };
 const notDeployed = new Set(['og', 'deploy', 'README.md']); // top-level entries of site/ that stay source-only
 const screenshots = ['changes-and-commit', 'file-actions', 'history'];
@@ -148,7 +150,7 @@ function imageSize(file) {
 // ---------- Build ----------
 function build() {
   for (const [name, value] of Object.entries(placeholders)) {
-    if (!/^[\w.:/?= -]+$/.test(value)) throw new Error(`Placeholder ${name} contains characters that would need escaping: ${value}`);
+    if (!/^[\w.:/?=, -]+$/.test(value)) throw new Error(`Placeholder ${name} contains characters that would need escaping: ${value}`);
   }
   if (path.basename(output) !== 'site-dist' || path.dirname(output) !== root) throw new Error('Unexpected output directory.');
   fs.rmSync(output, { recursive: true, force: true });
@@ -299,24 +301,26 @@ function validate() {
 
     const structured = page.scripts.filter(script => script.attributes.type === 'application/ld+json');
     if (!structured.length) fail(`${file}: missing JSON-LD`);
+    let describesProduct = false;
     for (const script of structured) {
       counts.jsonLd++;
       let data;
       try { data = JSON.parse(script.body); } catch (error) { fail(`${file}: invalid JSON-LD (${error.message})`); continue; }
       const types = [].concat(data['@type']);
       if (/"(?:aggregateRating|review|ratingValue)"/.test(script.body)) fail(`${file}: JSON-LD must not contain ratings or reviews`);
-      // Other pages describe themselves (a WebPage about Git Pro); the home page describes the product.
-      if (file !== 'index.html') {
-        if (!types.length || data.url !== expectedUrl) fail(`${file}: JSON-LD needs a @type and url ${expectedUrl}`);
+      // The home page must describe the product in one script; every other script (a WebSite, a WebPage about Git Pro) only has to name its type and its own URL.
+      if (!types.includes('SoftwareApplication')) {
+        if (!types.length || !types[0] || data.url !== expectedUrl) fail(`${file}: JSON-LD needs a @type and url ${expectedUrl}`);
         continue;
       }
-      if (!types.includes('SoftwareApplication')) fail(`${file}: JSON-LD must describe a SoftwareApplication`);
+      describesProduct = true;
       if (data.name !== 'Git Pro' || data.applicationCategory !== 'DeveloperApplication' || data.url !== SITE_URL) fail(`${file}: JSON-LD name, applicationCategory or url is wrong`);
       // No offers while the Marketplace listing is not live; if one is added later it must not carry a price.
       if ([].concat(data.offers || []).some(offer => Number(offer && offer.price) !== 0)) fail(`${file}: JSON-LD offers must not carry a price`);
       if (data.softwareVersion !== version) fail(`${file}: JSON-LD softwareVersion must be ${version}`);
-      for (const key of ['image', 'screenshot']) if (data[key]) check(file, data[key]);
+      for (const key of ['image', 'screenshot']) for (const url of [].concat(data[key] || [])) check(file, url);
     }
+    if (file === 'index.html' && !describesProduct) fail(`${file}: JSON-LD must describe a SoftwareApplication`);
   }
 
   for (const file of files) {

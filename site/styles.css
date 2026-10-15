@@ -1725,6 +1725,25 @@ html:has(.lightbox[open]) {
   text-align: center;
 }
 
+/* Guide links at the foot of a feature card. */
+.feature-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-4) 0 0;
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.feature-link a {
+  text-decoration: none;
+}
+
+.feature-link a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* The comparison page. */
 .compare-title {
   margin: 0 0 var(--space-3);
