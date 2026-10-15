@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.2.0 — 2026-10-15
+
+- Git Pro is no longer labelled a preview on the Marketplace, on the website or in the docs. Requirements and known limits, such as Remote WSL and Dev Containers not having completed release validation, stay listed in Compatibility and limitations.
+- No functional changes since 0.1.0.
+
+## 0.1.0 — 2026-10-15
 
 - Review changes with file and folder staging, native diffs, file-type icons, inline row actions (Open Changes, Open File, Discard, Stage) and contextual actions.
 - Commit staged changes from a message box above Changes (Ctrl+Enter or Commit; Commit & Push and options in the menu beside it), with amend, signoff and configured Git signing.

@@ -44,27 +44,31 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run package
+      - name: Locate the packaged VSIX
+        shell: bash
+        # The file name carries the manifest version, so a version bump needs no workflow change.
+        run: echo "GIT_PRO_VSIX=${GITHUB_WORKSPACE}/artifacts/git-pro-$(node -p "require('./package.json').version").vsix" >> "$GITHUB_ENV"
       - run: xvfb-run -a npm run test:extension
         if: runner.os == 'Linux'
         env:
           GIT_PRO_STRESS_HOST: '1'
           GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
-          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+          GIT_PRO_TEST_VSIX: ${{ env.GIT_PRO_VSIX }}
       - run: npm run test:extension
         if: runner.os != 'Linux'
         env:
           GIT_PRO_STRESS_HOST: '1'
           GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
-          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+          GIT_PRO_TEST_VSIX: ${{ env.GIT_PRO_VSIX }}
       - run: xvfb-run -a npm run test:extension
         if: runner.os == 'Linux'
         env:
           GIT_PRO_TEST_RESTART: '1'
           GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
-          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+          GIT_PRO_TEST_VSIX: ${{ env.GIT_PRO_VSIX }}
       - run: npm run test:extension
         if: runner.os != 'Linux'
         env:
           GIT_PRO_TEST_RESTART: '1'
           GIT_PRO_TEST_VERSION: ${{ matrix.vscode }}
-          GIT_PRO_TEST_VSIX: ${{ github.workspace }}/artifacts/git-pro-0.1.0.vsix
+          GIT_PRO_TEST_VSIX: ${{ env.GIT_PRO_VSIX }}

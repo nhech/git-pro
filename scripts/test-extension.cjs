@@ -47,7 +47,7 @@ const { runTests, downloadAndUnzipVSCode } = require('@vscode/test-electron');
       launchArgs.push(...sharedArgs);
       const installed=spawnSync(executable,[cliJs,'--install-extension',path.resolve(process.env.GIT_PRO_TEST_VSIX),'--extensions-dir',extensionRoot,'--user-data-dir',path.join(root,'profile'),...sharedArgs],{env:{...env,ELECTRON_RUN_AS_NODE:'1'},windowsHide:true,shell:false,encoding:'utf8',timeout:60_000});
       if(installed.status!==0)throw new Error(`Private VSIX installation failed: ${installed.stderr}`);
-      extensionPath=path.join(extensionRoot,'longtd.git-pro-0.1.0');
+      extensionPath=path.join(extensionRoot,`longtd.git-pro-${require('../package.json').version}`);
       for(const asset of ['dist/extension.js','media/helpers/rebase-editor.cjs','media/helpers/preserve-editor.cjs','package.nls.json'])await fs.access(path.join(extensionPath,asset));
       console.log('Private VSIX installed in an isolated temporary profile; testing packaged extension assets.');
     }

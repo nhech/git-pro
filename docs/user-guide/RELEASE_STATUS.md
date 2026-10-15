@@ -1,6 +1,6 @@
 # Compatibility and limitations
 
-Git Pro 0.1.0 is a preview: behavior and limits may change between versions. Report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
+This page lists what Git Pro requires and the limits it has today. Report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
 
 ## Requirements
 

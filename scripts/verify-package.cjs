@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const yauzl = require('yauzl');
-const file = path.resolve(process.argv[2] || 'artifacts/git-pro-0.1.0.vsix');
+const file = path.resolve(process.argv[2] || `artifacts/git-pro-${require('../package.json').version}.vsix`);
 const output = path.resolve(process.argv[3] || 'artifacts/package-check.json');
 const guides = ['GETTING_STARTED.md', 'WORKFLOWS.md', 'SETTINGS.md', 'RELEASE_STATUS.md'];
 const docs = ['docs/GIT_API_PROVENANCE.md', ...guides.map(name => `docs/user-guide/${name}`)];

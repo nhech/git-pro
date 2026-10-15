@@ -325,20 +325,6 @@ main:focus {
   color: var(--text);
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.5rem;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  line-height: 1.5;
-}
-
 /* ---------- Header ---------- */
 /* Opaque on purpose: a translucent header lets screenshots show through and lowers text contrast. */
 .site-header {
@@ -383,13 +369,6 @@ main:focus {
 .brand-mark {
   width: 28px;
   height: 28px;
-}
-
-/* Below 360px the header row cannot fit the badge as well; the hero still states the preview status. */
-@media (max-width: 359px) {
-  .site-header .badge {
-    display: none;
-  }
 }
 
 .header-actions {

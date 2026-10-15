@@ -4,11 +4,11 @@ Git workflows for VS Code: review changes, stage files, write commits, browse Hi
 
 Website: [git-pro.longtd.me](https://git-pro.longtd.me/) · Source: [github.com/nhech/git-pro](https://github.com/nhech/git-pro)
 
-**0.1.0 preview.** Behavior and limits may change between versions. See [compatibility and limitations](docs/user-guide/RELEASE_STATUS.md) and report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
+Requirements and known limits are in [compatibility and limitations](docs/user-guide/RELEASE_STATUS.md). Report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
 
 ## See Git Pro in action
 
-Preview screenshots use a demo repository in VS Code with dark and light themes. Layout varies with the VS Code version and window width.
+Screenshots use a demo repository in VS Code with dark and light themes. Layout varies with the VS Code version and window width.
 
 ### Review, stage and commit
 
