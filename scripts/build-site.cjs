@@ -8,7 +8,7 @@ const zlib = require('node:zlib');
 const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=longtd.git-pro';
 // Set to true once the listing is live: the build then drops every <!-- unlisted -->...<!-- /unlisted -->
 // block (the "not live yet" notes). While false, only the markers are removed and the notes stay.
-const MARKETPLACE_LISTED = false;
+const MARKETPLACE_LISTED = true;
 const UNLISTED_BLOCK = /<!-- unlisted -->([\s\S]*?)<!-- \/unlisted -->/g;
 const SITE_URL = 'https://git-pro.longtd.me/';
 const OG_IMAGE = { file: 'og.jpg', type: 'image/jpeg', width: 1200, height: 630 };
