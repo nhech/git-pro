@@ -47,7 +47,8 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
     item.tooltip = redact(`${node.branch.name}\n${node.branch.oid}${node.branch.worktree ? `\nChecked out: ${node.branch.worktree}` : ''}`);
     const visual = branchVisual({ remote: node.branch.remote, current });
     item.iconPath = new vscode.ThemeIcon(visual.icon, new vscode.ThemeColor(visual.color));
-    item.command = { command: 'gitPro.branchActions', title: 'Branch Actions', arguments: [node] }; return item;
+    // A click only selects; the actions are in the view's own menu and behind the inline Branch Actions button.
+    return item;
   }
   dispose(): void { this.subscription.dispose(); this.changed.dispose(); }
 }

@@ -23,7 +23,7 @@ function toolsCommands(options:{compare?:boolean;run?:()=>Promise<void>;conflict
   const surfaces={conflictSources:new Map<string,unknown>(),...(options.compare===false?{}:{compare:{openRefs:async(...args:unknown[])=>{compared.push(args);},openWorktree:async()=>undefined}})};
   const source=path.resolve(__dirname,'../../src/commands/tools.commands.js'),load=createRequire(source),exports:Record<string,unknown>={};
   runInNewContext(readFileSync(source,'utf8'),{exports,require:(name:string)=>name==='vscode'?vscode:name==='./message-editor'?{editMessage:async()=>undefined}:load(name)});
-  const commands=new (exports.ToolsCommands as new(...args:unknown[])=>{actions(category:unknown,id:unknown,key:unknown):Promise<void>})(tools,{},history,{add:()=>{throw new Error('No snapshot is needed.');}},surfaces);
+  const commands=new (exports.ToolsCommands as new(...args:unknown[])=>{actions(category:unknown,id:unknown,key:unknown):Promise<void>;menu(node:unknown,preset:string):Promise<void>})(tools,{},history,{add:()=>{throw new Error('No snapshot is needed.');}},surfaces);
   return {commands,choices,executed,compared,surfaces,stash,tag};
 }
 test('Tags → Compare With HEAD opens the Compare tab with the tag ref instead of a file quick pick',async()=>{
@@ -64,4 +64,29 @@ test('Repository Tools context menu resolves only a valid clicked group or row',
   assert.equal(readRepositoryToolsContext({label:'not a tools node'}),undefined);
   assert.throws(()=>readRepositoryToolsContext({kind:'row',group:'Tags',repositoryId:'repo-1'}),/Repository Tools/);
   assert.throws(()=>readRepositoryToolsContext({kind:'group',group:'Unknown',repositoryId:'repo-1'}),/Repository Tools/);
+});
+test('Repository Tools menu choices run the Quick Pick entry they stand for on the clicked row, without asking for it again',async()=>{
+  let ran=0;const h=toolsCommands({run:async()=>{ran++;}});
+  const stash={kind:'row',group:'Stashes',repositoryId:'owned',key:h.stash.oid+h.stash.selector};
+  h.choices.push('Working tree only');await h.commands.menu(stash,'Pop');
+  assert.equal(ran,1);assert.equal(h.choices.length,0,'only the question about the index was asked: the action list was skipped');
+  await h.commands.menu({kind:'row',group:'Tags',repositoryId:'owned',key:'v1.0'},'Compare With HEAD');
+  assert.deepEqual(h.compared,[['owned','refs/tags/v1.0','HEAD']]);
+  h.choices.push('left over');await h.commands.menu({kind:'group',group:'Stashes',repositoryId:'owned'},'Create');
+  assert.deepEqual(h.choices,['left over'],'Create on a group goes straight to its prompt instead of the list of entries');
+  await assert.rejects(h.commands.menu({label:'not a tools node'},'Pop'),/Repository Tools/);
+  await assert.rejects(h.commands.menu({kind:'row',group:'Tags',repositoryId:'owned',key:'gone'},'Push'),/selection changed/);
+});
+test('Repository Tools items only select: they carry a viewItem per kind and no command',()=>{
+  class TreeItem{id?:string;contextValue?:string;description?:string;tooltip?:string;iconPath?:unknown;command?:unknown;constructor(readonly label:string,readonly state?:number){}}
+  const vscode={EventEmitter:class{event=()=>({dispose(){}});fire(){}dispose(){}},TreeItem,TreeItemCollapsibleState:{None:0,Collapsed:1},ThemeIcon:class{constructor(readonly id:string,readonly color?:unknown){}},ThemeColor:class{constructor(readonly id:string){}}};
+  const source=path.resolve(__dirname,'../../src/views/tools/tools.provider.js'),load=createRequire(source),exports:Record<string,unknown>={};
+  runInNewContext(readFileSync(source,'utf8'),{exports,require:(name:string)=>name==='vscode'?vscode:load(name)});
+  const provider=new (exports.ToolsProvider as new(tools:unknown)=>{getTreeItem(node:unknown):TreeItem;dispose():void})({advanced:{git:{registry:{onDidInvalidate:()=>({dispose(){}})}}}});
+  const row=(group:string)=>({kind:'row',group,repositoryId:'owned',key:'k',label:'label',description:'d',detail:'x'});
+  const values=['Stashes','Tags','Remotes','Worktrees'].map(group=>[provider.getTreeItem({kind:'group',group,repositoryId:'owned'}).contextValue,provider.getTreeItem(row(group)).contextValue]);
+  assert.deepEqual(values,[['gitPro.tools.group.stashes','gitPro.tools.row.stash'],['gitPro.tools.group.tags','gitPro.tools.row.tag'],['gitPro.tools.group.remotes','gitPro.tools.row.remote'],['gitPro.tools.group.worktrees','gitPro.tools.row.worktree']]);
+  assert.equal(provider.getTreeItem(row('Tags')).command,undefined,'a click selects or expands; the actions are in the view menu and the inline button');
+  assert.equal(provider.getTreeItem({kind:'group',group:'Tags',repositoryId:'owned'}).command,undefined);
+  provider.dispose();
 });

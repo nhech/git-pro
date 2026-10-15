@@ -11,7 +11,9 @@ test('manifest localization and menu commands resolve without duplicate contribu
   for(const menu of Object.values(manifest.contributes.menus) as {command:string}[][])for(const item of menu)assert.ok(ids.includes(item.command),`Unregistered contribution ${item.command}`);
   assert.equal(manifest.contributes.views.gitPro.find((view:{id:string})=>view.id==='gitPro.changes')?.type,'webview','Changes uses a custom view so status can align at the far edge');
   const itemMenu=manifest.contributes.menus['view/item/context'] as {command:string;when:string;group:string}[];
-  for(const command of ['gitPro.branchActions','gitPro.repositoryTools'])assert.ok(itemMenu.some(item=>item.command===command&&item.group!=='inline'),`${command} must be available from the right-click menu`);
+  // The Quick Pick of actions stays one click away on every item; the right-click menu lists each of its choices natively.
+  for(const command of ['gitPro.branchActions','gitPro.repositoryTools'])assert.ok(itemMenu.some(item=>item.command===command&&item.group==='inline'),`${command} stays available as the inline button`);
+  for(const command of ['gitPro.branch.checkout','gitPro.branch.rename','gitPro.branch.delete','gitPro.repository.fetch','gitPro.tools.stash.apply','gitPro.tools.tag.push'])assert.ok(itemMenu.some(item=>item.command===command&&item.group!=='inline'),`${command} is in the right-click menu`);
   assert.ok(!itemMenu.some(item=>item.when.includes('view == gitPro.changes')),'Tree-only menu clauses must not remain after the Changes view switch');
   assert.ok(itemMenu.some(item=>item.command==='gitPro.repositoryTools'&&item.when.includes('gitPro.toolsView')&&item.when.includes('gitPro.tools')),'Repository Tools context action is scoped to its own view items');
   assert.equal(manifest.contributes.keybindings,undefined,'No default shortcuts before collision review');
@@ -73,7 +75,9 @@ test('conflict and compare contributions use stable menus, owned context keys, l
     // Menu-only: each needs the tree item or folder it was invoked on, so from the palette it would do nothing useful.
     'gitPro.openFile','gitPro.stageFolder','gitPro.unstageFolder','gitPro.discardFolder',
     // Webview menu commands take the object the panel's context menu passes, so the palette has nothing to give them.
-    ...(manifest.contributes.menus['webview/context'] as Item[]).map(item=>item.command)];
+    ...(manifest.contributes.menus['webview/context'] as Item[]).map(item=>item.command),
+    // The same for the entries of the Branches, Repositories and Repository Tools views' own menus: they take the item they were opened on.
+    ...(menus['view/item/context'] as Item[]).map(item=>item.command).filter(command=>/^gitPro\.(?:branch|repository|tools)\./.test(command))];
   assert.deepEqual(menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command).sort(),[...argumentOnly].sort(),'argument-only commands are hidden from the palette');
   for(const id of ['gitPro.conflicts.open','gitPro.operation.menu','gitPro.compareWithCurrent','gitPro.diffWithWorkingTree','gitPro.compareWithRef'])assert.ok(palette(id,{}),`${id} stays in the palette`);
   const merging={'gitPro.operation':'merging','gitPro.hasConflicts':true},rebasing={'gitPro.operation':'rebasing'},idle={'gitPro.operation':'idle'};

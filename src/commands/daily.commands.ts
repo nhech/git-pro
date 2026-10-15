@@ -17,6 +17,8 @@ import { hasChanges, type ChangeGroup } from '../git/git-parser';
 import { branchVisual } from '../views/tree-visuals';
 import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfterFailure, type Surfaces } from '../conflicts/surfaces';
 
+type BranchChoice = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Compare with Another Branch…' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
+
 export class DailyCommands implements vscode.Disposable {
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly branchPickers = new Set<vscode.Disposable>();
@@ -46,6 +48,9 @@ export class DailyCommands implements vscode.Disposable {
     register('gitPro.pull', () => this.pull());
     register('gitPro.branches', () => this.branches());
     register('gitPro.branchActions', (arg, selected) => this.branchActions(arg, selected));
+    // The Branches view's own menu: each entry is one choice of the Branch Actions Quick Pick, applied to the clicked branch.
+    for (const [name, choice] of [['checkout', 'Checkout'], ['checkoutTracking', 'Checkout Tracking Branch'], ['rename', 'Rename'], ['setUpstream', 'Set Upstream'], ['unsetUpstream', 'Unset Upstream'], ['copyName', 'Copy Name'], ['delete', 'Delete'], ['forceDelete', 'Force Delete']] as const)
+      register(`gitPro.branch.${name}`, (arg, selected) => this.branchMenu(choice, arg, selected));
     register('gitPro.createBranch', () => this.createBranch());
     register('gitPro.copyPath', arg => this.copyPath(arg));
     register('gitPro.init', async () => {
@@ -219,7 +224,7 @@ export class DailyCommands implements vscode.Disposable {
     const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined)) as BranchNode | undefined;
     if (!node || node.kind !== 'branch') return this.branches();
     const { branch, repositoryId: id } = node;
-    type Action = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Compare with Another Branch…' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
+    type Action = BranchChoice;
     type Item = vscode.QuickPickItem & { action?: Action };
     const item = (action: Action, description: string, icon: string): Item => ({ label: action, action, description, iconPath: new vscode.ThemeIcon(icon) });
     const copy = item('Copy Name', 'Copy the full branch name', 'copy'), head = this.git.registry.store.get(id)?.head;
@@ -240,8 +245,18 @@ export class DailyCommands implements vscode.Disposable {
     ];
     const choice = (await vscode.window.showQuickPick(actions, { title: redact(branch.name) }))?.action;
     if (!choice) return;
+    await this.branchChoice(choice, node);
+  }
+  private async branchMenu(choice: BranchChoice, arg: unknown, selection?: unknown): Promise<void> {
+    const node = (arg ?? (Array.isArray(selection) && selection.length === 1 ? selection[0] : undefined)) as BranchNode | undefined;
+    if (!node || node.kind !== 'branch') throw new Error('Select a branch in the Branches view.');
+    await this.branchChoice(choice, node);
+  }
+  /** One branch action: chosen in the Branch Actions Quick Pick, or from the Branches view's own menu. */
+  private async branchChoice(choice: BranchChoice, node: Extract<BranchNode, { kind: 'branch' }>): Promise<void> {
+    const { branch, repositoryId: id } = node;
     // These run through their own trusted commands, so a merge or rebase that stops on conflicts opens Conflicts like any other Git Pro mutation.
-    const routed: Partial<Record<Action, string>> = { 'Compare with Current': 'gitPro.compareWithCurrent', 'Show Diff with Working Tree': 'gitPro.diffWithWorkingTree', 'Compare with Another Branch…': 'gitPro.compareWithBranch', 'Merge into Current…': 'gitPro.mergeIntoCurrent', 'Rebase Current onto This…': 'gitPro.rebaseCurrentOnto' };
+    const routed: Partial<Record<BranchChoice, string>> = { 'Compare with Current': 'gitPro.compareWithCurrent', 'Show Diff with Working Tree': 'gitPro.diffWithWorkingTree', 'Compare with Another Branch…': 'gitPro.compareWithBranch', 'Merge into Current…': 'gitPro.mergeIntoCurrent', 'Rebase Current onto This…': 'gitPro.rebaseCurrentOnto' };
     const routedCommand = routed[choice];
     if (routedCommand) { await vscode.commands.executeCommand(routedCommand, node); return; }
     if (choice === 'Copy Name') { await vscode.env.clipboard.writeText(branch.name); return; }

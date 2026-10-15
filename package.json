@@ -548,6 +548,216 @@
         "command": "gitPro.menu.rebasePlanner.moveDown",
         "title": "%command.gitPro.menu.rebasePlanner.moveDown.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.checkout",
+        "title": "%command.gitPro.branch.checkout.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.checkoutTracking",
+        "title": "%command.gitPro.branch.checkoutTracking.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.rename",
+        "title": "%command.gitPro.branch.rename.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.setUpstream",
+        "title": "%command.gitPro.branch.setUpstream.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.unsetUpstream",
+        "title": "%command.gitPro.branch.unsetUpstream.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.copyName",
+        "title": "%command.gitPro.branch.copyName.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.delete",
+        "title": "%command.gitPro.branch.delete.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.branch.forceDelete",
+        "title": "%command.gitPro.branch.forceDelete.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.history",
+        "title": "%command.gitPro.repository.history.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.fetch",
+        "title": "%command.gitPro.repository.fetch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.pull",
+        "title": "%command.gitPro.repository.pull.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.push",
+        "title": "%command.gitPro.repository.push.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.tools",
+        "title": "%command.gitPro.repository.tools.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.copyPath",
+        "title": "%command.gitPro.repository.copyPath.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.repository.reveal",
+        "title": "%command.gitPro.repository.reveal.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stash.inspect",
+        "title": "%command.gitPro.tools.stash.inspect.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stash.apply",
+        "title": "%command.gitPro.tools.stash.apply.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stash.pop",
+        "title": "%command.gitPro.tools.stash.pop.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stash.branch",
+        "title": "%command.gitPro.tools.stash.branch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stash.drop",
+        "title": "%command.gitPro.tools.stash.drop.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.message",
+        "title": "%command.gitPro.tools.tag.message.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.compare",
+        "title": "%command.gitPro.tools.tag.compare.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.checkout",
+        "title": "%command.gitPro.tools.tag.checkout.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.branch",
+        "title": "%command.gitPro.tools.tag.branch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.push",
+        "title": "%command.gitPro.tools.tag.push.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.deleteLocal",
+        "title": "%command.gitPro.tools.tag.deleteLocal.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tag.deleteRemote",
+        "title": "%command.gitPro.tools.tag.deleteRemote.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.fetch",
+        "title": "%command.gitPro.tools.remote.fetch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.pushBranch",
+        "title": "%command.gitPro.tools.remote.pushBranch.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.upstream",
+        "title": "%command.gitPro.tools.remote.upstream.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.rename",
+        "title": "%command.gitPro.tools.remote.rename.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.fetchUrl",
+        "title": "%command.gitPro.tools.remote.fetchUrl.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.pushUrl",
+        "title": "%command.gitPro.tools.remote.pushUrl.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.prune",
+        "title": "%command.gitPro.tools.remote.prune.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remote.remove",
+        "title": "%command.gitPro.tools.remote.remove.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.worktree.open",
+        "title": "%command.gitPro.tools.worktree.open.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.worktree.remove",
+        "title": "%command.gitPro.tools.worktree.remove.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.stashes.create",
+        "title": "%command.gitPro.tools.stashes.create.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.tags.create",
+        "title": "%command.gitPro.tools.tags.create.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.remotes.create",
+        "title": "%command.gitPro.tools.remotes.create.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.worktrees.create",
+        "title": "%command.gitPro.tools.worktrees.create.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.tools.worktrees.prune",
+        "title": "%command.gitPro.tools.worktrees.prune.title%",
+        "category": "%command.category%"
       }
     ],
     "viewsContainers": {
@@ -687,44 +897,249 @@
           "group": "inline"
         },
         {
-          "command": "gitPro.branchActions",
-          "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./",
-          "group": "gitPro"
-        },
-        {
           "command": "gitPro.compareWithCurrent",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
-          "group": "compare@1"
+          "group": "2_compare@1"
         },
         {
           "command": "gitPro.diffWithWorkingTree",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
-          "group": "compare@2"
+          "group": "2_compare@2"
         },
         {
           "command": "gitPro.compareBranches",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./ && listDoubleSelection",
-          "group": "compare@3"
+          "group": "2_compare@3"
         },
         {
           "command": "gitPro.compareWithBranch",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\./ && !listMultiSelection",
-          "group": "compare@4"
+          "group": "2_compare@4"
         },
         {
           "command": "gitPro.mergeIntoCurrent",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
-          "group": "integrate@1"
+          "group": "3_integrate@1"
         },
         {
           "command": "gitPro.rebaseCurrentOnto",
           "when": "view == gitPro.branchesView && viewItem =~ /^gitPro\\.branch\\.(local|remote)$/ && !listMultiSelection",
-          "group": "integrate@2"
+          "group": "3_integrate@2"
         },
         {
           "command": "gitPro.repositoryTools",
-          "when": "view == gitPro.toolsView && viewItem == gitPro.tools",
-          "group": "gitPro"
+          "when": "view == gitPro.toolsView && viewItem =~ /^gitPro\\.tools\\./",
+          "group": "inline"
+        },
+        {
+          "command": "gitPro.branch.checkout",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem == gitPro.branch.local",
+          "group": "0_checkout@1"
+        },
+        {
+          "command": "gitPro.branch.checkoutTracking",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem == gitPro.branch.remote",
+          "group": "0_checkout@1"
+        },
+        {
+          "command": "gitPro.branch.rename",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem =~ /^gitPro\\.branch\\.(local|current)$/",
+          "group": "1_manage@1"
+        },
+        {
+          "command": "gitPro.branch.setUpstream",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem =~ /^gitPro\\.branch\\.(local|current)$/",
+          "group": "1_manage@2"
+        },
+        {
+          "command": "gitPro.branch.unsetUpstream",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem =~ /^gitPro\\.branch\\.(local|current)$/",
+          "group": "1_manage@3"
+        },
+        {
+          "command": "gitPro.branch.copyName",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem =~ /^gitPro\\.branch\\./",
+          "group": "8_copy@1"
+        },
+        {
+          "command": "gitPro.branch.delete",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem == gitPro.branch.local",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "gitPro.branch.forceDelete",
+          "when": "view == gitPro.branchesView && !listMultiSelection && viewItem == gitPro.branch.local",
+          "group": "9_delete@2"
+        },
+        {
+          "command": "gitPro.repository.history",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "0_view@1"
+        },
+        {
+          "command": "gitPro.repository.fetch",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "1_sync@1"
+        },
+        {
+          "command": "gitPro.repository.pull",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "1_sync@2"
+        },
+        {
+          "command": "gitPro.repository.push",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "1_sync@3"
+        },
+        {
+          "command": "gitPro.repository.tools",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "2_tools@1"
+        },
+        {
+          "command": "gitPro.repository.copyPath",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitPro.repository.reveal",
+          "when": "view == gitPro.repositories && viewItem == gitPro.repository",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "gitPro.tools.stash.inspect",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.stash",
+          "group": "0_view@1"
+        },
+        {
+          "command": "gitPro.tools.stash.apply",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.stash",
+          "group": "1_apply@1"
+        },
+        {
+          "command": "gitPro.tools.stash.pop",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.stash",
+          "group": "1_apply@2"
+        },
+        {
+          "command": "gitPro.tools.stash.branch",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.stash",
+          "group": "1_apply@3"
+        },
+        {
+          "command": "gitPro.tools.stash.drop",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.stash",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "gitPro.tools.tag.message",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "0_view@1"
+        },
+        {
+          "command": "gitPro.tools.tag.compare",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "0_view@2"
+        },
+        {
+          "command": "gitPro.tools.tag.checkout",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "1_use@1"
+        },
+        {
+          "command": "gitPro.tools.tag.branch",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "1_use@2"
+        },
+        {
+          "command": "gitPro.tools.tag.push",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "gitPro.tools.tag.deleteLocal",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "gitPro.tools.tag.deleteRemote",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.tag",
+          "group": "9_danger@2"
+        },
+        {
+          "command": "gitPro.tools.remote.fetch",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "0_sync@1"
+        },
+        {
+          "command": "gitPro.tools.remote.pushBranch",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "0_sync@2"
+        },
+        {
+          "command": "gitPro.tools.remote.upstream",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "0_sync@3"
+        },
+        {
+          "command": "gitPro.tools.remote.rename",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "1_edit@1"
+        },
+        {
+          "command": "gitPro.tools.remote.fetchUrl",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "1_edit@2"
+        },
+        {
+          "command": "gitPro.tools.remote.pushUrl",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "1_edit@3"
+        },
+        {
+          "command": "gitPro.tools.remote.prune",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "2_clean@1"
+        },
+        {
+          "command": "gitPro.tools.remote.remove",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.remote",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "gitPro.tools.worktree.open",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.worktree",
+          "group": "0_open@1"
+        },
+        {
+          "command": "gitPro.tools.worktree.remove",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.row.worktree",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "gitPro.tools.stashes.create",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.stashes",
+          "group": "0_create@1"
+        },
+        {
+          "command": "gitPro.tools.tags.create",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.tags",
+          "group": "0_create@1"
+        },
+        {
+          "command": "gitPro.tools.remotes.create",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.remotes",
+          "group": "0_create@1"
+        },
+        {
+          "command": "gitPro.tools.worktrees.create",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.worktrees",
+          "group": "0_create@1"
+        },
+        {
+          "command": "gitPro.tools.worktrees.prune",
+          "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.worktrees",
+          "group": "0_create@2"
         }
       ],
       "editor/context": [
@@ -969,6 +1384,174 @@
         },
         {
           "command": "gitPro.menu.rebasePlanner.moveDown",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.checkoutTracking",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.rename",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.setUpstream",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.unsetUpstream",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.copyName",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.delete",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.branch.forceDelete",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.history",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.fetch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.pull",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.push",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.tools",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.repository.reveal",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stash.inspect",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stash.apply",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stash.pop",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stash.branch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stash.drop",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.message",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.compare",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.branch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.push",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.deleteLocal",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tag.deleteRemote",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.fetch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.pushBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.upstream",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.rename",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.fetchUrl",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.pushUrl",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.prune",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remote.remove",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.worktree.open",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.worktree.remove",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.stashes.create",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.tags.create",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.remotes.create",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.worktrees.create",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.tools.worktrees.prune",
           "when": "false"
         }
       ],

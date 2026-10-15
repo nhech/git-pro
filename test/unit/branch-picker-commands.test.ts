@@ -119,6 +119,21 @@ test('branch deletion keeps plain modal identities, fresh-ref guard and explicit
   assert.equal(h.errors.length, 1); h.instance.dispose();
 });
 
+test('the Branches view menu runs the same choices as the Branch Actions Quick Pick on the clicked branch, without opening it', async () => {
+  const h = harness(), local = branch('feature/ux'), remote = branch('origin/feature/ux', true), node = (info: BranchInfo) => ({ kind: 'branch', repositoryId: 'owned', branch: info });
+  await h.run('gitPro.branch.checkout', node(local)); assert.deepEqual(h.operations, [['checkout', 'owned', 'feature/ux']]);
+  await h.run('gitPro.branch.copyName', node(remote)); assert.deepEqual(h.copied, ['origin/feature/ux']);
+  assert.equal(h.actionItems.length, 0, 'no Quick Pick opened');
+  // Delete keeps its modal and its fresh-ref guard; the clicked row may also arrive as the only item of the selection.
+  await h.run('gitPro.branch.delete', node(local)); assert.deepEqual(h.warnings.at(-1)!.choices, ['Delete']); assert.equal(h.operations.length, 1, 'declining the modal deletes nothing');
+  await h.action(local, undefined, 'Delete'); await h.run('gitPro.branch.delete', undefined, [node(local)]); assert.equal(h.operations.at(-1)![3], 'delete');
+  await h.run('gitPro.branch.forceDelete', node(local)); assert.deepEqual(h.warnings.at(-1)!.choices, ['Force Delete']);
+  const before = h.errors.length; await h.run('gitPro.branch.rename', { kind: 'group', remote: false }); await h.run('gitPro.branch.rename', undefined);
+  assert.equal(h.errors.length, before + 2); assert.match(h.errors.at(-1)!, /Select a branch in the Branches view/);
+  for (const id of ['checkout', 'checkoutTracking', 'rename', 'setUpstream', 'unsetUpstream', 'copyName', 'delete', 'forceDelete']) assert.equal(typeof h.run(`gitPro.branch.${id}`, { kind: 'group' }).then, 'function', id);
+  h.instance.dispose();
+});
+
 test('closing branch picker settles without waiting for read; late success/rejection never changes disposed UI', async () => {
   for (const reject of [false, true]) {
     const h = harness(); let settled = false;
@@ -248,7 +263,7 @@ test('Branches view marks the checked-out local branch gitPro.branch.current and
   assert.equal(item(branch('main')).contextValue, 'gitPro.branch.current'); assert.equal(item(branch('main')).description, 'Current');
   assert.equal(item(branch('feature')).contextValue, 'gitPro.branch.local'); assert.equal(item(branch('main', true)).contextValue, 'gitPro.branch.remote');
   store.head = 'feature'; assert.equal(item(branch('main')).contextValue, 'gitPro.branch.local');
-  assert.deepEqual(Array.from((item(branch('feature')).command as { arguments: unknown[] }).arguments), [{ kind: 'branch', repositoryId: 'owned', branch: branch('feature') }]);
+  assert.equal(item(branch('feature')).command, undefined, 'a click only selects: the actions are in the view\'s own menu and behind the inline button');
   provider.dispose();
 });
 

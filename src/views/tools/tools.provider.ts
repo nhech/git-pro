@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ToolsService } from '../../git/tools/tools.service';
 import { redact } from '../../security/redaction';
 import { repositoryToolVisual } from '../tree-visuals';
+import { toolContextValue } from './tool-menus';
 const groups=['Stashes','Tags','Remotes','Worktrees'] as const;
 type Group=typeof groups[number];
 type Node={kind:'group';group:Group;repositoryId:string}|{kind:'row';group:Group;repositoryId:string;key:string;label:string;description:string;detail:string}|{kind:'notice';label:string};
@@ -30,7 +31,8 @@ export class ToolsProvider implements vscode.TreeDataProvider<Node>,vscode.Dispo
     if(node.kind==='notice'){const item=new vscode.TreeItem(node.label);item.iconPath=new vscode.ThemeIcon('info',new vscode.ThemeColor('descriptionForeground'));return item;}
     const item=new vscode.TreeItem(node.kind==='group'?node.group:node.label,node.kind==='group'?vscode.TreeItemCollapsibleState.Collapsed:vscode.TreeItemCollapsibleState.None);
     item.id=`${node.repositoryId}:${node.group}:${node.kind==='row'?node.key:'group'}`;
-    item.contextValue='gitPro.tools';item.command={command:'gitPro.repositoryTools',title:`${node.group} Actions`,arguments:[node.group,node.repositoryId,...(node.kind==='row'?[node.key]:[])]};
+    // A click only selects (or expands); the actions are in the view's own menu and behind the inline Repository Tools button.
+    item.contextValue=toolContextValue(node.group,node.kind==='row');
     if(node.kind==='row'){item.description=node.description;item.tooltip=node.detail;}const visual=repositoryToolVisual[node.group];item.iconPath=new vscode.ThemeIcon(visual.icon,new vscode.ThemeColor(visual.color));return item;
   }
   dispose(){this.disposed=true;this.subscription.dispose();this.changed.dispose();}

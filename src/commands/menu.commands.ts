@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { FeatureDeps, TrustedCommand } from '../conflicts/surfaces';
 import type { AdvancedCommands } from './advanced.commands';
 import type { ToolsCommands } from './tools.commands';
+import { toolMenus } from '../views/tools/tool-menus';
 
 /** Panels whose rows are commits: the commit menu below is the same in History and in the Compare tab. */
 export const commitWebviews: readonly string[] = ['gitPro.history', 'gitPro.compare'];
@@ -31,6 +32,17 @@ export function registerMenus(_context: vscode.ExtensionContext, deps: FeatureDe
   onCommit('copyMessage', async (id, oid) => { await vscode.env.clipboard.writeText(await deps.history.message(id, oid)); });
   for (const name of ['showFiles', 'showInHistory']) onPanel('compare', 'commit', name);
   for (const name of ['diff', 'localDiff', 'openFile', 'getFromBranch', 'copyPath']) onPanel('compare', 'file', name);
+  // The Repository Tools view's own menu, and the Repositories view's.
+  for (const [name, preset] of toolMenus) command(`gitPro.tools.${name}`, node => flows.tools.menu(node, preset));
+  const repository = (node: unknown) => {
+    const id = node && typeof node === 'object' ? (node as { id?: unknown }).id : undefined, found = typeof id === 'string' ? deps.registry.list().find(item => item.id === id) : undefined;
+    if (!found) throw new Error('Select a repository in the Repositories view.');
+    return found;
+  };
+  for (const [name, target] of [['history', 'gitPro.history'], ['fetch', 'gitPro.fetch'], ['pull', 'gitPro.pull'], ['push', 'gitPro.push'], ['tools', 'gitPro.repositoryTools']] as const)
+    command(`gitPro.repository.${name}`, async node => { deps.registry.select(repository(node).id); await vscode.commands.executeCommand(target); });
+  command('gitPro.repository.copyPath', async node => { await vscode.env.clipboard.writeText(repository(node).root); });
+  command('gitPro.repository.reveal', async node => { await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(repository(node).root)); });
   for (const name of ['pick', 'reword', 'edit', 'squash', 'fixup', 'drop', 'moveUp', 'moveDown', 'editMessage']) onPanel('rebasePlanner', 'step', name);
   for (const name of ['merge', 'acceptYours', 'acceptTheirs', 'markResolved', 'openFile', 'compareBaseYours', 'compareBaseTheirs', 'compareYoursTheirs']) onPanel('conflicts', 'conflict', name);
 }
