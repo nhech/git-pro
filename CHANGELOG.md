@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-10-16
+
+Changes is now VS Code's own tree, Branches shows how far each branch has moved, and Compare reads more like a code review.
+
+- **Changes is a native tree.** It looks and behaves like the built-in views: status icons, letters and colours that follow your theme, the file name with its folder beside it, multi-select with Ctrl or Shift and the keyboard, the same hover and focus rows, and a count badge on the Git Pro icon. Hover or select a row for Open Changes, Open File, Discard and Stage or Unstage; group headers have Stage All and Unstage All, and the view title has Commit, Fetch, Pull, Push, Stage All and Unstage All, with a **View as Tree** or **View as List** switch. Right-click a row, a folder or a group for every action; the menu works on the whole selection. An unfinished merge, rebase, cherry-pick or revert is the first row of the list ("Merging feature into main · 3 conflicts") with Resolve, Continue, Skip, Abort and Amend. The "N selected" bar below the list is gone, because the menus and the inline buttons now act on the selection themselves.
+- **Ahead and behind in Branches.** A local branch that differs from its upstream shows `↑2 ↓1` next to its name. The counts are read apart from the list, so a slow repository never delays it.
+- **Compare marks the same change.** A commit that exists on the other side under another ID, such as a cherry-pick or a rebased copy, carries a `≈` and its row says so to a screen reader; the footer counts them. The check runs when the two sides together have at most 2,000 commits; with more, the footer says it was skipped.
+- **Compare lists the changed files as a nested tree.** Folders come first and hold their folders and files, a chain of folders with nothing else in it reads as one row (`src/main/java`), as in the Explorer, and a folder row counts everything below it.
+- **Mark files as viewed**, as in a code review. Press **V** on a row, use the button on it, or right-click (the whole selection of a working-tree comparison at once). A viewed file is dimmed with a check and counted in the footer. The marks are kept in the workspace for that exact comparison, so they outlive the tab and last as long as the two commits and the folder stay the same; the 30 most recent comparisons are remembered. Marking a file changes nothing else, so a selection made for Get from Branch is kept. The files of one commit have no marks.
+- **Commit rows in Compare** have **Copy Revision Number** and **Show in History** buttons on hover and focus.
+- Marks in a working-tree comparison follow the file: one that you edit while the tab is open is no longer marked, and Since fork and Tip to tip keep their marks apart, because the same file has another diff in each.
+- Fixes: **Stage All** on the Untracked group failed when one of its entries was a repository of its own; it now leaves that one out, as the title-bar Stage All does. Stage Folder, Unstage Folder, Discard Folder and Copy Relative Path act on every selected row, not only the one you right-clicked. In Changes, **Merge…** is offered only on a conflict that both sides changed or added (the others get Resolve Conflicts… in its place), and Open File is not offered on a deleted file. A group header that is part of a selection no longer turns Stage or Discard into an action on the whole group. Branches keeps its ahead and behind counts in a repository with many long branch names.
+- The screenshots in the README and on the website are now taken by a script (`npm run screenshots`) from a demo repository, and there are new ones for Compare and Conflicts.
+
 ## 0.2.3 — 2026-10-15
 
 Right-click menus are now VS Code's own, and Compare is quicker to work in.
