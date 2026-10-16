@@ -7,7 +7,7 @@ export const markers = ['MERGE_HEAD', 'rebase-merge', 'rebase-apply', 'CHERRY_PI
 export type Marker = typeof markers[number];
 /** Typed read recipes, separate from coordinated mutation recipes below. */
 export type ReadCommand = { kind: 'version' } | { kind: 'status' } | { kind: 'historyHead' } | { kind: 'index'; paths?: readonly string[] } |
-  {kind:'filePatch';path:string;index:boolean} | { kind: 'branches' | 'branchIdentities' | 'branchUpstreamKeys' | 'branchConfig' } | {kind:'branchUpstreams';refs:readonly string[]} | { kind: 'worktrees' } | { kind: 'workDiff'; paths: readonly string[] } |
+  {kind:'filePatch';path:string;index:boolean} | { kind: 'branches' | 'branchIdentities' | 'branchUpstreamKeys' | 'branchConfig' } | {kind:'branchUpstreams';refs:readonly string[]} | {kind:'branchTracking';refs:readonly string[]} | { kind: 'worktrees' } | { kind: 'workDiff'; paths: readonly string[] } |
   { kind: 'tree'; oid: string; path: string } | { kind: 'blobSize' | 'blob'; oid: string } |
   { kind: 'ref'; ref: string } | {kind:'pointsAt';oid:string} | {kind:'linearRange';base:string;tip:string} | {kind:'remoteUrls';remote:string;push:boolean} | {kind:'remoteRef';url:string;branch:string} |
   { kind: 'metadata'; field: 'root' | 'gitDir' | 'commonDir' } | { kind: 'marker'; marker: Marker } | HistoryReadCommand | ToolsRead;
@@ -25,9 +25,11 @@ export function buildReadCommand(command: ReadCommand): string[] {
     case 'branchIdentities': return [...prefix,'for-each-ref','--format=%(refname)%00%(objectname)%00%00%(worktreepath)','refs/heads/','refs/remotes/'];
     case 'branchUpstreamKeys': return [...prefix,'config','--null','--name-only','--includes','--get-regexp','^branch\\..*\\.merge$'];
     case 'branchConfig': return [...prefix,'config','--null','--includes','--get-regexp','^branch\\.'];
-    case 'branchUpstreams': {
+    case 'branchUpstreams': case 'branchTracking': {
       if(!command.refs.length||command.refs.length>200||Buffer.byteLength(command.refs.join('\0'))>12000)throw new Error('Branch metadata request exceeds its bound.');
       const refs=command.refs.map(ref=>{if(!ref.startsWith('refs/heads/'))throw new Error('Select full local branch refs.');return validateBranchName(ref);});
+      // How far each branch is ahead of and behind its upstream, counted by Git for these refs only (a count per branch is what makes the whole listing slow).
+      if(command.kind==='branchTracking')return [...prefix,'for-each-ref','--format=%(refname)%00%(upstream:track,nobracket)',...refs];
       return [...prefix,'for-each-ref','--format=%(refname)%00%(objectname)%00%(upstream:short)%00%(worktreepath)',...refs];
     }
     case 'worktrees': return [...prefix, 'worktree', 'list', '--porcelain', '-z'];

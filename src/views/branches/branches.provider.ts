@@ -7,13 +7,31 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
   private readonly subscription: { dispose(): void };
-  constructor(private readonly git: GitService) { this.subscription = git.registry.onDidInvalidate(() => this.changed.fire()); }
+  /** Ahead and behind counts per repository, for the branches listed when they were asked for; Git counts them per branch, so they are read apart from the list. */
+  private readonly tracking = new Map<string, { readonly key: string; readonly until: number; readonly value: Map<string, string> }>();
+  constructor(private readonly git: GitService) { this.subscription = git.registry.onDidInvalidate(() => { this.tracking.clear(); this.changed.fire(); }); }
+  /**
+   * "↑2 ↓1" for each local branch that is ahead of or behind its upstream. A slow count never holds the list up: the list is drawn without it after a short wait
+   * and drawn again when the numbers arrive.
+   */
+  private async tracks(id: string, branches: readonly BranchInfo[]): Promise<Map<string, string>> {
+    const key = branches.map(branch => `${branch.ref}@${branch.oid}@${branch.upstream}`).join('|'), hit = this.tracking.get(id);
+    if (hit?.key === key && hit.until > Date.now()) return hit.value;
+    const entry = { key, until: Date.now() + 15_000, value: new Map<string, string>() };
+    this.tracking.set(id, entry);
+    const done = Promise.resolve().then(() => this.git.branchTracking(id, branches.map(branch => branch.ref))).then(found => { for (const [ref, text] of found) entry.value.set(ref, text); }, () => { if (this.tracking.get(id) === entry) this.tracking.delete(id); });
+    let late = true; const budget = new Promise<void>(resolve => { setTimeout(resolve, 800); });
+    await Promise.race([done.then(() => { late = false; }), budget]);
+    if (late) void done.then(() => { if (this.tracking.get(id) === entry && entry.value.size) this.changed.fire(); });
+    return entry.value;
+  }
   async getChildren(node?: BranchNode): Promise<BranchNode[]> {
     const repo = this.git.registry.active; if (!repo) return [];
     if (!node) return [{ kind: 'group', remote: false }, { kind: 'group', remote: true }];
     if (node.kind !== 'group') return [];
-    const branches = (await this.git.branchSearchSnapshot(repo.id)).filter(branch => branch.remote === node.remote).slice(0, 200)
-      .map((branch): BranchNode => ({ kind: 'branch', repositoryId: repo.id, branch }));
+    const listed = (await this.git.branchSearchSnapshot(repo.id)).filter(branch => branch.remote === node.remote).slice(0, 200);
+    if (!node.remote && listed.length) await this.tracks(repo.id, listed);
+    const branches = listed.map((branch): BranchNode => ({ kind: 'branch', repositoryId: repo.id, branch }));
     if (branches.length || !node.remote) return branches;
     // Remote branches are only the ones Git already has locally; say so, and offer the fetch that downloads the rest.
     // A fetch cannot help a repository with no remote, so that case says so instead. If the lookup fails, assume a remote exists.
@@ -43,7 +61,9 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
     const current = !node.branch.remote && this.git.registry.store.get(node.repositoryId)?.head === node.branch.name;
     // The checked-out branch keeps Branch Actions but not Compare with Current, Merge into Current or Rebase Current onto This.
     item.contextValue = node.branch.remote ? 'gitPro.branch.remote' : current ? 'gitPro.branch.current' : 'gitPro.branch.local';
-    item.description = current ? 'Current' : node.branch.remote ? `Remote${node.branch.upstream ? ` · ${redact(node.branch.upstream)}` : ''}` : redact(node.branch.upstream);
+    const snapshot = this.git.registry.store.get(node.repositoryId), counts = [snapshot?.ahead ? `↑${snapshot.ahead}` : '', snapshot?.behind ? `↓${snapshot.behind}` : ''].filter(Boolean).join(' ');
+    const track = current ? counts : node.branch.remote ? '' : this.tracking.get(node.repositoryId)?.value.get(node.branch.ref) ?? '';
+    item.description = (current ? 'Current' : node.branch.remote ? `Remote${node.branch.upstream ? ` · ${redact(node.branch.upstream)}` : ''}` : redact(node.branch.upstream)) + (track ? `${current || node.branch.upstream ? ' · ' : ''}${track}` : '');
     item.tooltip = redact(`${node.branch.name}\n${node.branch.oid}${node.branch.worktree ? `\nChecked out: ${node.branch.worktree}` : ''}`);
     const visual = branchVisual({ remote: node.branch.remote, current });
     item.iconPath = new vscode.ThemeIcon(visual.icon, new vscode.ThemeColor(visual.color));

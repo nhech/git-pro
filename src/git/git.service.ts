@@ -311,6 +311,17 @@ export class GitService implements RestoreFromSource {
     const output = (await this.executor.read(repo.root, { kind: 'branches' })).stdout.toString('utf8');
     return this.parseBranches(output);
   }
+  /** How far each of up to 200 local branches is ahead of and behind its upstream ("↑2 ↓1", or "gone" when the upstream was deleted); a branch with nothing to say is left out. */
+  async branchTracking(id:string,refs:readonly string[]):Promise<Map<string,string>>{
+    const repo=this.repository(id),found=new Map<string,string>();
+    if(!refs.length)return found;
+    for(const line of (await this.executor.read(repo.root,{kind:'branchTracking',refs})).stdout.toString('utf8').split('\n')){
+      const [ref='',track='']=line.split('\0'),ahead=/ahead (\d+)/.exec(track)?.[1],behind=/behind (\d+)/.exec(track)?.[1];
+      const text=track==='gone'?'gone':[ahead?`↑${ahead}`:'',behind?`↓${behind}`:''].filter(Boolean).join(' ');
+      if(ref&&text)found.set(ref,text);
+    }
+    return found;
+  }
   private parseBranches(output:string):BranchInfo[]{
     return output.split('\n').filter(Boolean).map(line => {
       const [ref = '', oid = '', upstream = '', worktree = ''] = line.split('\0');

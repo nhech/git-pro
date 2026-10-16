@@ -268,7 +268,7 @@ test('Branches view marks the checked-out local branch gitPro.branch.current and
   const vscode = { EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} }, TreeItem, TreeItemCollapsibleState: { Collapsed: 1 },
     ThemeIcon: class { constructor(readonly id: string, readonly color?: unknown) {} }, ThemeColor: class { constructor(readonly id: string) {} } };
   const source = path.resolve(__dirname, '../../src/views/branches/branches.provider.js'), load = createRequire(source), exports: Record<string, unknown> = {};
-  runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  runInNewContext(readFileSync(source, 'utf8'), { exports, setTimeout, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   const store = { head: 'main' }, git = { registry: { onDidInvalidate: () => ({ dispose() {} }), store: { get: () => store } } };
   const provider = new (exports.BranchesProvider as new (git: unknown) => { getTreeItem(node: unknown): TreeItem; dispose(): void })(git);
   const item = (info: BranchInfo) => provider.getTreeItem({ kind: 'branch', repositoryId: 'owned', branch: info });
@@ -284,7 +284,7 @@ test('an empty Remote group explains that no remote branches are downloaded and 
   const vscode = { EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} }, TreeItem, TreeItemCollapsibleState: { None: 0, Collapsed: 1 },
     ThemeIcon: class { constructor(readonly id: string, readonly color?: unknown) {} }, ThemeColor: class { constructor(readonly id: string) {} } };
   const source = path.resolve(__dirname, '../../src/views/branches/branches.provider.js'), load = createRequire(source), exports: Record<string, unknown> = {};
-  runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  runInNewContext(readFileSync(source, 'utf8'), { exports, setTimeout, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   let branches: BranchInfo[] = [branch('main'), branch('feature')];
   let remotes: () => Promise<unknown[]> = async () => [{ name: 'origin' }];
   const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => ({ head: 'main' }) } }, branchSearchSnapshot: async () => branches, listRemotes: () => remotes() };
@@ -313,4 +313,34 @@ test('an empty Remote group explains that no remote branches are downloaded and 
   branches = [branch('origin/main', true)];
   assert.deepEqual(plain(await provider.getChildren({ kind: 'group', remote: false })), [], 'an empty Local group stays empty');
   provider.dispose();
+});
+
+test('the Branches view shows how far each local branch is ahead of or behind its upstream, and never waits long for the counts', async () => {
+  class TreeItem { id?: string; contextValue?: string; description?: string; command?: unknown; constructor(readonly label: string, readonly state?: number) {} }
+  let fired = 0;
+  const vscode = { EventEmitter: class { event = (listener: () => void) => { this.listener = listener; return { dispose() {} }; }; listener: () => void = () => undefined; fire() { fired++; this.listener(); } dispose() {} }, TreeItem, TreeItemCollapsibleState: { None: 0, Collapsed: 1 },
+    ThemeIcon: class { constructor(readonly id: string, readonly color?: unknown) {} }, ThemeColor: class { constructor(readonly id: string) {} } };
+  const source = path.resolve(__dirname, '../../src/views/branches/branches.provider.js'), load = createRequire(source), exports: Record<string, unknown> = {};
+  runInNewContext(readFileSync(source, 'utf8'), { exports, setTimeout, require: (name: string) => name === 'vscode' ? vscode : load(name) });
+  const store = { head: 'main', ahead: 1, behind: 3 }; let release!: (value: Map<string, string>) => void, slow = false, reads = 0;
+  const feature = { ...branch('feature'), upstream: 'origin/feature' }, local = [branch('main'), feature, branch('scratch')], remote = branch('origin/feature', true);
+  const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => store } },
+    branchSearchSnapshot: async () => [...local, remote],
+    branchTracking: (_id: string, refs: string[]) => { reads++; assert.deepEqual(Array.from(refs), local.map(info => info.ref)); return slow ? new Promise<Map<string, string>>(resolve => { release = resolve; }) : Promise.resolve(new Map([[feature.ref, '↑2 ↓1']])); } };
+  const make = () => new (exports.BranchesProvider as new (git: unknown) => { getChildren(node?: unknown): Promise<unknown[]>; getTreeItem(node: unknown): TreeItem; dispose(): void })(git);
+  let provider = make(); const [localGroup] = await provider.getChildren() as { kind: string }[];
+  const describe = async () => (await provider.getChildren(localGroup)).map(node => provider.getTreeItem(node).description);
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature · ↑2 ↓1', ''].map(text => text || undefined).map(text => text ?? ''), 'main from the status, feature from the tracking read, scratch has nothing to say');
+  assert.equal(reads, 1); await describe(); assert.equal(reads, 1, 'the counts are kept for the listed branches for a short while');
+  assert.equal(provider.getTreeItem((await provider.getChildren(await provider.getChildren().then(groups => groups[1])))[0]).description, 'Remote', 'a remote branch has no counts');
+  provider.dispose();
+  // A slow count: the list is drawn without it after a short wait, then drawn again when it arrives.
+  slow = true; reads = 0; fired = 0; provider = make(); const started = Date.now();
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature', ''], 'drawn without the slow numbers'); assert.ok(Date.now() - started < 3000);
+  assert.equal(fired, 0); release(new Map([[feature.ref, '↓4']])); await new Promise(resolve => setImmediate(resolve)); assert.equal(fired, 1, 'drawn again when the counts arrive');
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature · ↓4', ''], 'and the numbers are there'); assert.equal(reads, 1);
+  provider.dispose();
+  // A failed read leaves the list as it was.
+  slow = false; git.branchTracking = () => Promise.reject(new Error('git failed')); provider = make();
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature', '']); provider.dispose();
 });
