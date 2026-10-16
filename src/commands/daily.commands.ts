@@ -71,7 +71,8 @@ export class DailyCommands implements vscode.Disposable {
       return { id: repo.id, paths: [path.relative(repo.root, await canonicalFilePath(arg.fsPath)).replace(/\\/g, '/')], groups: [] };
     }
     const nodes = Array.isArray(selected) ? selected : arg ? [arg] : this.changesView.selection;
-    const entries = nodes.filter((node: unknown): node is Extract<ChangeNode, { kind: 'file'|'folder' }> => !!node && typeof node === 'object' && ((node as ChangeNode).kind === 'file'||(node as ChangeNode).kind==='folder'));
+    // A group row stands for every file in it, as a folder row does for the files under it.
+    const entries = nodes.filter((node: unknown): node is Extract<ChangeNode, { kind: 'file'|'folder'|'group' }> => !!node && typeof node === 'object' && ((node as ChangeNode).kind === 'file'||(node as ChangeNode).kind==='folder'||(node as ChangeNode).kind==='group'));
     if (!entries.length) {
       if(nodes.length)throw new Error('Select changed file or folder entries only.');
       const editor = vscode.window.activeTextEditor; if (editor?.document.uri.scheme === 'file') return this.selection(editor.document.uri);
@@ -82,9 +83,9 @@ export class DailyCommands implements vscode.Disposable {
     if(entries.some(node=>node.repositoryId!==id))throw new Error('Select files from one repository.');
     const repo=this.git.registry.list().find(item=>item.id===id);if(!repo)throw new Error('Repository is no longer open.');
     const groups=[...new Set(entries.map(node=>node.kind==='file'?node.change.group:node.group))];
-    const snapshot=entries.some(node=>node.kind==='folder')?await this.git.state(id):undefined;
-    const paths=[...new Set(entries.flatMap(node=>node.kind==='file'?[node.change.path]:changedPathsInFolder(snapshot!.changes,node.group,node.prefix)))];
-    if(!paths.length)throw new Error('This folder has no changed files in the selected status group. Refresh and try again.');
+    const snapshot=entries.some(node=>node.kind!=='file')?await this.git.state(id):undefined;
+    const paths=[...new Set(entries.flatMap(node=>node.kind==='file'?[node.change.path]:node.kind==='folder'?changedPathsInFolder(snapshot!.changes,node.group,node.prefix):snapshot!.changes.filter(change=>change.group===node.group).map(change=>change.path)))];
+    if(!paths.length)throw new Error('This folder or group has no changed files in the selected status group. Refresh and try again.');
     return { id, paths, groups, ...(entries.length===1&&entries[0]!.kind==='file'?{change:entries[0]}:{}) };
   }
   private async fileAction(action: 'stage' | 'unstage' | 'discard', arg: unknown, selected: unknown): Promise<void> {

@@ -166,5 +166,10 @@
   "command.gitPro.tools.remotes.create.title": "Add Remote…",
   "command.gitPro.tools.worktrees.create.title": "Create Worktree…",
   "command.gitPro.tools.worktrees.prune.title": "Prune Stale Worktree Metadata…",
-  "setting.gitPro.compare.openDiffsBeside.description": "Open a file's diff in the editor group beside the Compare tab, so the list stays in view and the next click replaces the diff. Off: the diff opens in the Compare tab's own group, and the tab comes back when you close it."
+  "setting.gitPro.compare.openDiffsBeside.description": "Open a file's diff in the editor group beside the Compare tab, so the list stays in view and the next click replaces the diff. Off: the diff opens in the Compare tab's own group, and the tab comes back when you close it.",
+  "viewsWelcome.changes.contents": "Open a trusted folder containing a Git repository. Its changes appear here.\n[Initialize Repository](command:gitPro.init) · [Clone Repository](command:gitPro.clone)",
+  "command.gitPro.stageGroup.title": "Stage All Changes",
+  "command.gitPro.unstageGroup.title": "Unstage All Changes",
+  "command.gitPro.changes.viewAsTree.title": "View as Tree",
+  "command.gitPro.changes.viewAsList.title": "View as List"
 }

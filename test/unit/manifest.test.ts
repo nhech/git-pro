@@ -9,12 +9,16 @@ test('manifest localization and menu commands resolve without duplicate contribu
   const visit=(value:unknown):void=>{if(typeof value==='string'&&/^%[^%]+%$/.test(value))assert.ok(messages[value.slice(1,-1)]?.trim(),`Missing ${value}`);else if(value&&typeof value==='object')for(const nested of Object.values(value))visit(nested);};visit(manifest);
   const ids=manifest.contributes.commands.map((item:{command:string})=>item.command) as string[];assert.equal(new Set(ids).size,ids.length);
   for(const menu of Object.values(manifest.contributes.menus) as {command:string}[][])for(const item of menu)assert.ok(ids.includes(item.command),`Unregistered contribution ${item.command}`);
-  assert.equal(manifest.contributes.views.gitPro.find((view:{id:string})=>view.id==='gitPro.changes')?.type,'webview','Changes uses a custom view so status can align at the far edge');
+  assert.equal(manifest.contributes.views.gitPro.find((view:{id:string})=>view.id==='gitPro.changes')?.type,undefined,'Changes is a native tree: its selection, menus, keyboard and theming are the workbench\'s own');
   const itemMenu=manifest.contributes.menus['view/item/context'] as {command:string;when:string;group:string}[];
   // The Quick Pick of actions stays one click away on every item; the right-click menu lists each of its choices natively.
   for(const command of ['gitPro.branchActions','gitPro.repositoryTools'])assert.ok(itemMenu.some(item=>item.command===command&&item.group==='inline'),`${command} stays available as the inline button`);
   for(const command of ['gitPro.branch.checkout','gitPro.branch.rename','gitPro.branch.delete','gitPro.repository.fetch','gitPro.tools.stash.apply','gitPro.tools.tag.push'])assert.ok(itemMenu.some(item=>item.command===command&&item.group!=='inline'),`${command} is in the right-click menu`);
-  assert.ok(!itemMenu.some(item=>item.when.includes('view == gitPro.changes')),'Tree-only menu clauses must not remain after the Changes view switch');
+  // The Changes tree has its own menus: inline buttons and a context menu for each kind of row, scoped by the row's context value.
+  const changesMenu=itemMenu.filter(item=>item.when.includes('view == gitPro.changes'));
+  const offered=(command:string,fragment:string)=>changesMenu.some(item=>item.command===command&&item.when.includes(fragment));
+  for(const [command,fragment] of [['gitPro.stage','working|untracked'],['gitPro.unstage','(staged)'],['gitPro.discard','(working)'],['gitPro.conflicts.merge','(conflicts)'],['gitPro.stageFolder','folder'],['gitPro.stageGroup','gitPro.group.working'],['gitPro.unstageGroup','gitPro.group.staged'],['gitPro.operation.continue','continue']] as const)assert.ok(offered(command,fragment),`${command} is in the Changes menus (${fragment})`);
+  for(const group of ['inline','0_open','1_modify','2_conflict','9_copy'])assert.ok(changesMenu.some(item=>item.group?.startsWith(group)),`the Changes menus have a ${group} group`);
   assert.ok(itemMenu.some(item=>item.command==='gitPro.repositoryTools'&&item.when.includes('gitPro.toolsView')&&item.when.includes('gitPro.tools')),'Repository Tools context action is scoped to its own view items');
 });
 
@@ -59,7 +63,7 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   // Merge-editor and multi-diff menu points other than editor/title are proposed API.
   assert.deepEqual(Object.keys(menus).filter(id=>!['view/title','view/item/context','editor/context','editor/title','editor/title/context','explorer/context','commandPalette','webview/context'].includes(id)),[]);
   const views=new Set((manifest.contributes.views.gitPro as {id:string}[]).map(view=>view.id));
-  const owned=new Set(['gitPro.hasRepositories','gitPro.hasConflicts','gitPro.conflictResources','gitPro.operation']);
+  const owned=new Set(['gitPro.hasRepositories','gitPro.hasConflicts','gitPro.conflictResources','gitPro.operation','gitPro.changes.groupBy']);
   const builtIn=new Set(['view','viewItem','resource','resourceScheme','isMergeEditor','mergeEditorResultUri','listMultiSelection','listDoubleSelection','explorerResourceIsFolder','webviewId','webviewSection',
     // Plain values a panel puts on its elements (data-vscode-context) for its own menu items to read.
     'commitShown','compareWorktree','fileOnlyInBranch','conflictUnresolved','conflictFile','conflictMarkable','stepAction','stepFirst','stepLast']);
@@ -76,7 +80,9 @@ test('conflict and compare contributions use stable menus, owned context keys, l
     // Webview menu commands take the object the panel's context menu passes, so the palette has nothing to give them.
     ...(manifest.contributes.menus['webview/context'] as Item[]).map(item=>item.command),
     // The same for the entries of the Branches, Repositories and Repository Tools views' own menus: they take the item they were opened on.
-    ...(menus['view/item/context'] as Item[]).map(item=>item.command).filter(command=>/^gitPro\.(?:branch|repository|tools)\./.test(command))];
+    ...(menus['view/item/context'] as Item[]).map(item=>item.command).filter(command=>/^gitPro\.(?:branch|repository|tools)\./.test(command)),
+    // The Changes view's own: a group row stages everything in it, and the title switches between a list and a tree.
+    'gitPro.stageGroup','gitPro.unstageGroup','gitPro.changes.viewAsTree','gitPro.changes.viewAsList'];
   assert.deepEqual(menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command).sort(),[...argumentOnly].sort(),'argument-only commands are hidden from the palette');
   for(const id of ['gitPro.conflicts.open','gitPro.operation.menu','gitPro.compareWithCurrent','gitPro.diffWithWorkingTree','gitPro.compareWithRef'])assert.ok(palette(id,{}),`${id} stays in the palette`);
   const merging={'gitPro.operation':'merging','gitPro.hasConflicts':true},rebasing={'gitPro.operation':'rebasing'},idle={'gitPro.operation':'idle'};
@@ -139,7 +145,7 @@ test('the welcome text and the workspace capability notes are localizable, not l
   const manifest=JSON.parse(readFileSync('package.json','utf8')) as {capabilities:Record<string,{description?:string}>;contributes:{viewsWelcome:{contents:string}[]}};
   const messages=JSON.parse(readFileSync('package.nls.json','utf8')) as Record<string,string>;
   const texts=[...Object.values(manifest.capabilities).map(entry=>entry.description??''),...manifest.contributes.viewsWelcome.map(entry=>entry.contents)];
-  assert.equal(texts.length,3);
+  assert.equal(texts.length,4);
   for(const text of texts){assert.match(text,/^%[\w.]+%$/,`${text} is an nls reference`);assert.ok(messages[text.slice(1,-1)]?.trim());}
 });
 

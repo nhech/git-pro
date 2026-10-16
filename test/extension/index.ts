@@ -117,6 +117,12 @@ async function runHostChecks(): Promise<void> {
     await webviewTab('Git Pro: History & Compare');
     await vscode.commands.executeCommand('gitPro.fileHistory', vscode.Uri.file(path.join(root,'changed.txt')));
     await webviewTab('Git Pro: File History');
+    // The Changes tree names its rows to the commands of its menus: Open File and File History take the row itself.
+    const row = { kind: 'file', repositoryId: api.activeRepository(), change };
+    await vscode.commands.executeCommand('gitPro.openFile', row);
+    assert.equal(path.normalize(vscode.window.activeTextEditor?.document.uri.fsPath ?? ''), path.normalize(path.join(root,'changed.txt')), 'Open File opened the row\'s file');
+    await vscode.commands.executeCommand('gitPro.fileHistory', row);
+    await webviewTab('Git Pro: File History');
     assert.equal(vscode.workspace.getConfiguration('gitPro').get('blame.enabled'),false);
     await vscode.commands.executeCommand('gitPro.toggleBlame');
     const lensUri = vscode.Uri.file(path.join(root, 'changed.txt'));
@@ -153,7 +159,8 @@ async function runHostChecks(): Promise<void> {
   await vscode.commands.executeCommand('gitPro.repositories.focus');
   await vscode.commands.executeCommand('gitPro.changes.focus');
   for(let attempt=0;attempt<40&&!api.changesViewResolved();attempt++)await new Promise(resolve=>setTimeout(resolve,25));
-  assert.ok(api.changesViewResolved(),'Custom Changes WebviewView resolves when focused.');
+  assert.ok(api.changesViewResolved(),'The native Changes tree is shown when focused.');
+  assert.ok(api.viewItemCounts().files>=1,'The Changes tree lists the changed files of the active repository.');
   await vscode.commands.executeCommand('gitPro.commitView.focus');
   await vscode.commands.executeCommand('gitPro.branchesView.focus');
   await vscode.commands.executeCommand('gitPro.toolsView.focus');

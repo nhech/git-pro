@@ -36,6 +36,16 @@ export function registerMenus(_context: vscode.ExtensionContext, deps: FeatureDe
   onCommit('copyMessage', async (id, oid) => { await vscode.env.clipboard.writeText(await deps.history.message(id, oid)); });
   for (const name of ['showFiles', 'showInHistory']) onPanel('compare', 'commit', name);
   for (const name of ['diff', 'localDiff', 'openFile', 'getFromBranch', 'copyPath']) onPanel('compare', 'file', name);
+  // The Changes view's own menu: a group row stages or unstages all of its files, and the view title switches between a list and a tree.
+  command('gitPro.stageGroup', async node => { await vscode.commands.executeCommand('gitPro.stage', node); });
+  command('gitPro.unstageGroup', async node => { await vscode.commands.executeCommand('gitPro.unstage', node); });
+  const group = async (mode: 'status' | 'folder') => {
+    const repo = deps.registry.active, config = vscode.workspace.getConfiguration('gitPro', repo ? vscode.Uri.file(repo.root) : undefined), inspected = config.inspect<string>('changes.groupBy');
+    // Written where the effective value comes from, so the choice never leaves a workspace file that shadows nothing.
+    await config.update('changes.groupBy', mode, inspected?.workspaceFolderValue !== undefined ? vscode.ConfigurationTarget.WorkspaceFolder : inspected?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+  };
+  command('gitPro.changes.viewAsTree', () => group('folder'));
+  command('gitPro.changes.viewAsList', () => group('status'));
   // The Repository Tools view's own menu, and the Repositories view's.
   for (const [name, preset] of toolMenus) command(`gitPro.tools.${name}`, node => flows.tools.menu(node ?? flows.selectedTool?.(), preset));
   const repository = (node: unknown) => {

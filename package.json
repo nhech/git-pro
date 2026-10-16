@@ -88,7 +88,8 @@
       {
         "command": "gitPro.openFile",
         "title": "%command.gitPro.openFile.title%",
-        "category": "%command.category%"
+        "category": "%command.category%",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "gitPro.showOutput",
@@ -765,6 +766,30 @@
         "command": "gitPro.tools.worktrees.prune",
         "title": "%command.gitPro.tools.worktrees.prune.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.stageGroup",
+        "title": "%command.gitPro.stageGroup.title%",
+        "category": "%command.category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitPro.unstageGroup",
+        "title": "%command.gitPro.unstageGroup.title%",
+        "category": "%command.category%",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitPro.changes.viewAsTree",
+        "title": "%command.gitPro.changes.viewAsTree.title%",
+        "category": "%command.category%",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "gitPro.changes.viewAsList",
+        "title": "%command.gitPro.changes.viewAsList.title%",
+        "category": "%command.category%",
+        "icon": "$(list-flat)"
       }
     ],
     "viewsContainers": {
@@ -792,7 +817,6 @@
         {
           "id": "gitPro.changes",
           "name": "%view.gitPro.changes.name%",
-          "type": "webview",
           "initialSize": 700
         },
         {
@@ -811,6 +835,11 @@
       {
         "view": "gitPro.repositories",
         "contents": "%viewsWelcome.repositories.contents%",
+        "when": "!gitPro.hasRepositories"
+      },
+      {
+        "view": "gitPro.changes",
+        "contents": "%viewsWelcome.changes.contents%",
         "when": "!gitPro.hasRepositories"
       }
     ],
@@ -894,6 +923,16 @@
         {
           "command": "gitPro.repositoryTools",
           "when": "view == gitPro.toolsView && gitPro.hasRepositories",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.changes.viewAsTree",
+          "when": "view == gitPro.changes && gitPro.changes.groupBy == status",
+          "group": "navigation"
+        },
+        {
+          "command": "gitPro.changes.viewAsList",
+          "when": "view == gitPro.changes && gitPro.changes.groupBy == folder",
           "group": "navigation"
         }
       ],
@@ -1147,6 +1186,196 @@
           "command": "gitPro.tools.worktrees.prune",
           "when": "view == gitPro.toolsView && viewItem == gitPro.tools.group.worktrees",
           "group": "0_create@2"
+        },
+        {
+          "command": "gitPro.conflicts.merge",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(conflicts)$/ && !listMultiSelection",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.openFile",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged|untracked|conflicts)$/ && !listMultiSelection",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitPro.discard",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working)$/",
+          "group": "inline@3"
+        },
+        {
+          "command": "gitPro.stage",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|untracked)$/",
+          "group": "inline@4"
+        },
+        {
+          "command": "gitPro.unstage",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(staged)$/",
+          "group": "inline@4"
+        },
+        {
+          "command": "gitPro.diff",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged|untracked)$/ && !listMultiSelection",
+          "group": "0_open@1"
+        },
+        {
+          "command": "gitPro.diffHead",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged)$/ && !listMultiSelection",
+          "group": "0_open@2"
+        },
+        {
+          "command": "gitPro.openFile",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged|untracked|conflicts)$/ && !listMultiSelection",
+          "group": "0_open@3"
+        },
+        {
+          "command": "gitPro.fileHistory",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged|untracked|conflicts)$/ && !listMultiSelection",
+          "group": "0_open@4"
+        },
+        {
+          "command": "gitPro.stage",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|untracked)$/",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.unstage",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(staged)$/",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "gitPro.discard",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working)$/",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "gitPro.conflicts.merge",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(conflicts)$/",
+          "group": "2_conflict@1"
+        },
+        {
+          "command": "gitPro.conflicts.acceptYours",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(conflicts)$/",
+          "group": "2_conflict@2"
+        },
+        {
+          "command": "gitPro.conflicts.acceptTheirs",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(conflicts)$/",
+          "group": "2_conflict@3"
+        },
+        {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(conflicts)$/",
+          "group": "2_conflict@4"
+        },
+        {
+          "command": "gitPro.copyPath",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.(working|staged|untracked|conflicts)$/",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "gitPro.stageFolder",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.folder\\.(working|untracked)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.unstageFolder",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.folder\\.(staged)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.stageFolder",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.folder\\.(working|untracked)$/",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.unstageFolder",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.folder\\.(staged)$/",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "gitPro.discardFolder",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.change\\.folder\\.(working)$/",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "gitPro.stageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.working",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.stageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.working",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.stageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.untracked",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.stageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.untracked",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.unstageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.staged",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.unstageGroup",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.staged",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.conflicts",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && viewItem == gitPro.group.conflicts",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bresolve\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitPro.operation.continue",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bcontinue\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitPro.operation.abort",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\babort\\b/",
+          "group": "inline@3"
+        },
+        {
+          "command": "gitPro.conflicts.open",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bresolve\\b/",
+          "group": "1_operation@1"
+        },
+        {
+          "command": "gitPro.operation.continue",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bcontinue\\b/",
+          "group": "1_operation@2"
+        },
+        {
+          "command": "gitPro.operation.skip",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bskip\\b/",
+          "group": "1_operation@3"
+        },
+        {
+          "command": "gitPro.advancedActions",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\bamend\\b/",
+          "group": "1_operation@4"
+        },
+        {
+          "command": "gitPro.operation.abort",
+          "when": "view == gitPro.changes && viewItem =~ /^gitPro\\.operation\\b.*\\babort\\b/",
+          "group": "1_operation@5"
         }
       ],
       "editor/context": [
@@ -1559,6 +1788,22 @@
         },
         {
           "command": "gitPro.tools.worktrees.prune",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.stageGroup",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.unstageGroup",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.changes.viewAsTree",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.changes.viewAsList",
           "when": "false"
         }
       ],

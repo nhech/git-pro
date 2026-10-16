@@ -37,6 +37,11 @@ export async function conflictTargets(deps: Pick<FeatureDeps, 'registry'>, args:
   }
   throw new Error('Select conflicted files in Git Pro first.');
 }
+/** The Conflicts group, or the operation row, of the Changes view means the whole tab, with nothing selected in it: the repository it belongs to. */
+export function wholeTabRepository(value: unknown): string | undefined {
+  const row = value as { kind?: unknown; repositoryId?: unknown; group?: unknown } | undefined;
+  return typeof row?.repositoryId === 'string' && (row.kind === 'operation' || row.kind === 'group' && row.group === 'conflicts') ? row.repositoryId : undefined;
+}
 const openOptions = (value: unknown): ConflictsOpenOptions => {
   const item = value && typeof value === 'object' ? value as { select?: unknown; preserveFocus?: unknown } : {};
   const select = Array.isArray(item.select) ? item.select.filter((file): file is string => typeof file === 'string').slice(0, 100) : undefined;
@@ -65,6 +70,7 @@ export function registerConflicts(context: vscode.ExtensionContext, deps: Featur
     const [first] = args;
     if (first === undefined) { const id = deps.registry.active?.id; if (!id) throw new Error('Select a repository first.'); await open(id); return; }
     if (typeof first === 'string') { await open(first, openOptions(args[1])); return; }
+    const whole = wholeTabRepository(first); if (whole) { await open(whole); return; }
     const target = await conflictTargets(deps, args); await open(target.id, { select: target.paths });
   });
   for (const [id, side] of [['gitPro.conflicts.acceptYours', 'yours'], ['gitPro.conflicts.acceptTheirs', 'theirs']] as const)

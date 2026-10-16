@@ -7,54 +7,7 @@ import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import * as path from 'node:path';
 
-const settle = () => new Promise<void>(resolve => setImmediate(resolve));
 const disposable = { dispose: () => undefined };
-
-test('Changes does not rebuild while hidden, keeps the badge current, drops the invisible selection and renders once when shown', async () => {
-  const file = path.resolve(__dirname, '../../src/views/changes/changes-panel.js'), load = createRequire(file), exports: Record<string, unknown> = {};
-  type Change = { group: string; path: string; status: string };
-  const listeners: (() => void)[] = [];
-  const repo = { id: 'repo', root: 'fixture/repo' };
-  const change = (name: string): Change => ({ group: 'working', path: name, status: 'M' });
-  const registry = { active: repo, store: new Map<string, { version: number; changes: Change[] }>([[repo.id, { version: 1, changes: [change('a.txt')] }]]), errors: new Map<string, string>(),
-    onDidChange: (callback: () => void) => { listeners.push(callback); return disposable; } };
-  let built = 0;
-  const provider = { onDidChangeTreeData: () => disposable,
-    getChildren: (node?: unknown) => node ? registry.store.get(repo.id)!.changes.map(item => ({ kind: 'file', repositoryId: repo.id, change: item })) : [{ kind: 'group', group: 'working' }],
-    getTreeItem: (node: { kind: string; change?: Change }) => { built++; return { label: node.kind === 'file' ? node.change!.path : 'Working Tree', description: node.kind === 'file' ? 'Modified' : '1' }; } };
-  const vscode = { workspace: { getConfiguration: () => ({ get: () => 'status' }), onDidChangeConfiguration: () => disposable },
-    Uri: { file: (value: string) => value, joinPath: (_root: unknown, ...parts: string[]) => parts.join('/') }, commands: { executeCommand: async () => undefined } };
-  runInNewContext(readFileSync(file, 'utf8'), { exports, Buffer, require: (name: string) => name === 'vscode' ? vscode : load(name) });
-  const states: { rows: { kind: string; key: string; label: string }[] }[] = [];
-  let receive: (value: unknown) => void = () => undefined, onVisibility: () => void = () => undefined;
-  const view = { visible: true, badge: undefined as { value: number } | undefined,
-    webview: { html: '', cspSource: 'owned:', asWebviewUri: String, onDidReceiveMessage: (callback: typeof receive) => { receive = callback; return disposable; },
-      postMessage: async (value: { type: string; rows: { kind: string; key: string; label: string }[] }) => { if (value.type === 'state') states.push(value); return true; } },
-    onDidDispose: () => disposable, onDidChangeVisibility: (callback: () => void) => { onVisibility = callback; return disposable; } };
-  type Panel = { resolveWebviewView(view: unknown): void; dispose(): void; readonly selection: unknown[] };
-  const Constructor = exports.ChangesPanel as new (context: unknown, registry: unknown, provider: unknown) => Panel;
-  const panel = new Constructor({ extensionUri: 'owned' }, registry, provider);
-  const fire = () => { for (const callback of listeners) callback(); };
-  panel.resolveWebviewView(view); await settle();
-  assert.equal(states.length, 1); assert.equal(view.badge?.value, 1);
-  const session = /data-session="([^"]+)"/.exec(view.webview.html)![1]!;
-  receive({ type: 'select', session, keys: [states[0]!.rows.find(row => row.kind === 'file')!.key] }); await settle();
-  assert.equal(panel.selection.length, 1);
-
-  view.visible = false; onVisibility();
-  assert.equal(panel.selection.length, 0, 'a hidden renderer cannot show or change a selection');
-  const builtBeforeHidden = built;
-  registry.store.set(repo.id, { version: 2, changes: [change('a.txt'), change('b.txt')] });
-  for (let index = 0; index < 5; index++) { fire(); await settle(); }
-  assert.equal(states.length, 1, 'no state is built or posted for a hidden view'); assert.equal(built, builtBeforeHidden, 'no tree items are created either');
-  assert.equal(view.badge?.value, 2, 'the activity-bar badge still tracks the change count');
-
-  view.visible = true; onVisibility(); await settle();
-  assert.equal(states.length, 2); assert.ok(states[1]!.rows.some(row => row.label === 'b.txt'));
-  receive({ type: 'ready', session }); await settle();
-  assert.equal(states.length, 3, 'the recreated renderer always receives a forced state');
-  panel.dispose();
-});
 
 test('Commit composer skips state delivery while hidden and delivers it on ready', async () => {
   const file = path.resolve(__dirname, '../../src/webviews/commit/commit-composer.js'), load = createRequire(file), exports: Record<string, unknown> = {};

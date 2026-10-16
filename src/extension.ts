@@ -11,7 +11,8 @@ import { RepositoryStore } from './state/repository-store';
 import { OperationCoordinator } from './state/operation-coordinator';
 import { RepositoriesProvider } from './views/repositories/repositories.provider';
 import { ChangesProvider } from './views/changes/changes.provider';
-import { ChangesPanel } from './views/changes/changes-panel';
+import { ChangesView } from './views/changes/changes-view';
+import { ChangeDecorationProvider } from './views/changes/change-decoration-provider';
 import type { ChangeNode } from './views/changes/changes.provider';
 import { StatusbarController } from './statusbar/statusbar.controller';
 import { SafeLogger } from './utils/logging';
@@ -94,10 +95,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const registry = new RepositoryRegistry(policy, executor, store, logger, 5000, { isActive: () => vscode.window.state.focused, isBusy: repo => coordinator.busy(repo.commonDir) });
     // Enablement is checked before trust: git.enabled=false is folded into the trust policy, and would otherwise be reported as an untrusted workspace.
     const coordinator = new OperationCoordinator(() => { if (!adapter.enabled) throw new Error('Built-in Git is disabled.'); policy.checkTrust(); });
-    const providers = { repositories: new RepositoriesProvider(registry), changes: new ChangesProvider(registry) };
     // One late-bound holder: the register* calls below fill in the feature surfaces these constructors use.
     const surfaces = createSurfaces();
-    const changesPanel = new ChangesPanel(context,registry,providers.changes,surfaces);
+    const providers = { repositories: new RepositoriesProvider(registry), changes: new ChangesProvider(registry, surfaces) };
+    const changesView = new ChangesView(registry, providers.changes);
     const git = new GitService(registry, executor, policy, coordinator, adapter.dailyBackend());
     const statusbar = new StatusbarController(registry, id => git.lastFetched(id), git.onDidFetch, surfaces);
     const autoFetch = new AutoFetch(git, logger);
@@ -120,7 +121,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
-    const daily = new DailyCommands(git, revisions, adapter, changesPanel, logger, surfaces);
+    const daily = new DailyCommands(git, revisions, adapter, changesView, logger, surfaces);
     const branches = new BranchesProvider(git);
     // Ctrl/Shift-click selects two branches for Compare Branches; a click only selects, and the branch's actions are in its menu.
     const branchesView = vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches, canSelectMany: true });
@@ -130,7 +131,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     context.subscriptions.push({ dispose: () => lifetime.abort() }, executor, store, registry, coordinator,
       providers.repositories, providers.changes, statusbar,
       vscode.window.createTreeView('gitPro.repositories', { treeDataProvider: providers.repositories }),
-      changesPanel, vscode.window.registerWebviewViewProvider('gitPro.changes',changesPanel,{webviewOptions:{retainContextWhenHidden:false}}),
+      changesView, new ChangeDecorationProvider(),
       revisions, daily, branches, composer, autoFetch, history, historyPanels, blame,
       vscode.workspace.registerTextDocumentContentProvider('git-pro-revision', revisions),
       branchesView, trackSelection(branchesView, 'gitPro.branchesView.item', item => branches.getTreeItem(item).contextValue),
@@ -185,8 +186,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await configuration.update('blame.enabled', !configuration.get('blame.enabled', false), target);
     });
     command('gitPro.openBlameCommit',async()=>blame.openCurrentCommit());
+    /** The row of the Changes view a menu was opened on (a file row), or nothing. */
+    const changedFile = (value: unknown): { repositoryId: string; path: string } | undefined => {
+      const row = value as { kind?: unknown; repositoryId?: unknown; change?: { path?: unknown } } | undefined;
+      return row?.kind === 'file' && typeof row.repositoryId === 'string' && typeof row.change?.path === 'string' ? { repositoryId: row.repositoryId, path: row.change.path } : undefined;
+    };
     command('gitPro.fileHistory', async uri => {
-      const target = uri instanceof vscode.Uri ? uri : vscode.window.activeTextEditor?.document.uri;
+      const row = changedFile(uri), root = row ? registry.list().find(item => item.id === row.repositoryId)?.root : undefined;
+      if (row && !root) throw new Error('Repository is no longer open.');
+      const target = row ? vscode.Uri.file(path.join(root!, ...row.path.split('/'))) : uri instanceof vscode.Uri ? uri : vscode.window.activeTextEditor?.document.uri;
       if (!target || target.scheme !== 'file') throw new Error('Open a file in a repository.');
       const repo = await registry.resolveFile(target.fsPath); if (!repo) throw new Error('File is outside an open repository.');
       const relative = path.relative(repo.root, await canonicalFilePath(target.fsPath)).replace(/\\/g, '/'); await policy.authorizeFile(repo.root, relative);
@@ -197,7 +205,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       const selected = await vscode.window.showQuickPick(registry.list().map(repo => ({ label: redact(repo.root), id: repo.id })), { title: 'Git Pro: Select Repository' });
       if (selected) registry.select(selected.id);
     });
-    command('gitPro.openFile', async (id, relative) => {
+    command('gitPro.openFile', async (first, second) => {
+      const row = changedFile(first), id = row ? row.repositoryId : first, relative = row ? row.path : second;
       if (typeof id !== 'string' || typeof relative !== 'string') throw new Error('Select a changed file from Git Pro.');
       const repo = registry.list().find(item => item.id === id);
       if (!repo) throw new Error('Repository is no longer open.');
@@ -242,7 +251,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       repositories: () => registry.list().length, activeRepository: () => registry.active?.id,
       capabilities: () => adapter.capabilities(), activeSnapshot: () => registry.active ? store.get(registry.active.id) : undefined,
       historyPanelCount:()=>historyPanels.activePanelCount,
-      changesViewResolved:()=>changesPanel.isResolved,
+      changesViewResolved:()=>changesView.isResolved,
       viewItemCounts: () => ({ repositories: providers.repositories.getChildren().length,
         groups: providers.changes.getChildren().filter(node => node.kind === 'group').length,
         files: countFiles(providers.changes.getChildren()) })

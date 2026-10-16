@@ -28,7 +28,7 @@ function harness() {
 
 test('every menu command the manifest contributes for the panels and views is registered, and nothing else', () => {
   const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { contributes: { commands: { command: string }[] } };
-  const contributed = manifest.contributes.commands.map(item => item.command).filter(command => /^gitPro\.(?:menu|tools|repository)\./.test(command)).sort();
+  const contributed = manifest.contributes.commands.map(item => item.command).filter(command => /^gitPro\.(?:menu|tools|repository)\.|^gitPro\.(?:stage|unstage)Group$|^gitPro\.changes\.viewAs/.test(command)).sort();
   assert.deepEqual([...harness().handlers.keys()].sort(), contributed);
   assert.deepEqual(toolMenus.map(([name]) => `gitPro.tools.${name}`).sort(), contributed.filter(command => command.startsWith('gitPro.tools.')), 'the table of Repository Tools choices is the manifest');
 });
