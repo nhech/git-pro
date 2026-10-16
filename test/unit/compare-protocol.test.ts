@@ -30,6 +30,12 @@ test('Compare protocol rejects forged sessions, revisions, offsets, indexes, OID
   for (const value of rejected) assert.throws(() => parseCompareAction(value), Error, JSON.stringify(value));
 });
 
+test('Compare protocol takes up to 100 distinct file indexes and a flag for the viewed marks, and nothing else', () => {
+  assert.deepEqual(parseCompareAction({ type: 'viewed', session: s, revision: 2, indexes: [3, 1], viewed: true, path: 'x' }), { type: 'viewed', session: s, revision: 2, indexes: [3, 1], viewed: true });
+  for (const bad of [{ indexes: [], viewed: true }, { indexes: [1, 1], viewed: true }, { indexes: [-1], viewed: true }, { indexes: [1.5], viewed: true }, { indexes: Array.from({ length: 101 }, (_, index) => index), viewed: true }, { indexes: [1] }, { indexes: [1], viewed: 'yes' }, { indexes: '1', viewed: true }, { viewed: false }])
+    assert.throws(() => parseCompareAction({ type: 'viewed', session: s, revision: 1, ...bad }), /Unknown Compare action/, JSON.stringify(bad));
+});
+
 test('Compare protocol takes a bounded name fragment and a set of change types for the file filter, and nothing else', () => {
   assert.deepEqual(parseCompareAction({ type: 'filter', session: s, revision: 2, text: '  src/app  ', statuses: 'RA', path: '/etc' }), { type: 'filter', session: s, revision: 2, text: 'src/app', statuses: 'AR' }, 'trimmed, types sorted');
   assert.deepEqual(parseCompareAction({ type: 'filter', session: s, revision: 0, text: '', statuses: '' }), { type: 'filter', session: s, revision: 0, text: '', statuses: '' });

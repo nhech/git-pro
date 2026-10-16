@@ -120,7 +120,13 @@
           if (commit.equivalent) { const same = node('span', 'same-change', '≈'); same.title = 'Same change as a commit on the other side (a cherry-pick or a rebased copy)'; same.setAttribute('aria-hidden', 'true'); subject.append(same); }
           subject.append(node('span', 'subject-text', commit.subject));
           const when = node('span', 'commit-date', relative(commit.timestamp)); when.title = date.toLocaleString();
-          row.append(node('span', 'commit-hash', short(commit.oid)), subject, node('span', 'commit-author', commit.author), when);
+          // What the menu offers most often, one click away on hover and focus, as on a file row.
+          const inlineActions = node('span', 'row-actions'); inlineActions.setAttribute('aria-hidden', 'true');
+          for (const [type, label, icon] of [['copyRevision', 'Copy Revision Number', 'copy'], ['showInHistory', 'Show in History', 'history']]) {
+            const inline = button('icon-button', undefined); inline.tabIndex = -1; inline.title = label; inline.setAttribute('aria-label', label); inline.dataset.inlineAction = type; inline.disabled = busy; inline.append(glyph(icon));
+            inline.addEventListener('click', event => { event.stopPropagation(); act(type, { oid: commit.oid }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); inlineActions.append(inline);
+          }
+          row.append(node('span', 'commit-hash', short(commit.oid)), subject, node('span', 'commit-author', commit.author), when, inlineActions);
           const choose = () => { if (!current) act('selectCommit', { oid: commit.oid }); };
           tag(row, { webviewSection: 'commit', oid: commit.oid, commitShown: current });
           row.addEventListener('click', () => { rove(rows, row); choose(); });
@@ -187,9 +193,11 @@
     if (!event.shiftKey) anchor = index; markChosen();
   };
   // A row names the files a menu command acts on: its own, or the whole selection when it is part of it (the native menu only sees the clicked element).
+  // Viewed marks: the files this row stands for (the whole selection when it is part of it) and whether the comparison keeps marks at all (not in a single commit's files).
+  const viewedTargets = item => state.mode === 'worktree' && chosen.has(item.index) ? [...chosen] : [item.index];
   const tagFile = (row, item) => {
     const worktree = state.mode === 'worktree', picked = worktree && chosen.has(item.index) ? [...chosen] : [item.index];
-    tag(row, { webviewSection: 'file', index: item.index, indexes: picked.join(','), compareWorktree: worktree, fileOnlyInBranch: item.presence === 'branch' });
+    tag(row, { webviewSection: 'file', index: item.index, indexes: picked.join(','), compareWorktree: worktree, fileOnlyInBranch: item.presence === 'branch', viewedAvailable: state.files?.viewedCount !== undefined, fileViewed: Boolean(item.viewed) });
   };
   // Select All belongs to the list, as in the Explorer: every file of this page, up to the 100 Get from Branch takes at once (a branch comparison has nothing to select).
   const selectAll = () => {
@@ -216,14 +224,16 @@
     else if (event.key === 'ArrowLeft') { if (entry.dir && !collapsed.has(entry.dir)) { event.preventDefault(); activate(); return; } if (entry.parent) target = focusables.get(`dir:${entry.parent}`); }
     else if (event.key === 'Enter') { event.preventDefault(); activate(); return; }
     else if (event.key === ' ') { event.preventDefault(); if (entry.item && state.mode === 'worktree') pick(entry.item.index, { ctrlKey: true }); else activate(); return; }
+    else if ((event.key === 'v' || event.key === 'V') && !event.ctrlKey && !event.metaKey && !event.altKey && entry.item && state.files?.viewedCount !== undefined) { event.preventDefault(); act('viewed', { indexes: viewedTargets(entry.item), viewed: !entry.item.viewed }); return; }
     else return;
     event.preventDefault(); if (target) rove(treeRows, target);
   };
   const dirRow = entry => {
     const open = !collapsed.has(entry.dir), row = keyed(node('div', 'tree-row dir-row'), `dir:${entry.dir}`);
-    row.setAttribute('role', 'treeitem'); row.setAttribute('aria-level', '1'); row.setAttribute('aria-expanded', String(open)); row.setAttribute('aria-label', `${entry.dir}, ${count(entry.count, 'file')}`); row.tabIndex = -1; row.title = entry.dir;
+    row.setAttribute('role', 'treeitem'); row.setAttribute('aria-level', String(entry.level)); row.setAttribute('aria-expanded', String(open)); row.setAttribute('aria-label', `${entry.dir}, ${count(entry.count, 'file')}`); row.tabIndex = -1; row.title = entry.dir;
+    if (entry.level > 1) row.style.paddingLeft = `${12 + (entry.level - 1) * 16}px`;
     const twisty = glyph(open ? 'chevron-down' : 'chevron-right'); twisty.className += ' twisty';
-    row.append(twisty, glyph('folder'), node('span', 'dir-name', entry.dir), node('span', 'dir-count', String(entry.count)));
+    row.append(twisty, glyph('folder'), node('span', 'dir-name', entry.label ?? entry.dir), node('span', 'dir-count', String(entry.count)));
     const toggle = () => { if (collapsed.has(entry.dir)) collapsed.delete(entry.dir); else collapsed.add(entry.dir); lastTreeKey = row.dataset.focusKey; restoreKey = lastTreeKey; render(); };
     row.addEventListener('click', toggle);
     row.addEventListener('focus', () => { lastTreeKey = row.dataset.focusKey; remember(); });
@@ -232,22 +242,23 @@
   };
   const fileRow = entry => {
     const item = entry.item, worktree = state.mode === 'worktree', slash = item.path.lastIndexOf('/'), name = item.path.slice(slash + 1), dir = slash > 0 ? item.path.slice(0, slash) : '';
-    const row = keyed(node('div', `tree-row file-row level-${entry.level}`), `file:${item.index}`);
+    const row = keyed(node('div', `tree-row file-row level-${entry.level}${item.viewed ? ' viewed' : ''}`), `file:${item.index}`);
+    if (entry.level > 1) row.style.paddingLeft = `${12 + entry.level * 16}px`;
     row.dataset.status = item.status; row.dataset.index = String(item.index); if (item.presence) row.dataset.presence = item.presence;
     row.setAttribute('role', 'treeitem'); row.setAttribute('aria-level', String(entry.level)); row.tabIndex = -1; if (worktree) row.setAttribute('aria-selected', String(chosen.has(item.index)));
     const stats = item.binary ? 'Binary' : typeof item.added === 'number' ? `${item.added} added, ${item.removed} removed` : '';
-    const words = [item.path, statusWords[item.status] || item.status, presenceText(item), item.originalPath ? `renamed from ${item.originalPath}` : '', stats].filter(Boolean).join(', ');
+    const words = [item.path, statusWords[item.status] || item.status, presenceText(item), item.originalPath ? `renamed from ${item.originalPath}` : '', stats, item.viewed ? 'viewed' : ''].filter(Boolean).join(', ');
     row.setAttribute('aria-label', words); row.title = words;
-    const main = node('span', 'file-main'); main.append(node('span', 'file-name', name)); if (flat && dir) main.append(node('span', 'file-dir', dir)); if (item.originalPath) main.append(node('span', 'file-origin', `← ${item.originalPath}`)); row.append(main);
+    const main = node('span', 'file-main'); if (item.viewed) main.append(Object.assign(glyph('check'), { className: 'codicon codicon-check viewed-mark' })); main.append(node('span', 'file-name', name)); if (flat && dir) main.append(node('span', 'file-dir', dir)); if (item.originalPath) main.append(node('span', 'file-origin', `← ${item.originalPath}`)); row.append(main);
     const stat = node('span', 'file-stat');
     if (item.binary) stat.textContent = 'Binary'; else if (typeof item.added === 'number') { if (item.added || !item.removed) stat.append(node('span', 'stat-added', `+${item.added}`)); if (item.removed) stat.append(node('span', 'stat-removed', `−${item.removed}`)); }
     row.append(stat);
     // Inline actions as in native Source Control: shown on hover and focus, kept out of the tab order, each one also in the context menu.
     const actions = node('span', 'row-actions'); actions.setAttribute('aria-hidden', 'true');
-    for (const [type, label, icon] of [...(worktree ? [] : [['localDiff', 'Compare with Local', 'git-compare']]), ['openFile', 'Open File', 'go-to-file']]) {
+    for (const [type, label, icon] of [...(worktree ? [] : [['localDiff', 'Compare with Local', 'git-compare']]), ['openFile', 'Open File', 'go-to-file'], ...(state.files.viewedCount !== undefined ? [['viewed', item.viewed ? 'Mark as Not Viewed' : 'Mark as Viewed', item.viewed ? 'eye-closed' : 'eye']] : [])]) {
       if (type === 'openFile' && item.presence === 'branch') continue;
       const inline = button('icon-button', undefined); inline.tabIndex = -1; inline.title = label; inline.setAttribute('aria-label', label); inline.dataset.inlineAction = type; inline.disabled = busy; inline.append(glyph(icon));
-      inline.addEventListener('click', event => { event.stopPropagation(); act(type, { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
+      inline.addEventListener('click', event => { event.stopPropagation(); act(type, type === 'viewed' ? { indexes: viewedTargets(item), viewed: !item.viewed } : { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
     }
     row.append(actions);
     const letter = node('span', 'file-status', item.status); letter.setAttribute('aria-hidden', 'true'); row.append(letter);
@@ -300,14 +311,24 @@
     const entries = [];
     if (flat) for (const item of files.items) entries.push({ item, level: 1 });
     else {
-      // Directories first, compact (one row per directory path), then the files at the root, as the native SCM tree orders them.
-      const groups = new Map();
-      for (const item of files.items) { const slash = item.path.lastIndexOf('/'), dir = slash > 0 ? item.path.slice(0, slash) : ''; if (!groups.has(dir)) groups.set(dir, []); groups.get(dir).push(item); }
-      for (const dir of [...groups.keys()].filter(Boolean).sort((a, b) => a < b ? -1 : a > b ? 1 : 0)) {
-        entries.push({ dir, count: groups.get(dir).length });
-        if (!collapsed.has(dir)) for (const item of groups.get(dir)) entries.push({ item, level: 2, parent: dir });
+      // A tree of folders, each holding its folders first and then its files, as the native tree orders them. A chain of folders that hold nothing else reads as one row (src/main/java),
+      // as in the Explorer; a folder's files count includes everything below it.
+      const trunk = { dirs: new Map(), files: [] }, total = node => node.files.length + [...node.dirs.values()].reduce((sum, child) => sum + total(child), 0);
+      for (const item of files.items) {
+        const parts = item.path.split('/'); parts.pop(); let at = trunk;
+        for (const part of parts) { let next = at.dirs.get(part); if (!next) { next = { dirs: new Map(), files: [] }; at.dirs.set(part, next); } at = next; }
+        at.files.push(item);
       }
-      for (const item of groups.get('') || []) entries.push({ item, level: 1 });
+      const emit = (at, prefix, level, parent) => {
+        for (const name of [...at.dirs.keys()].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)) {
+          let child = at.dirs.get(name), label = name, dir = prefix ? `${prefix}/${name}` : name;
+          while (!child.files.length && child.dirs.size === 1) { const [next, deeper] = [...child.dirs][0]; label += `/${next}`; dir += `/${next}`; child = deeper; }
+          entries.push({ dir, label, count: total(child), level, parent });
+          if (!collapsed.has(dir)) emit(child, dir, level + 1, dir);
+        }
+        for (const item of at.files) entries.push({ item, level, parent });
+      };
+      emit(trunk, '', 1, undefined);
     }
     for (const entry of entries) { const row = entry.dir !== undefined ? dirRow(entry) : fileRow(entry); treeRows.push(row); tree.append(row); }
     const entry = treeRows.find(row => row.dataset.focusKey === lastTreeKey) || treeRows[0]; if (entry) entry.tabIndex = 0;
@@ -319,7 +340,7 @@
       next.addEventListener('click', () => { if (files.offset + 200 < files.total) act('filesPage', { offset: files.offset + 200 }); });
       pager.append(previous, next, node('span', 'caption', `Files ${(files.offset + 1).toLocaleString()}–${(files.offset + files.items.length).toLocaleString()} of ${files.total.toLocaleString()}`));
     }
-    footer.textContent = [count(files.total, 'file'), files.binary ? `${files.binary.toLocaleString()} binary not in All Changes` : '', files.total - files.binary > 300 ? 'All Changes opens the first 300' : ''].filter(Boolean).join(' · ');
+    footer.textContent = [count(files.total, 'file'), files.viewedCount !== undefined ? `${files.viewedCount.toLocaleString()} of ${(files.unfiltered ?? files.total).toLocaleString()} viewed` : '', files.binary ? `${files.binary.toLocaleString()} binary not in All Changes` : '', files.total - files.binary > 300 ? 'All Changes opens the first 300' : ''].filter(Boolean).join(' · ');
     if (worktree) { worktreeBar.hidden = false; markChosen(); }
   };
   const renderToolbar = () => {

@@ -790,6 +790,16 @@
         "title": "%command.gitPro.changes.viewAsList.title%",
         "category": "%command.category%",
         "icon": "$(list-flat)"
+      },
+      {
+        "command": "gitPro.menu.compare.markViewed",
+        "title": "%command.gitPro.menu.compare.markViewed.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.compare.unmarkViewed",
+        "title": "%command.gitPro.menu.compare.unmarkViewed.title%",
+        "category": "%command.category%"
       }
     ],
     "viewsContainers": {
@@ -1805,6 +1815,14 @@
         {
           "command": "gitPro.changes.viewAsList",
           "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.markViewed",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.compare.unmarkViewed",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -1977,6 +1995,16 @@
           "command": "gitPro.menu.rebasePlanner.moveDown",
           "when": "webviewId == 'gitPro.rebasePlanner' && webviewSection == 'step' && !stepLast",
           "group": "2_move@2"
+        },
+        {
+          "command": "gitPro.menu.compare.markViewed",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file' && viewedAvailable && !fileViewed",
+          "group": "1_review@1"
+        },
+        {
+          "command": "gitPro.menu.compare.unmarkViewed",
+          "when": "webviewId == 'gitPro.compare' && webviewSection == 'file' && viewedAvailable && fileViewed",
+          "group": "1_review@2"
         }
       ]
     },

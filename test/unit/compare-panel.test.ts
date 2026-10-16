@@ -32,7 +32,7 @@ class FakePanel {
   get state() { return this.last('state') as Message & { revision: number; files: Message & { items: Message[] }; sides: { leftOnly: Message & { commits: Message[] }; rightOnly: Message & { commits: Message[] } } }; }
 }
 
-async function harness(options: { files?: unknown; worktree?: unknown; head?: string; equivalent?: ReadonlySet<string>; skipped?: boolean } = {}) {
+async function harness(options: { files?: unknown; worktree?: unknown; head?: string; equivalent?: ReadonlySet<string>; skipped?: boolean; workspaceState?: unknown } = {}) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'git-pro-compare-panel-')));
   await mkdir(path.join(root, 'src')); await writeFile(path.join(root, 'src', 'app.ts'), 'working\n'); await writeFile(path.join(root, 'README.md'), 'readme\n');
   const panels: FakePanel[] = [], executed: unknown[][] = [], clipboard: string[] = [], histories: unknown[][] = [], calls: string[] = [];
@@ -76,7 +76,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
   const blobs = loadWithVscode(path.resolve(__dirname, '../../src/documents/blob-provider.js'), vscode);
   const Panels = exports.ComparePanels as new (context: unknown, deps: unknown, blobs: unknown) => { openRefs(id: string, left: string, right: string): Promise<void>; openWorktree(id: string, ref: string, folder?: string): Promise<void>; getFromBranch: unknown; activePanelCount: number; dispose(): void };
   const Blobs = blobs.BlobProvider as new (history: unknown) => unknown;
-  const surface = new Panels({ extensionUri: uri('file', '/extension') }, deps, new Blobs(history));
+  const surface = new Panels({ extensionUri: uri('file', '/extension'), ...(options.workspaceState ? { workspaceState: options.workspaceState } : {}) }, deps, new Blobs(history));
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
   return { root, panels, executed, clipboard, histories, calls, tabs, settings, surface, refs, menus, history: history as Record<string, unknown>, invalidate: () => invalidate(), settle, files,
     /** registry.sync without this repository, and with it again. */
@@ -488,4 +488,46 @@ test('Commits with the same change on the other side are marked in the lists, an
   } finally { await skipped.cleanup(); }
   const plain = await harness();
   try { await plain.surface.openRefs('repo', 'feature', 'main'); const state = plain.panels[0]!.state as unknown as Record<string, unknown>; assert.equal('equivalentCommits' in state, false); assert.equal('equivalentSkipped' in state, false); } finally { await plain.cleanup(); }
+});
+
+test('Viewed marks are kept with the comparison: marking changes no revision, a tab opened again finds them, and a single commit has none', async () => {
+  const stored = new Map<string, unknown>(), workspaceState = { get: (key: string) => stored.get(key), update: async (key: string, value: unknown) => { stored.set(key, JSON.parse(JSON.stringify(value))); } };
+  const h = await harness({ workspaceState });
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
+    type State = { revision: number; files: { viewedCount?: number; items: { index: number; viewed?: boolean }[] } };
+    const view = () => panel.state as unknown as State, viewed = () => view().files.items.filter(item => item.viewed).map(item => item.index);
+    assert.equal(view().files.viewedCount, 0); assert.deepEqual(viewed(), []);
+    const sentBefore = panel.sent.filter(message => message.type === 'state').length;
+    await panel.send({ type: 'viewed', revision, indexes: [0, 2], viewed: true });
+    assert.deepEqual(viewed(), [0, 2]); assert.equal(view().files.viewedCount, 2); assert.equal(view().revision, revision, 'only how the list reads changed: the revision, and with it a selection, stay');
+    assert.equal(panel.sent.filter(message => message.type === 'state').length, sentBefore + 1);
+    assert.deepEqual((stored.get('gitPro.compare.viewed') as Record<string, { files: string[] }>)[Object.keys(stored.get('gitPro.compare.viewed') as object)[0]!]!.files, ['src/app.ts', 'old.md\0README.md'], 'a rename is marked by both its paths');
+    await panel.send({ type: 'viewed', revision, indexes: [0], viewed: false }); assert.deepEqual(viewed(), [2]); assert.equal(view().files.viewedCount, 1);
+    await panel.send({ type: 'viewed', revision, indexes: [9], viewed: true }); assert.match(String(panel.last('error')?.message), /current comparison/, 'only files of the captured list');
+    await panel.send({ type: 'viewed', revision: revision + 3, indexes: [1], viewed: true }); assert.match(String(panel.last('error')?.message), /changed/);
+    // The same comparison in a new tab finds the marks; another comparison does not.
+    panel.dispose(); await h.surface.openRefs('repo', 'feature', 'main'); const again = h.panels[1]!;
+    assert.deepEqual(again.state.files.items.filter(item => (item as { viewed?: boolean }).viewed).map(item => item.index), [2]);
+    await h.surface.openRefs('repo', 'main', 'feature'); const reversed = h.panels[2]!; assert.equal((reversed.state.files as unknown as { viewedCount: number }).viewedCount, 0, 'the other direction is another comparison');
+    // One commit's own files are not the comparison's: no marks there, and none can be made.
+    await again.send({ type: 'selectCommit', revision: again.state.revision, oid: again.state.sides.leftOnly.commits[0]!.oid });
+    assert.equal((again.state.files as unknown as { viewedCount?: number }).viewedCount, undefined);
+    await again.send({ type: 'viewed', revision: again.state.revision, indexes: [0], viewed: true }); assert.match(String(again.last('error')?.message), /whole comparison/);
+  } finally { await h.cleanup(); }
+  const nowhere = await harness();
+  try { await nowhere.surface.openRefs('repo', 'feature', 'main'); const panel = nowhere.panels[0]!; await panel.send({ type: 'viewed', revision: panel.state.revision, indexes: [0], viewed: true }); assert.equal((panel.state.files as unknown as { viewedCount: number }).viewedCount, 1, 'without a workspace state the marks last as long as the tab'); }
+  finally { await nowhere.cleanup(); }
+});
+
+test('Mark as Viewed from the native menu is the tab\'s own viewed request for the row or its selection', async () => {
+  const h = await harness();
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, state = panel.state;
+    const argument = (extra: Record<string, unknown>) => ({ webview: 'gitPro.compare', webviewSection: 'file', preventDefaultContextMenuItems: true, session: panel.session, revision: state.revision, index: 0, indexes: '0,2', ...extra });
+    const run = async (action: string, extra: Record<string, unknown> = {}) => { const { panel: target, context } = h.menus.resolve(argument(extra), ['gitPro.compare'], 'file'); await target.handle!(action, context); };
+    await run('markViewed'); assert.deepEqual(panel.state.files.items.filter(item => (item as { viewed?: boolean }).viewed).map(item => item.index), [0, 2]);
+    await run('unmarkViewed', { indexes: '2' }); assert.deepEqual(panel.state.files.items.filter(item => (item as { viewed?: boolean }).viewed).map(item => item.index), [0]);
+    const errors = panel.sent.filter(message => message.type === 'error').length; await run('markViewed', { indexes: '0,x' }); assert.equal(panel.sent.filter(message => message.type === 'error').length, errors + 1, 'a malformed list is refused');
+  } finally { await h.cleanup(); }
 });

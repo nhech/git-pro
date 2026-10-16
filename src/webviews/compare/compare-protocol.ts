@@ -9,6 +9,8 @@ export type CompareAction = { type: 'ready'; session: string } | { type: 'refres
   { type: 'filesPage'; session: string; revision: number; offset: number } |
   /** Which changed files the list shows: a name fragment and the change types (any of A, M, D, R) to keep; empty means all. */
   { type: 'filter'; session: string; revision: number; text: string; statuses: string } |
+  /** Marks files of the comparison as viewed or not viewed (by index into the captured list); a presentation choice, kept with the comparison. */
+  { type: 'viewed'; session: string; revision: number; indexes: number[]; viewed: boolean } |
   { type: 'diff' | 'localDiff' | 'openFile' | 'copyPath'; session: string; revision: number; index: number } |
   { type: 'getFromBranch'; session: string; revision: number; indexes: number[] };
 const index = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) < 1_000_000;
@@ -32,6 +34,9 @@ export function parseCompareAction(value: unknown): CompareAction {
       break;
     case 'filesMode':
       if (item.mode === 'fork' || item.mode === 'tips') return { type: 'filesMode', session, revision, mode: item.mode };
+      break;
+    case 'viewed':
+      if (Array.isArray(item.indexes) && item.indexes.length >= 1 && item.indexes.length <= 100 && item.indexes.every(index) && new Set(item.indexes).size === item.indexes.length && typeof item.viewed === 'boolean') return { type: 'viewed', session, revision, indexes: [...item.indexes], viewed: item.viewed };
       break;
     case 'filter':
       if (typeof item.text === 'string' && item.text.length <= 200 && typeof item.statuses === 'string' && /^[AMDR]{0,4}$/.test(item.statuses) && new Set(item.statuses).size === item.statuses.length && ![...item.text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) return { type: 'filter', session, revision, text: item.text.trim(), statuses: [...item.statuses].sort().join('') };

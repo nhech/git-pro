@@ -93,8 +93,8 @@ test('Compare files show a directory tree with status, stats and inline actions,
   assert.equal(rows[2]!.find(node => node.className === 'file-origin')?.textContent, '← src/old.ts'); assert.equal(rows[3]!.find(node => node.className === 'file-stat')?.textContent, 'Binary');
   app.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 4, index: 0, session: 'session-1' });
   app.find(node => node.dataset.inlineAction === 'localDiff')!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'localDiff', revision: 4, index: 0, session: 'session-1' });
-  assert.deepEqual(context(app), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 0, indexes: '0', compareWorktree: false, fileOnlyInBranch: false });
-  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 2, indexes: '2', compareWorktree: false, fileOnlyInBranch: false });
+  assert.deepEqual(context(app), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 0, indexes: '0', compareWorktree: false, fileOnlyInBranch: false, viewedAvailable: false, fileViewed: false });
+  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 2, indexes: '2', compareWorktree: false, fileOnlyInBranch: false, viewedAvailable: false, fileViewed: false });
   app.fire('contextmenu'); assert.equal(h.body.children.length, 0, 'no menu of ours is drawn');
   rows[0]!.focus(); rows[0]!.key('ArrowLeft'); assert.equal(tree.children.length, 2, 'Collapsing a directory hides its files'); assert.equal(Element.active?.dataset.focusKey, 'dir:src', 'Focus stays on the collapsed directory');
   tree.children[0]!.key('ArrowRight'); assert.equal(tree.children.length, 4); tree.children[0]!.key('ArrowDown'); assert.equal(Element.active?.dataset.focusKey, 'file:0'); Element.active!.key('ArrowLeft'); assert.equal(Element.active?.dataset.focusKey, 'dir:src');
@@ -177,7 +177,7 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
   assert.equal(h.get('get-from-branch').textContent, 'Get 2 Files from feature'); assert.equal(h.get('get-from-branch').disabled, false);
   h.get('get-from-branch').fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'getFromBranch', revision: 2, indexes: [0, 1], session: 'session-1' });
   rows[2]!.fire('click', { shiftKey: true }); assert.equal(h.get('selection-hint').textContent, '2 files selected', 'Shift-click selects the range from the anchor');
-  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 2, webviewSection: 'file', index: 2, indexes: '1,2', compareWorktree: true, fileOnlyInBranch: false }, 'a row of the selection names the whole selection');
+  assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 2, webviewSection: 'file', index: 2, indexes: '1,2', compareWorktree: true, fileOnlyInBranch: false, viewedAvailable: false, fileViewed: false }, 'a row of the selection names the whole selection');
   assert.equal(context(rows[1]!).fileOnlyInBranch, true, 'a file only in the branch has no local file to open'); assert.equal(context(rows[0]!).indexes, '0', 'a row outside the selection names only itself');
   const before = h.sent.length; rows[2]!.fire('contextmenu'); assert.equal(h.sent.length, before, 'a right-click opens no diff'); assert.equal(h.get('selection-hint').textContent, '2 files selected', 'a right-click inside the selection keeps it');
   rows[0]!.fire('contextmenu'); assert.equal(h.get('selection-hint').textContent, '1 file selected', 'as in the Explorer, a right-click outside the selection selects just that row');
@@ -291,4 +291,57 @@ test('A commit with the same change on the other side carries a mark, and the su
   assert.match(h.get('summary').textContent, / · ≈ 3 commits with the same change on the other side$/);
   h.post(commitsState({ revision: 5, equivalentSkipped: true })); assert.match(h.get('summary').textContent, / · Same-change commits not checked$/);
   h.post(commitsState({ revision: 6 })); assert.doesNotMatch(h.get('summary').textContent, /same change|Same-change/i);
+});
+
+test('Folders nest as a tree and a chain of folders that hold nothing else reads as one row', () => {
+  const h = harness();
+  const items = ['src/main/java/app/A.java', 'src/main/java/app/B.java', 'src/main/resources/x.txt', 'src/test/T.java', 'docs/deep/er/readme.md', 'top.txt'].map((path, index) => ({ index, status: 'M', path, added: 1, removed: 0, binary: false }));
+  h.post(commitsState({ files: { scope: 'fork', from: oid(3), to: oid(1), total: items.length, offset: 0, omitted: false, binary: 0, items } }));
+  const rows = h.get('file-rows').children, shown = () => h.get('file-rows').children.map(row => [row.dataset.focusKey, row.getAttribute('aria-level'), row.find(node => node.className === 'dir-name' || node.className === 'file-name')?.textContent]);
+  assert.deepEqual(shown(), [['dir:docs/deep/er', '1', 'docs/deep/er'], ['file:4', '2', 'readme.md'], ['dir:src', '1', 'src'], ['dir:src/main', '2', 'main'], ['dir:src/main/java/app', '3', 'java/app'], ['file:0', '4', 'A.java'], ['file:1', '4', 'B.java'],
+    ['dir:src/main/resources', '3', 'resources'], ['file:2', '4', 'x.txt'], ['dir:src/test', '2', 'test'], ['file:3', '3', 'T.java'], ['file:5', '1', 'top.txt']], 'folders first, then files; src/main/java/app is two folders deep under main, docs/deep/er is one row');
+  assert.equal(rows[0]!.find(node => node.className === 'dir-count')?.textContent, '1'); assert.equal(rows[2]!.find(node => node.className === 'dir-count')?.textContent, '4', 'a folder counts everything below it');
+  assert.equal(rows[3]!.style.paddingLeft, '28px'); assert.equal(rows[5]!.style.paddingLeft, '76px'); assert.equal(rows[0]!.style.paddingLeft, undefined, 'a folder at the top has the default indent');
+  // Collapsing a folder hides its whole subtree and nothing else; Left on a file goes to its folder row.
+  rows[2]!.key('ArrowLeft'); assert.deepEqual(shown().map(row => row[0]), ['dir:docs/deep/er', 'file:4', 'dir:src', 'file:5']);
+  h.get('file-rows').children[2]!.key('ArrowRight'); assert.equal(shown().length, 12);
+  const file = h.get('file-rows').children.find(row => row.dataset.focusKey === 'file:0')!; file.focus(); file.key('ArrowLeft'); assert.equal(Element.active?.dataset.focusKey, 'dir:src/main/java/app', 'Left goes to the folder row it is under');
+  h.get('layout').fire('click'); assert.deepEqual(h.get('file-rows').children.map(row => row.dataset.focusKey), ['file:0', 'file:1', 'file:2', 'file:3', 'file:4', 'file:5'], 'the list view has no folders');
+});
+
+test('Files can be marked as viewed from the row, the keyboard and the menu, and the marks are counted', () => {
+  const h = harness({ flat: true });
+  const items = [0, 1, 2].map(index => ({ index, status: 'M', path: `f${index}.ts`, added: 1, removed: 0, binary: false, ...(index === 1 ? { viewed: true } : {}) }));
+  const files = (extra: Record<string, unknown> = {}) => ({ scope: 'fork', from: oid(3), to: oid(1), total: 3, offset: 0, omitted: false, binary: 0, items, viewedCount: 1, ...extra });
+  h.post(commitsState({ files: files() }));
+  const rows = h.get('file-rows').children;
+  assert.equal(rows[1]!.className.includes('viewed'), true); assert.equal(rows[0]!.className.includes('viewed'), false); assert.ok(rows[1]!.find(node => node.className.includes('viewed-mark'))); assert.match(rows[1]!.getAttribute('aria-label')!, /, viewed$/);
+  assert.equal(h.get('files-footer').textContent, '3 files · 1 of 3 viewed');
+  const inline = (row: (typeof rows)[number]) => row.find(node => node.dataset.inlineAction === 'viewed')!;
+  assert.equal(inline(rows[0]!).getAttribute('aria-label'), 'Mark as Viewed'); assert.equal(inline(rows[1]!).getAttribute('aria-label'), 'Mark as Not Viewed');
+  inline(rows[0]!).fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'viewed', revision: 4, indexes: [0], viewed: true, session: 'session-1' });
+  inline(rows[1]!).fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'viewed', revision: 4, indexes: [1], viewed: false, session: 'session-1' });
+  rows[2]!.focus(); rows[2]!.fire('keydown', { key: 'v' }); assert.deepEqual(h.sent.at(-1), { type: 'viewed', revision: 4, indexes: [2], viewed: true, session: 'session-1' });
+  const count = h.sent.length; rows[2]!.fire('keydown', { key: 'v', ctrlKey: true }); assert.equal(h.sent.length, count, 'Ctrl+V is paste, not a mark');
+  assert.deepEqual(JSON.parse(rows[1]!.getAttribute('data-vscode-context')!).fileViewed, true); assert.deepEqual(JSON.parse(rows[0]!.getAttribute('data-vscode-context')!).viewedAvailable, true);
+  // A commit's own files carry no marks: the comparison does.
+  h.post(commitsState({ revision: 5, files: { scope: 'commit', commit: { oid: oid(11), subject: 'Commit 11' }, from: oid(9), to: oid(11), total: 1, offset: 0, omitted: false, binary: 0, items: [{ index: 0, status: 'M', path: 'x.ts', added: 1, removed: 0, binary: false }] } }));
+  assert.equal(h.get('file-rows').children[0]!.find(node => node.dataset.inlineAction === 'viewed'), undefined); assert.doesNotMatch(h.get('files-footer').textContent, /viewed/);
+  assert.equal(JSON.parse(h.get('file-rows').children[0]!.getAttribute('data-vscode-context')!).viewedAvailable, false);
+  // With the selection of a working-tree comparison, the mark applies to all of it.
+  const w = harness({ flat: true });
+  w.post({ type: 'state', revision: 2, mode: 'worktree', left: { name: 'feature', oid: oid(1), current: false }, swapped: false, head: 'main', filesMode: 'fork', moved: [], loading: false,
+    files: { scope: 'worktree', from: oid(1), total: 2, offset: 0, omitted: false, binary: 0, viewedCount: 0, items: [0, 1].map(index => ({ index, status: 'M', path: `w${index}.ts`, added: 1, removed: 0, binary: false, presence: 'both' })) } });
+  const wr = w.get('file-rows').children; wr[0]!.fire('click'); wr[1]!.fire('click', { ctrlKey: true });
+  wr[0]!.find(node => node.dataset.inlineAction === 'viewed')!.fire('click'); assert.deepEqual(w.sent.at(-1), { type: 'viewed', revision: 2, indexes: [0, 1], viewed: true, session: 'session-1' });
+});
+
+test('A commit row has Copy Revision Number and Show in History one click away', () => {
+  const h = harness(); h.post(commitsState());
+  const row = h.get('commits').children[0]!.find(node => node.className === 'commit-rows')!.children[2]!;
+  const copy = row.find(node => node.dataset.inlineAction === 'copyRevision')!, history = row.find(node => node.dataset.inlineAction === 'showInHistory')!;
+  assert.equal(copy.getAttribute('aria-label'), 'Copy Revision Number'); assert.equal(copy.tabIndex, -1);
+  copy.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'copyRevision', revision: 4, oid: oid(12), session: 'session-1' });
+  history.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'showInHistory', revision: 4, oid: oid(12), session: 'session-1' });
+  assert.equal(h.sent.some(message => message.type === 'selectCommit'), false, 'a button on the row does not also select it');
 });

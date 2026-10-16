@@ -195,7 +195,8 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(
 .dir-row .codicon-folder{margin:0 6px 0 2px;color:var(--gp-icon-fg)}
 .dir-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .dir-count{flex:none;margin-left:8px;font-size:11px;color:var(--gp-muted);font-variant-numeric:tabular-nums}
-.file-row.level-2{padding-left:44px}
+.file-row.viewed :is(.file-name,.file-dir,.file-origin){opacity:.6}
+.viewed-mark{flex:none;margin-right:4px;color:var(--gp-st-added)}
 .file-main{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:6px;overflow:hidden}
 .file-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--gp-state,var(--gp-fg))}
 .file-dir,.file-origin{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--gp-muted)}
@@ -216,7 +217,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(
 [data-presence=both]{--gp-presence:var(--gp-st-modified)}
 .file-row[data-presence]{--gp-state:var(--gp-presence)}
 .row-actions{display:none;align-items:center;flex:none;margin-left:4px}
-.tree-row:hover .row-actions,.tree-row:focus .row-actions,.tree-row:focus-within .row-actions,.tree-row[aria-selected=true] .row-actions{display:flex}
+.tree-row:hover .row-actions,.tree-row:focus .row-actions,.tree-row:focus-within .row-actions,.tree-row[aria-selected=true] .row-actions,.commit-row:hover .row-actions,.commit-row:focus .row-actions,.commit-row:focus-within .row-actions,.commit-row[aria-selected=true] .row-actions{display:flex}
 .row-actions .icon-button{width:20px;height:20px;padding:2px}
 
 /* Row states: theme list colours only */

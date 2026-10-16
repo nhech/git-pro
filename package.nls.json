@@ -171,5 +171,7 @@
   "command.gitPro.stageGroup.title": "Stage All Changes",
   "command.gitPro.unstageGroup.title": "Unstage All Changes",
   "command.gitPro.changes.viewAsTree.title": "View as Tree",
-  "command.gitPro.changes.viewAsList.title": "View as List"
+  "command.gitPro.changes.viewAsList.title": "View as List",
+  "command.gitPro.menu.compare.markViewed.title": "Mark as Viewed",
+  "command.gitPro.menu.compare.unmarkViewed.title": "Mark as Not Viewed"
 }

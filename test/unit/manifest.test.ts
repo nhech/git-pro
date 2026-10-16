@@ -66,7 +66,7 @@ test('conflict and compare contributions use stable menus, owned context keys, l
   const owned=new Set(['gitPro.hasRepositories','gitPro.hasConflicts','gitPro.conflictResources','gitPro.operation','gitPro.changes.groupBy']);
   const builtIn=new Set(['view','viewItem','resource','resourceScheme','isMergeEditor','mergeEditorResultUri','listMultiSelection','listDoubleSelection','explorerResourceIsFolder','webviewId','webviewSection',
     // Plain values a panel puts on its elements (data-vscode-context) for its own menu items to read.
-    'commitShown','compareWorktree','fileOnlyInBranch','conflictUnresolved','conflictFile','conflictMarkable','stepAction','stepFirst','stepLast']);
+    'commitShown','compareWorktree','fileOnlyInBranch','viewedAvailable','fileViewed','conflictUnresolved','conflictFile','conflictMarkable','stepAction','stepFirst','stepLast']);
   for(const [menu,items] of Object.entries(menus))for(const item of items){
     if(item.when===undefined)continue;const seen=new Set<string>();when(item.when,{},seen);
     for(const name of seen)assert.ok(owned.has(name)||builtIn.has(name),`${menu} ${item.command} reads unknown context key ${name}`);

@@ -12,6 +12,7 @@ import { redact } from '../../security/redaction';
 import { historyPath } from '../../git/history/history-builders';
 import { LinkOutsideError, refuseGitMetadata } from '../../security/paths';
 import type { MenuContext } from '../menu-context';
+import { ViewedStore, viewedId } from './viewed-store';
 
 /** What the Compare tab reads from the feature dependencies; a narrow type keeps the panel testable with stand-ins. */
 export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools' | 'surfaces'>;
@@ -22,6 +23,8 @@ export type GetFromBranch = (request: GetFromBranchRequest) => Promise<boolean>;
 export type ChangesResource = readonly [vscode.Uri, vscode.Uri | undefined, vscode.Uri | undefined];
 
 const FILE_PAGE = 200, SIDE_PAGE = 25, ALL_CHANGES_LIMIT = 300;
+/** The indexes a menu names, as the string the clicked row carried; anything else is no list at all and fails the way a forged message does. */
+const indexList = (value: unknown): number[] | undefined => typeof value === 'string' && /^\d{1,7}(?:,\d{1,7}){0,99}$/.test(value) ? value.split(',').map(Number) : undefined;
 const isOid = (value: string) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 const short = (oid: string | undefined) => oid ? oid.slice(0, 8) : 'Empty';
 const failure = (error: unknown) => redact(error instanceof Error ? error.message : String(error));
@@ -66,6 +69,8 @@ class ComparePanel {
   private gone: readonly string[] = []; private expired = false;
   private refs = new Map<string, string[]>();
   private filesMode: CompareFilesMode;
+  /** Files marked as viewed in this comparison, loaded from the workspace state under the comparison's own key (its two commits and folder). */
+  private viewed = new Set<string>(); private viewedFor = '';
   /** Which changed files the list shows (a name fragment and change types); the captured list itself never changes, so every index still names the same file. */
   private filter = { text: '', statuses: '' };
   private readonly menu: { dispose(): void } | undefined;
@@ -114,17 +119,17 @@ class ComparePanel {
     const commit = (value: HistoryCommit) => ({ oid: value.oid, subject: redact(value.subject.slice(0, 500)), author: redact(value.author.slice(0, 200)), timestamp: value.timestamp, refs: (this.refs.get(value.oid) ?? []).map(name => redact(name.slice(0, 200))), ...(loaded.equivalent?.has(value.oid) ? { equivalent: true } : {}) });
     const page = (value: SideCommits) => ({ count: value.count, offset: value.offset, commits: value.commits.map(commit) });
     const files = loaded.view.files, worktree = files.scope === 'worktree';
-    const shown = this.visible(files);
+    const shown = this.visible(files), marked = files.scope === 'commit' ? undefined : this.marks();
     const items = shown.slice(loaded.offset, loaded.offset + FILE_PAGE).map(({ file, index }) => {
       const stat = statFor(files, file), letter = file.status.charAt(0);
-      return { index, status: letter, path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
+      return { index, status: letter, ...(marked?.has(viewedId(file)) ? { viewed: true } : {}), path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
         ...(worktree ? { presence: letter === 'A' ? 'worktree' : letter === 'D' ? 'branch' : 'both' } : {}) };
     });
     return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple, ...(loaded.fork.shallow ? { shallow: true } : {}) } } : {}),
       ...(loaded.leftOnly && loaded.rightOnly ? { sides: { leftOnly: page(loaded.leftOnly), rightOnly: page(loaded.rightOnly) } } : {}),
       ...(loaded.equivalent?.size ? { equivalentCommits: loaded.equivalent.size } : {}), ...(loaded.equivalentSkipped ? { equivalentSkipped: true } : {}),
       files: { scope: files.scope, ...(loaded.view.commit ? { commit: { oid: loaded.view.commit.oid, subject: redact(loaded.view.commit.subject.slice(0, 500)) } } : {}), ...(files.from ? { from: files.from } : {}), ...(files.to ? { to: files.to } : {}),
-        total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
+        total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), ...(marked ? { viewedCount: files.files.filter(file => marked.has(viewedId(file))).length } : {}), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
   }
   /** One request at a time per tab. A task that returns false changed nothing the webview shows, so the revision stays and no state is posted. */
   private async run(task: (signal: AbortSignal) => Promise<boolean>): Promise<void> {
@@ -150,7 +155,8 @@ class ComparePanel {
       case 'showFiles': return this.receive({ ...base, type: 'selectCommit', oid });
       case 'showInHistory': return this.receive({ ...base, type: 'showInHistory', oid });
       case 'diff': case 'localDiff': case 'openFile': case 'copyPath': return this.receive({ ...base, type: action, index });
-      case 'getFromBranch': return this.receive({ ...base, type: 'getFromBranch', indexes: typeof indexes === 'string' && /^\d{1,7}(?:,\d{1,7}){0,99}$/.test(indexes) ? indexes.split(',').map(Number) : undefined });
+      case 'getFromBranch': return this.receive({ ...base, type: 'getFromBranch', indexes: indexList(indexes) });
+      case 'markViewed': case 'unmarkViewed': return this.receive({ ...base, type: 'viewed', indexes: indexList(indexes), viewed: action === 'markViewed' });
     }
     throw new Error('Unknown Compare menu action.');
   }
@@ -199,6 +205,14 @@ class ComparePanel {
         const files = await history.comparisonFiles(id, this.left.oid, this.right.oid, action.mode, signal, loaded.fork); if (this.disposed) return false;
         this.filesMode = action.mode; this.loaded = { ...loaded, branchFiles: files, view: { files }, offset: 0 }; return true;
       }
+      case 'viewed': {
+        if (loaded.view.files.scope === 'commit') throw new Error('Viewed marks belong to the whole comparison, not to one commit.');
+        const marks = this.marks();
+        for (const index of action.indexes) { const id = viewedId(this.file(loaded, index)); if (action.viewed) marks.add(id); else marks.delete(id); }
+        this.owner.viewed.save(this.viewedKey(), marks);
+        // Only how the list reads changes: the same revision goes out, so a selection made for Get from Branch is kept.
+        await this.post(this.state()); return false;
+      }
       case 'filter': this.filter = { text: action.text, statuses: action.statuses }; this.loaded = { ...loaded, offset: 0 }; return true;
       case 'filesPage': {
         const total = this.visible(loaded.view.files).length;
@@ -216,6 +230,8 @@ class ComparePanel {
       }
     }
   }
+  private viewedKey(): string { return JSON.stringify([this.root, this.mode, this.left.oid, this.right?.oid ?? null, this.folder ?? null]); }
+  private marks(): Set<string> { const key = this.viewedKey(); if (key !== this.viewedFor) { this.viewedFor = key; this.viewed = this.owner.viewed.load(key); } return this.viewed; }
   /** The files the list shows, each with its index in the captured list: actions name that index, never a position in the filtered list. */
   private visible(files: CompareFiles): { file: ChangedFile; index: number }[] {
     const { text, statuses } = this.filter, needle = text.toLowerCase(), all = files.files.map((file, index) => ({ file, index }));
@@ -378,7 +394,10 @@ export class ComparePanels implements CompareSurface, vscode.Disposable {
   private readonly subscription: { dispose(): void };
   /** Get from Branch for working-tree mode; registerCompare (WP5) sets it. */
   getFromBranch: GetFromBranch | undefined;
-  constructor(readonly context: Pick<vscode.ExtensionContext, 'extensionUri'>, readonly deps: CompareDeps, readonly blobs: BlobProvider, private readonly owned: readonly { dispose(): void }[] = []) {
+  /** The marks of viewed files, kept in the workspace state when there is one. */
+  readonly viewed: ViewedStore;
+  constructor(readonly context: Pick<vscode.ExtensionContext, 'extensionUri'> & Partial<Pick<vscode.ExtensionContext, 'workspaceState'>>, readonly deps: CompareDeps, readonly blobs: BlobProvider, private readonly owned: readonly { dispose(): void }[] = []) {
+    this.viewed = new ViewedStore(context.workspaceState);
     this.subscription = deps.registry.onDidInvalidate(() => { for (const panel of this.live) panel.schedule(); });
   }
   get activePanelCount(): number { return this.live.size; }
