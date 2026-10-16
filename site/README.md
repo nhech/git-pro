@@ -6,7 +6,7 @@ Static source for <https://git-pro.longtd.me>. No framework, no npm dependencies
 |---|---|
 | `site/index.html` | The single landing page. Uses the `{{MARKETPLACE_URL}}`, `{{VERSION}}`, `{{SETTINGS_COUNT}}`, `{{RELEASE_DATE}}`, `{{RELEASE_DATE_ISO}}`, `{{GIT_MINIMUM}}` and `{{VSCODE_MINIMUM}}` placeholders. |
 | `site/compare/index.html` | The comparison page at `/compare/`: a dated, sourced table against VS Code Source Control, GitLens and Git Graph. Its "Last checked" date and the versions it names are written by hand; re-check every cell against the linked sources before changing them. |
-| `site/img/` | The 1080 and 1600 pixel JPEG sizes of the three screenshots, for `srcset`. Regenerate with `powershell -ExecutionPolicy Bypass -File scripts/make-site-images.ps1` when a screenshot in `docs/images/` changes, and commit the result. |
+| `site/img/` | The 1080 and 1600 pixel JPEG sizes of the screenshots, for `srcset`. Written together with the originals in `docs/images/` by `npm run screenshots` (see `CONTRIBUTING.md`); commit them both. |
 | `site/404.html` | Not-found page. Uses root-relative URLs because nginx serves it for missing paths at any depth. |
 | `site/deploy/` | Production origin: `Dockerfile`, `nginx.conf` and `compose.yml` for the nginx container behind the Cloudflare Tunnel. Source-only, never copied into `site-dist/`. |
 | `site/styles.css` | Design tokens (dark for every visitor by default; light only after choosing it with the toggle, which is stored), layout and motion. |
@@ -18,7 +18,7 @@ Static source for <https://git-pro.longtd.me>. No framework, no npm dependencies
 `scripts/build-site.cjs` writes `site-dist/` (ignored by Git and excluded from the VSIX):
 
 - copies `site/` except `site/og/`, `site/deploy/` and this README, replacing the placeholders;
-- copies `docs/images/{changes-and-commit,file-actions,history}.jpg` to `images/`;
+- copies `docs/images/{changes-and-commit,file-actions,branches,history,compare,conflicts}.jpg` to `images/`;
 - copies `media/icon.png` to `icon.png` and `apple-touch-icon.png`, and box-filters it to `favicon-32.png`;
 - validates the result: every local `href`/`src` (including root-relative and `https://git-pro.longtd.me/...` URLs) resolves to a file, every `#fragment` has a matching `id`, ids are unique, each page has one `<h1>`, every `<img>` has `alt`, `width` and `height` matching the image's aspect ratio, required meta tags, canonical, Open Graph and Twitter tags are present, the JSON-LD is valid and has no ratings, reviews or priced offers, `og.jpg` is 1200 × 630 and declared as `image/jpeg`, and no placeholder or `<!-- unlisted -->` marker is left.
 

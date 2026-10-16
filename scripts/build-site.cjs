@@ -37,7 +37,7 @@ const placeholders = {
   KEYWORDS: manifest.keywords.join(', ')
 };
 const notDeployed = new Set(['og', 'deploy', 'README.md']); // top-level entries of site/ that stay source-only
-const screenshots = ['changes-and-commit', 'file-actions', 'history'];
+const screenshots = ['changes-and-commit', 'file-actions', 'branches', 'history', 'compare', 'conflicts'];
 const templated = new Set(['.html', '.xml', '.txt', '.webmanifest']);
 const textTypes = new Set([...templated, '.css', '.js', '.svg', '.json']);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

@@ -34,3 +34,6 @@ media/codicons/
 # Landing page build output (scripts/build-site.cjs) and generated nginx headers (scripts/deploy-site.cjs)
 site-dist/
 site/deploy/.generated/
+
+# Raw captures of scripts/screenshots.cjs
+.shots/

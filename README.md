@@ -12,21 +12,39 @@ Screenshots use a demo repository in VS Code with dark and light themes. Layout 
 
 ### Review, stage and commit
 
-See staged, modified and untracked files at a glance. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history.
+See staged, modified and untracked files at a glance in VS Code's own tree. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history.
 
-![Git Pro Changes sidebar with right-aligned file status labels and the commit composer](docs/images/changes-and-commit.jpg)
+![Git Pro sidebar with the Commit box and the Changes tree of staged, modified and untracked files, next to the diff of src/cart.ts](docs/images/changes-and-commit.jpg)
 
 ### File actions where you need them
 
-Hover or select a file for inline Open Changes, Open File, Discard and Stage buttons, or right-click it for its diff, history, staging, relative path and a reviewed discard. Available actions follow the file's state.
+Hover or select a file for inline Open Changes, Open File, Discard and Stage buttons, or right-click it for its diff, comparison with HEAD, history, staging, relative path and a reviewed discard. Available actions follow the file's state.
 
-![Git Pro file context menu showing diff, staging, file history, copy path and discard actions](docs/images/file-actions.jpg)
+![Git Pro right-click menu on a changed file in the light theme: Open Diff, Compare with HEAD, Open Changed File, File History, Stage Selected, Discard Unstaged Changes and Copy Relative Path](docs/images/file-actions.jpg)
+
+### Know where each branch stands
+
+Every local branch shows how far it is ahead of or behind its upstream. Right-click a branch to check it out, rename it, set its upstream, compare it, merge it, rebase onto it or delete it.
+
+![Git Pro Branches view with ahead and behind counts next to each branch and the right-click menu of feature/checkout](docs/images/branches.jpg)
 
 ### Browse History and compare revisions
 
 Follow the commit graph, select a commit for details and changed files, or compare revisions without leaving VS Code. Right-click a commit to check it out, branch or tag from it, cherry-pick, revert, start an interactive rebase from it or compare it with the current branch or the working tree.
 
 ![Git Pro History panel with a commit graph and selected commit details](docs/images/history.jpg)
+
+### Review a branch like a pull request
+
+Compare any two branches, tags or revisions: the commits on each side, with cherry-picked copies marked ≈, and the changed files as a nested tree. Mark files as viewed as you go; the marks are kept for that comparison.
+
+![Git Pro Compare tab for feature/checkout and main: commits on each side with copies of the same change marked, a nested tree of changed files and two of three files marked as viewed](docs/images/compare.jpg)
+
+### Resolve conflicts in one place
+
+When a merge, pull or rebase stops on conflicts, Yours and Theirs are named after their branches. Accept a side for many files at once, or open Merge… in VS Code's merge editor.
+
+![Git Pro Conflicts tab for a merge of promo/spring-sale into main, with two conflicted files selected and the Accept Yours, Accept Theirs and Merge actions](docs/images/conflicts.jpg)
 
 ## Get started
 
@@ -42,12 +60,12 @@ Selecting a file does not stage it. The composer commits the current index, incl
 
 | Area | Workflows |
 |---|---|
-| Changes and commits | File and folder staging, native diffs, reviewed discard, commit, amend and signoff |
-| Branches and sync | Branch and upstream actions from the view's own right-click menu, fetch, explicit pull strategy, push, init and clone |
+| Changes and commits | A native Changes tree with file and folder staging, native diffs, reviewed discard, commit, amend and signoff |
+| Branches and sync | Branch and upstream actions from the view's own right-click menu, how far each branch is ahead of or behind its upstream, fetch, explicit pull strategy, push, init and clone |
 | History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History; commit actions in the right-click menu |
 | File review | Text hunk actions, saved-file commits and optional active-line blame and CodeLens |
 | Conflicts | Conflicts tab with Yours/Theirs by branch, bulk Accept Yours/Theirs, Merge… in VS Code's merge editor, Continue/Abort banner |
-| Compare | Any branch, tag or revision such as `HEAD~3` against another; a branch, tag or revision against the working tree or one folder of it; commits on each side; changed files as a tree with diffs opened beside the list; Open All Changes; Get from Branch |
+| Compare | Any branch, tag or revision such as `HEAD~3` against another; a branch, tag or revision against the working tree or one folder of it; commits on each side, with cherry-picked copies marked; changed files as a nested tree with diffs opened beside the list and files marked as viewed; Open All Changes; Get from Branch |
 | Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase with a right-click menu on each step |
 | Repository tools | Stashes, tags, remotes and worktrees, each with its own right-click menu |
 

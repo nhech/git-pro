@@ -57,6 +57,9 @@
     "screenshot": [
       "https://git-pro.longtd.me/images/changes-and-commit.jpg",
       "https://git-pro.longtd.me/images/history.jpg",
+      "https://git-pro.longtd.me/images/compare.jpg",
+      "https://git-pro.longtd.me/images/conflicts.jpg",
+      "https://git-pro.longtd.me/images/branches.jpg",
       "https://git-pro.longtd.me/images/file-actions.jpg"
     ],
     "license": "https://github.com/nhech/git-pro/blob/main/LICENSE",
@@ -320,30 +323,57 @@
 
         <div class="shots">
           <figure class="shot shot-wide reveal">
+            <a class="shot-link" href="images/compare.jpg" data-lightbox>
+              <img src="images/compare.jpg" srcset="img/compare-1080.jpg 1080w, img/compare-1600.jpg 1600w, images/compare.jpg 2160w" sizes="(min-width: 1200px) 1120px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro Compare tab for feature/checkout and main: commits on each side with copies of the same change marked, a nested tree of changed files and two of three files marked as viewed">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>Review a branch like a pull request.</strong> See the commits on each side, with cherry-picked copies marked ≈, and the changed files as a nested tree. Mark files as viewed as you go; the marks are kept for that comparison. <span class="shot-theme">Dark theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal">
+            <a class="shot-link" href="images/changes-and-commit.jpg" data-lightbox>
+              <img src="images/changes-and-commit.jpg" srcset="img/changes-and-commit-1080.jpg 1080w, img/changes-and-commit-1600.jpg 1600w, images/changes-and-commit.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro sidebar with the Commit box and the Changes tree of staged, modified and untracked files, next to the diff of src/cart.ts">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>Review, stage and commit.</strong> See staged, modified and untracked files at a glance in VS&nbsp;Code’s own tree, then commit from the box above Changes. <span class="shot-theme">Dark theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal" style="--i: 1">
+            <a class="shot-link" href="images/file-actions.jpg" data-lightbox>
+              <img src="images/file-actions.jpg" srcset="img/file-actions-1080.jpg 1080w, img/file-actions-1600.jpg 1600w, images/file-actions.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro right-click menu on a changed file in the light theme: Open Diff, Compare with HEAD, Open Changed File, File History, Stage Selected, Discard Unstaged Changes and Copy Relative Path">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>File actions where you need them.</strong> Right-click a file for its diff, history, staging, relative path and a reviewed discard. Available actions follow the file’s state. <span class="shot-theme">Light theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal">
+            <a class="shot-link" href="images/branches.jpg" data-lightbox>
+              <img src="images/branches.jpg" srcset="img/branches-1080.jpg 1080w, img/branches-1600.jpg 1600w, images/branches.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro Branches view with ahead and behind counts next to each branch and the right-click menu of feature/checkout">
+              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
+            </a>
+            <figcaption><strong>Know where each branch stands.</strong> Every local branch shows how far it is ahead of or behind its upstream. Right-click one to check it out, compare it, merge it, rebase onto it or delete it. <span class="shot-theme">Dark theme</span></figcaption>
+          </figure>
+
+          <figure class="shot reveal" style="--i: 1">
             <a class="shot-link" href="images/history.jpg" data-lightbox>
-              <img src="images/history.jpg" srcset="img/history-1080.jpg 1080w, img/history-1600.jpg 1600w, images/history.jpg 2160w" sizes="(min-width: 1200px) 1120px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+              <img src="images/history.jpg" srcset="img/history-1080.jpg 1080w, img/history-1600.jpg 1600w, images/history.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
                 alt="Git Pro History panel with a commit graph and selected commit details">
               <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
             </a>
             <figcaption><strong>Browse History and compare revisions.</strong> Follow the commit graph, select a commit for details and changed files, or compare revisions without leaving VS&nbsp;Code. <span class="shot-theme">Dark theme</span></figcaption>
           </figure>
 
-          <figure class="shot reveal">
-            <a class="shot-link" href="images/changes-and-commit.jpg" data-lightbox>
-              <img src="images/changes-and-commit.jpg" srcset="img/changes-and-commit-1080.jpg 1080w, img/changes-and-commit-1600.jpg 1600w, images/changes-and-commit.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
-                alt="Git Pro Changes sidebar with right-aligned file status labels and the commit composer">
+          <figure class="shot shot-wide reveal">
+            <a class="shot-link" href="images/conflicts.jpg" data-lightbox>
+              <img src="images/conflicts.jpg" srcset="img/conflicts-1080.jpg 1080w, img/conflicts-1600.jpg 1600w, images/conflicts.jpg 2160w" sizes="(min-width: 1200px) 1120px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
+                alt="Git Pro Conflicts tab for a merge of promo/spring-sale into main, with two conflicted files selected and the Accept Yours, Accept Theirs and Merge actions">
               <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
             </a>
-            <figcaption><strong>Review, stage and commit.</strong> See staged, modified and untracked files at a glance, then commit from the box above Changes. <span class="shot-theme">Dark theme</span></figcaption>
-          </figure>
-
-          <figure class="shot reveal" style="--i: 1">
-            <a class="shot-link" href="images/file-actions.jpg" data-lightbox>
-              <img src="images/file-actions.jpg" srcset="img/file-actions-1080.jpg 1080w, img/file-actions-1600.jpg 1600w, images/file-actions.jpg 2160w" sizes="(min-width: 960px) 540px, calc(100vw - 2rem)" width="2160" height="1350" loading="lazy" decoding="async"
-                alt="Git Pro file context menu showing diff, staging, file history, copy path and discard actions">
-              <span class="shot-zoom"><svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>View full size</span>
-            </a>
-            <figcaption><strong>File actions where you need them.</strong> Right-click a file for its diff, history, staging, relative path and a reviewed discard. Available actions follow the file's state. <span class="shot-theme">Light theme</span></figcaption>
+            <figcaption><strong>Resolve conflicts in one place.</strong> Yours and Theirs are named after their branches. Accept a side for many files at once, or open Merge… in VS&nbsp;Code’s merge editor. <span class="shot-theme">Dark theme</span></figcaption>
           </figure>
         </div>
       </div>

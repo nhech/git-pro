@@ -11,6 +11,17 @@ npm run audit:licenses
 
 Press F5 in VS Code to launch the extension for development. Run `npm run test:extension` for extension-host tests; use `GIT_PRO_TEST_VERSION` to select a VS Code version. Tests create disposable repositories and must not operate on a contributor's working repository.
 
+## Screenshots
+
+The images in `docs/images/` (README and Marketplace) and `site/img/` (landing page) are taken by a script, from a demo repository, so they can be redone after any UI change:
+
+```sh
+npm run screenshots                # builds, then writes docs/images/*.jpg and site/img/*-1080|1600.jpg
+npm run screenshots -- --skip-build
+```
+
+It needs Docker. In a container, a virtual 2160 × 1350 display (device scale 2) runs a real VS Code with the extension and the demo repositories of `test/fixtures/demo-repository.ts`; the tour that clicks through it is `test/extension/screenshots.ts`, and the container side is in `scripts/screenshots/`. The first run builds the image and downloads VS Code into a Docker volume. Look at every image before you commit it: raw captures and tuning probes (names starting with `_`) stay in `.shots/`, which is ignored by Git.
+
 Keep changes focused and describe observable behavior in commit messages. Include relevant regression coverage for Git mutations, stale state, cancellation and disposal. Preserve the MIT license and third-party attribution.
 
 Keep generated packages, logs, local credentials and internal planning or measurement reports out of Git. The installation package contains runtime assets and user documentation only.
