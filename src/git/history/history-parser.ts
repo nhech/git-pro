@@ -16,6 +16,12 @@ export interface FileStat { path: string; originalPath?: string; added: number |
 export function decode(buffer: Buffer): string { return new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
 /** Content that is not strict UTF-8, refused in words: text sides never alias such bytes through replacement characters. */
 export class NonUtf8Error extends Error {}
+/** The commits `rev-list --left-right --cherry-mark` marks with `=`: those with the same change on the other side. */
+export function parseEquivalent(buffer:Buffer):Set<string>{
+  const found=new Set<string>();
+  for(const line of decode(buffer).split('\n')){const match=/^=([a-f0-9]{40}|[a-f0-9]{64})$/i.exec(line.trim());if(match)found.add(match[1]!.toLowerCase());}
+  return found;
+}
 export function parseComparisonCounts(buffer:Buffer):{left:number;right:number}{
   const match=/^(\d+)\s+(\d+)$/.exec(decode(buffer).trim());
   if(!match||!Number.isSafeInteger(Number(match[1]))||!Number.isSafeInteger(Number(match[2])))throw new Error('Invalid comparison commit counts.');

@@ -3,7 +3,7 @@ import { GitExecutor } from '../git-executor';
 import { GitFailure } from '../git-error-parser';
 import type { ReadCommand } from '../command-builders';
 import { buildHistoryRead, historyPath, type HistoryFilters } from './history-builders';
-import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, parseMergeBase, decode, NonUtf8Error, type HistoryCommit } from './history-parser';
+import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, parseComparisonCounts, parseEquivalent, parseMergeBase, decode, NonUtf8Error, type HistoryCommit } from './history-parser';
 import type { CompareFiles, CompareFilesMode, CompareService, MergeBase, RefComparison } from '../../webviews/compare/compare-contract';
 import { initialFileCursor, advanceFileCursor, parseLineageHistory, parseHistoryEdges, type FileCursor } from './file-lineage';
 import { parseBlame } from './blame-parser';
@@ -20,6 +20,8 @@ import * as path from 'node:path';
 const utf8Listing = (files: Buffer, stats: Buffer | undefined): boolean => isUtf8(files) && (!stats || isUtf8(stats));
 export interface PinnedHistory { repositoryId: string; tips: readonly string[]; filters: Readonly<HistoryFilters>;refs?:readonly {name:string;oid:string}[] }
 export interface HistoryPage { commits: readonly HistoryCommit[]; offset: number; hasMore: boolean; nextOffset: number }
+/** A comparison of more commits than this (both sides together) is not checked for patch-equivalent commits: Git would spend too long on it. */
+const EQUIVALENT_LIMIT = 2000;
 export class HistoryService implements CompareService {
   private readonly scheduler = new ReadScheduler();
   private fileQueries=new WeakMap<PinnedHistory,{repository:RepositoryDescriptor;cursor?:FileCursor}>();
@@ -201,11 +203,21 @@ export class HistoryService implements CompareService {
     return this.listedFiles(id,'fork',base.oid,left,signal,base.multiple?'multipleMergeBases':undefined);
   }
   async worktreeFiles(id:string,oid:string,signal?:AbortSignal):Promise<CompareFiles>{validateOid(oid);return this.listedFiles(id,'worktree',oid,undefined,signal);}
+  /**
+   * Which commits of the two sides have the same change on the other (a cherry-pick, a rebased copy). Git counts patches in proportion to the commits compared, so a very wide
+   * difference is not checked, and a read that fails only leaves the marks out: the comparison itself never depends on them.
+   */
+  private async equivalents(id:string,left:string,right:string,total:number,signal?:AbortSignal):Promise<{equivalent?:ReadonlySet<string>;equivalentSkipped?:true}>{
+    if(total<2)return{};
+    if(total>EQUIVALENT_LIMIT)return{equivalentSkipped:true};
+    try{return{equivalent:parseEquivalent(await this.read(id,{kind:'comparisonEquivalent',left,right},signal))};}
+    catch(error){if(signal?.aborted)throw error;return{equivalentSkipped:true};}
+  }
   async compareRefs(id:string,leftRef:string,rightRef:string,mode:CompareFilesMode,signal?:AbortSignal):Promise<RefComparison>{
     const [left,right]=await Promise.all([this.resolveRef(id,leftRef,signal),this.resolveRef(id,rightRef,signal)]);
     const [fork,leftCommits,rightCommits,counts]=await Promise.all([this.mergeBase(id,left,right,signal),this.read(id,{kind:'comparisonCommits',tip:left,exclude:right},signal),this.read(id,{kind:'comparisonCommits',tip:right,exclude:left},signal),this.read(id,{kind:'comparisonCount',from:left,to:right},signal)]);
-    const count=parseComparisonCounts(counts),files=await this.comparisonFiles(id,left,right,mode,signal,fork);
-    return Object.freeze({repositoryId:id,left:Object.freeze({name:leftRef,oid:left}),right:Object.freeze({name:rightRef,oid:right}),fork,
+    const count=parseComparisonCounts(counts),files=await this.comparisonFiles(id,left,right,mode,signal,fork),marks=await this.equivalents(id,left,right,count.left+count.right,signal);
+    return Object.freeze({repositoryId:id,left:Object.freeze({name:leftRef,oid:left}),right:Object.freeze({name:rightRef,oid:right}),fork,...marks,
       leftOnly:Object.freeze({count:count.left,offset:0,commits:Object.freeze(parseHistory(leftCommits))}),rightOnly:Object.freeze({count:count.right,offset:0,commits:Object.freeze(parseHistory(rightCommits))}),files});
   }
   async blame(id: string, file: string, line: number, signal?: AbortSignal) {

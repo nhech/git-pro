@@ -280,3 +280,15 @@ test('After a native menu closes, focus goes back to the row it was opened on, o
   assert.equal(restored?.dataset.focusKey, 'file:0', 'rows drawn again in between are found by their key'); assert.notEqual(restored, rows[0]);
   h.get('file-rows').children[0]!.fire('contextmenu'); Element.active = h.get('refresh'); focus({}); assert.equal(Element.active, h.get('refresh'), 'a button the user went to is left alone');
 });
+
+test('A commit with the same change on the other side carries a mark, and the summary counts them or says they were not checked', () => {
+  const h = harness({ flat: true });
+  const marked = commitsState({ equivalentCommits: 3 }); (marked.sides as { leftOnly: { commits: Record<string, unknown>[] } }).leftOnly.commits[1]!.equivalent = true;
+  h.post(marked);
+  const rows = h.get('commits').children[0]!.find(node => node.className === 'commit-rows')!.children;
+  assert.equal(rows[1]!.find(node => node.className === 'same-change')?.textContent, '≈'); assert.equal(rows[1]!.find(node => node.className === 'same-change')?.getAttribute('aria-hidden'), 'true');
+  assert.match(rows[1]!.getAttribute('aria-label')!, /, same change on the other side$/); assert.equal(rows[0]!.find(node => node.className === 'same-change'), undefined);
+  assert.match(h.get('summary').textContent, / · ≈ 3 commits with the same change on the other side$/);
+  h.post(commitsState({ revision: 5, equivalentSkipped: true })); assert.match(h.get('summary').textContent, / · Same-change commits not checked$/);
+  h.post(commitsState({ revision: 6 })); assert.doesNotMatch(h.get('summary').textContent, /same change|Same-change/i);
+});

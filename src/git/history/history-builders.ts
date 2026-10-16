@@ -7,7 +7,7 @@ export type HistoryReadCommand = { kind: 'history' | 'historyWindow'; tips: read
   {kind:'historyEdges';edges:readonly HistoryEdge[]} |
   {kind:'rangeMessages';base:string;tip:string} |
   {kind:'followHistory';tip:string;path:string;limit:number} |
-  {kind:'comparisonCommits';tip:string;exclude:string;offset?:number} | {kind:'comparisonCount';from:string;to:string} |
+  {kind:'comparisonCommits';tip:string;exclude:string;offset?:number} | {kind:'comparisonCount';from:string;to:string} | {kind:'comparisonEquivalent';left:string;right:string} |
   { kind: 'commitMetadata' | 'commitMessage' | 'containingRefs'; oid: string } |
   { kind: 'changedFiles' | 'numstat'; from?: string; to: string; paths?: readonly string[] } |
   {kind:'mergeBase';left:string;right:string} | {kind:'worktreeDiff'|'worktreeNumstat';oid:string;paths?:readonly string[]} |
@@ -55,7 +55,9 @@ export function buildHistoryRead(command: HistoryReadCommand): string[] {
       const offset=command.offset??0;if(!Number.isInteger(offset)||offset<0||offset>1_000_000)throw new Error('Invalid comparison page.');
       return [...prefix,'log','--topo-order','--no-show-signature','--no-notes','-z','--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s','--max-count=25',`--skip=${offset}`,'--left-only',`${validateOid(command.tip)}...${validateOid(command.exclude)}`,'--'];
     }
-    case 'comparisonCount':return [...prefix,'rev-list','--left-right','--count',`${validateOid(command.from)}...${validateOid(command.to)}`,'--'];
+    /** Every commit of either side that has a patch-equivalent on the other (a cherry-pick, a rebased copy) is printed with a `=` instead of `<` or `>`. Merges are never equivalent, so they are left out of the count. */
+ case 'comparisonEquivalent':return [...prefix,'rev-list','--left-right','--cherry-mark','--no-merges',`${validateOid(command.left)}...${validateOid(command.right)}`,'--'];
+ case 'comparisonCount':return [...prefix,'rev-list','--left-right','--count',`${validateOid(command.from)}...${validateOid(command.to)}`,'--'];
     case 'history': case 'historyWindow': {
       const maximum=command.kind==='historyWindow'?501:101;
       if (!command.tips.length || command.tips.length > 128 || !Number.isInteger(command.offset) || command.offset < 0 || command.offset > 1_000_000 || !Number.isInteger(command.limit) || command.limit < 1 || command.limit > maximum) throw new Error('Invalid history page.');

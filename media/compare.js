@@ -73,7 +73,8 @@
     if (state.mode === 'worktree') summary.textContent = `${state.left.name} ${short(state.left.oid)} · Tracked files, staged and unstaged · Untracked files are not compared`;
     else if (state.right && state.left.oid === state.right.oid) summary.textContent = `${state.left.name} and ${state.right.name} point to the same commit.`;
     else if (state.right && state.sides) summary.textContent = [state.fork ? state.fork.oid ? `Fork point ${short(state.fork.oid)}${state.fork.multiple ? ' (one of several merge bases)' : ''}` : state.fork.shallow ? 'Fork point unknown (shallow clone)' : 'No common ancestor' : '',
-      `${state.left.name} +${state.sides.leftOnly.count.toLocaleString()}`, `${state.right.name} +${state.sides.rightOnly.count.toLocaleString()}`].filter(Boolean).join(' · ');
+      `${state.left.name} +${state.sides.leftOnly.count.toLocaleString()}`, `${state.right.name} +${state.sides.rightOnly.count.toLocaleString()}`,
+      state.equivalentCommits ? `≈ ${count(state.equivalentCommits, 'commit')} with the same change on the other side` : state.equivalentSkipped ? 'Same-change commits not checked' : ''].filter(Boolean).join(' · ');
     // A moved ref can be re-pinned by Refresh; a ref that no longer resolves, or a closed repository, cannot.
     const moves = Array.isArray(state.moved) ? state.moved : [], gone = Array.isArray(state.gone) ? state.gone : [];
     const notes = state.expired ? ['This repository is no longer open in Git Pro, so this comparison cannot be refreshed. Open the repository again to continue.'] : [
@@ -113,8 +114,11 @@
         for (const commit of list.commits) {
           const row = keyed(node('div', 'commit-row'), `commit:${side}:${commit.oid}`), date = new Date(commit.timestamp * 1000), refs = (commit.refs || []).join(', '), current = commit.oid === selected;
           row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(current)); row.tabIndex = -1; row.title = `${short(commit.oid)}  ${commit.subject}`;
-          row.setAttribute('aria-label', `${commit.subject}, ${commit.author}, ${short(commit.oid)}, ${date.toLocaleString()}${refs ? `, refs ${refs}` : ''}`);
-          const subject = node('span', 'commit-subject'); for (const ref of commit.refs || []) subject.append(node('span', 'ref-badge', ref)); subject.append(node('span', 'subject-text', commit.subject));
+          row.setAttribute('aria-label', `${commit.subject}, ${commit.author}, ${short(commit.oid)}, ${date.toLocaleString()}${refs ? `, refs ${refs}` : ''}${commit.equivalent ? ', same change on the other side' : ''}`);
+          const subject = node('span', 'commit-subject'); for (const ref of commit.refs || []) subject.append(node('span', 'ref-badge', ref));
+          // The same change also exists on the other side (a cherry-pick, a rebased copy): `git log --cherry-mark` calls it equivalent.
+          if (commit.equivalent) { const same = node('span', 'same-change', '≈'); same.title = 'Same change as a commit on the other side (a cherry-pick or a rebased copy)'; same.setAttribute('aria-hidden', 'true'); subject.append(same); }
+          subject.append(node('span', 'subject-text', commit.subject));
           const when = node('span', 'commit-date', relative(commit.timestamp)); when.title = date.toLocaleString();
           row.append(node('span', 'commit-hash', short(commit.oid)), subject, node('span', 'commit-author', commit.author), when);
           const choose = () => { if (!current) act('selectCommit', { oid: commit.oid }); };

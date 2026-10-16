@@ -5,7 +5,8 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { fixture, gitExecutable } from '../fixtures/repository-fixture';
-import { NonUtf8Error } from '../../src/git/history/history-parser';
+import { NonUtf8Error, parseEquivalent } from '../../src/git/history/history-parser';
+import { buildHistoryRead } from '../../src/git/history/history-builders';
 import { PathPolicy } from '../../src/security/paths';
 import { GitExecutor } from '../../src/git/git-executor';
 import { RepositoryRegistry } from '../../src/repositories/repository-registry';
@@ -218,4 +219,34 @@ test('A shallow clone that cut off the fork point says so instead of reporting u
     f.git(['checkout', '-q', '--orphan', 'other']); f.git(['rm', '-q', '-rf', '--', '.']); await f.commit({ 'other.txt': 'other\n' }, 'unrelated root');
     assert.deepEqual((await f.service.compareRefs(f.id, 'other', 'main', 'fork')).fork, { oid: null, multiple: false }, 'a complete repository still reports unrelated histories as such');
   } finally { await f.close(); }
+});
+
+test('commits with the same change on the other side are marked equivalent, as git log --cherry-mark does, and a failed check only leaves the marks out', async () => {
+  const f = await compareFixture();
+  try {
+    await f.commit({ 'base.txt': 'base\n' }, 'base');
+    f.git(['checkout', '-q', '-b', 'feature']);
+    const picked = await f.commit({ 'fix.txt': 'fix\n' }, 'fix'), only = await f.commit({ 'feature.txt': 'feature\n' }, 'feature only');
+    f.git(['checkout', '-q', 'main']); const mainWork = await f.commit({ 'main.txt': 'main\n' }, 'main work');
+    f.git(['cherry-pick', picked]); const copy = f.git(['rev-parse', 'HEAD']).trim();
+    assert.notEqual(copy, picked, 'the cherry-pick is a commit of its own');
+    const result = await f.service.compareRefs(f.id, 'feature', 'main', 'fork');
+    assert.deepEqual([...result.leftOnly.commits.map(item => item.oid)].sort(), [picked, only].sort()); assert.deepEqual([...result.rightOnly.commits.map(item => item.oid)].sort(), [copy, mainWork].sort());
+    assert.deepEqual([...result.equivalent!].sort(), [picked, copy].sort(), 'the commit and its copy, on either side; the commits nobody copied are not marked');
+    assert.equal(result.equivalentSkipped, undefined);
+    // Nothing on one side: nothing to be equivalent to, and no read of patches.
+    const same = await f.service.compareRefs(f.id, 'main', copy, 'fork'); assert.equal(same.equivalent, undefined); assert.equal(same.equivalentSkipped, undefined);
+    // The marks are decoration: a failing patch comparison leaves them out and says so, and the comparison still succeeds.
+    const service = f.service as unknown as { read: (id: string, command: { kind: string }, signal?: AbortSignal) => Promise<Buffer> }, original = service.read;
+    service.read = async (id, command, signal) => { if (command.kind === 'comparisonEquivalent') throw new Error('patch ids unavailable'); return original.call(f.service, id, command, signal); };
+    const failed = await f.service.compareRefs(f.id, 'feature', 'main', 'fork'); assert.equal(failed.equivalent, undefined); assert.equal(failed.equivalentSkipped, true); assert.equal(failed.leftOnly.count, 2);
+    service.read = original;
+  } finally { await f.close(); }
+});
+
+test('the equivalent-commit read is a bounded rev-list over the symmetric difference', () => {
+  const oid = (digit: string) => digit.repeat(40);
+  assert.deepEqual(buildHistoryRead({ kind: 'comparisonEquivalent', left: oid('a'), right: oid('b') }).slice(-6), ['rev-list', '--left-right', '--cherry-mark', '--no-merges', `${oid('a')}...${oid('b')}`, '--']);
+  assert.throws(() => buildHistoryRead({ kind: 'comparisonEquivalent', left: 'main', right: oid('b') }), /Invalid full object ID/);
+  assert.deepEqual([...parseEquivalent(Buffer.from(`<${oid('1')}\n=${oid('2')}\n>${oid('3')}\n=${oid('A')}\n\nnoise\n`))], [oid('2'), oid('a')], 'only the marked ones, lower-cased');
 });

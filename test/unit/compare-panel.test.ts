@@ -32,7 +32,7 @@ class FakePanel {
   get state() { return this.last('state') as Message & { revision: number; files: Message & { items: Message[] }; sides: { leftOnly: Message & { commits: Message[] }; rightOnly: Message & { commits: Message[] } } }; }
 }
 
-async function harness(options: { files?: unknown; worktree?: unknown; head?: string } = {}) {
+async function harness(options: { files?: unknown; worktree?: unknown; head?: string; equivalent?: ReadonlySet<string>; skipped?: boolean } = {}) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'git-pro-compare-panel-')));
   await mkdir(path.join(root, 'src')); await writeFile(path.join(root, 'src', 'app.ts'), 'working\n'); await writeFile(path.join(root, 'README.md'), 'readme\n');
   const panels: FakePanel[] = [], executed: unknown[][] = [], clipboard: string[] = [], histories: unknown[][] = [], calls: string[] = [];
@@ -56,7 +56,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
     resolveRef: async (_id: string, ref: string) => { calls.push(`resolve:${ref}`); const value = refs.get(ref) ?? (/^[0-9a-f]{40}$/.test(ref) ? ref : undefined); if (!value) throw new Error('Invalid revision.'); return value; },
     compareRefs: async (_id: string, left: string, right: string, mode: string) => { calls.push(`compare:${left}:${right}:${mode}`);
       return { repositoryId: 'repo', left: { name: left, oid: left }, right: { name: right, oid: right }, fork: { oid: BASE, multiple: false },
-        leftOnly: { count: 60, offset: 0, commits: Array.from({ length: 25 }, (_, index) => commit(index + 10, index ? `Commit ${index}` : '<img src=x onerror=alert(1)>')) }, rightOnly: { count: 0, offset: 0, commits: [] }, files: branchFiles }; },
+        leftOnly: { count: 60, offset: 0, commits: Array.from({ length: 25 }, (_, index) => commit(index + 10, index ? `Commit ${index}` : '<img src=x onerror=alert(1)>')) }, rightOnly: { count: 0, offset: 0, commits: [] }, files: branchFiles, ...(options.equivalent ? { equivalent: options.equivalent } : {}), ...(options.skipped ? { equivalentSkipped: true } : {}) }; },
     comparisonFiles: async (_id: string, left: string, right: string, mode: string) => { calls.push(`files:${left}:${right}:${mode}`); return files(mode === 'tips' ? 'tips' : 'fork', mode === 'tips' ? left : BASE, mode === 'tips' ? right : left, [{ status: 'M', path: 'src/app.ts' }]); },
     comparisonPage: async (_id: string, tip: string, exclude: string, offset: number) => { calls.push(`page:${tip}:${exclude}:${offset}`); return [commit(offset + 100)]; },
     details: async (_id: string, value: string) => { calls.push(`details:${value}`); return { commit: commit(Number.parseInt(value, 16)), parent: oid(999), files: [{ status: 'D', path: 'gone.txt' }], stats: [{ path: 'gone.txt', added: 0, removed: 3 }], message: 'Details' }; },
@@ -472,4 +472,20 @@ test('The file filter narrows the list by name and change type, keeps each file\
     await panel.send({ type: 'filesPage', revision: panel.state.revision, offset: 200 }); assert.match(String(panel.last('error')?.message), /available file page/, 'paging is over the shown files');
     await panel.send({ type: 'filter', revision: panel.state.revision, text: '', statuses: '' }); assert.equal(files().total, 3); assert.equal(files().unfiltered, undefined);
   } finally { await h.cleanup(); }
+});
+
+test('Commits with the same change on the other side are marked in the lists, and the tab says how many there are or that they were not checked', async () => {
+  const marked = await harness({ equivalent: new Set([oid(10), oid(12), oid(77)]) });
+  try {
+    await marked.surface.openRefs('repo', 'feature', 'main'); const state = marked.panels[0]!.state as unknown as { equivalentCommits?: number; equivalentSkipped?: boolean; sides: { leftOnly: { commits: { oid: string; equivalent?: boolean }[] } } };
+    assert.deepEqual(state.sides.leftOnly.commits.filter(commit => commit.equivalent).map(commit => commit.oid), [oid(10), oid(12)], 'only the listed commits that have a counterpart carry the mark');
+    assert.equal(state.equivalentCommits, 3); assert.equal(state.equivalentSkipped, undefined);
+  } finally { await marked.cleanup(); }
+  const skipped = await harness({ skipped: true });
+  try {
+    await skipped.surface.openRefs('repo', 'feature', 'main'); const state = skipped.panels[0]!.state as unknown as { equivalentCommits?: number; equivalentSkipped?: boolean; sides: { leftOnly: { commits: { equivalent?: boolean }[] } } };
+    assert.equal(state.equivalentSkipped, true); assert.equal(state.equivalentCommits, undefined); assert.ok(state.sides.leftOnly.commits.every(commit => commit.equivalent === undefined));
+  } finally { await skipped.cleanup(); }
+  const plain = await harness();
+  try { await plain.surface.openRefs('repo', 'feature', 'main'); const state = plain.panels[0]!.state as unknown as Record<string, unknown>; assert.equal('equivalentCommits' in state, false); assert.equal('equivalentSkipped' in state, false); } finally { await plain.cleanup(); }
 });

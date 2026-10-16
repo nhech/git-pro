@@ -51,7 +51,7 @@ export function buildReadCommand(command: ReadCommand): string[] {
     case 'marker':
       if (!markers.includes(command.marker)) throw new Error('Unsupported operation marker.');
       return [...prefix, 'rev-parse', '--git-path', command.marker];
-    case 'history':case 'historyWindow':case 'rangeMessages':case 'historyLinearPrefix':case 'followHistory':case 'lineageHistory':case 'historyEdges': case 'comparisonCommits':case 'comparisonCount':case 'commitMetadata':case 'commitMessage': case 'containingRefs': case 'changedFiles': case 'numstat': case 'blame': case 'mergeBase': case 'worktreeDiff': case 'worktreeNumstat':
+    case 'history':case 'historyWindow':case 'rangeMessages':case 'historyLinearPrefix':case 'followHistory':case 'lineageHistory':case 'historyEdges': case 'comparisonCommits':case 'comparisonCount':case 'comparisonEquivalent':case 'commitMetadata':case 'commitMessage': case 'containingRefs': case 'changedFiles': case 'numstat': case 'blame': case 'mergeBase': case 'worktreeDiff': case 'worktreeNumstat':
       return buildHistoryRead(command);
     case 'stashes': case 'tags': case 'remoteNames': case 'remotePrunePreview': case 'worktreePrunePreview': case 'stashFiles': case 'tagMessage': case 'remoteTagRef':
       return buildToolsRead(command);

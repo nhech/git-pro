@@ -47,7 +47,7 @@ export async function openChangesTab(title: string, resources: readonly ChangesR
 
 interface Side { readonly ref: string; readonly label: string; readonly oid: string; readonly current: boolean }
 interface FilesView { readonly files: CompareFiles; readonly commit?: HistoryCommit }
-interface Loaded { readonly fork?: MergeBase; readonly leftOnly?: SideCommits; readonly rightOnly?: SideCommits; readonly branchFiles: CompareFiles; readonly view: FilesView; readonly offset: number }
+interface Loaded { readonly fork?: MergeBase; readonly leftOnly?: SideCommits; readonly rightOnly?: SideCommits; readonly branchFiles: CompareFiles; readonly view: FilesView; readonly offset: number; readonly equivalent?: ReadonlySet<string>; readonly equivalentSkipped?: true }
 const panelKey = (repositoryId: string, mode: 'commits' | 'worktree', left: string, right: string | undefined, folder?: string) => JSON.stringify([repositoryId, mode, left, right ?? null, ...(folder ? [folder] : [])]);
 const sameFiles = (a: CompareFiles, b: CompareFiles) => a.omitted === b.omitted && a.note === b.note && JSON.stringify([a.files, a.stats]) === JSON.stringify([b.files, b.stats]);
 /** A path whose working side is not a regular file of this repository (a submodule, a symlink, a nested repository or Git metadata). */
@@ -110,7 +110,8 @@ class ComparePanel {
     const base = { type: 'state', revision: this.revision, mode: this.mode, left: side(this.left), ...(this.right ? { right: side(this.right) } : {}), swapped: this.swapped, ...(head ? { head: redact(head) } : {}), ...(this.folder ? { folder: redact(this.folder) } : {}), filesMode: this.filesMode, moved: this.moved.map(redact), gone: this.gone.map(redact), filter: this.filter, ...(this.expired ? { expired: true } : {}) };
     const loaded = this.loaded;
     if (!loaded) return { ...base, loading: !this.loadError, ...(this.loadError ? { error: this.loadError } : {}) };
-    const commit = (value: HistoryCommit) => ({ oid: value.oid, subject: redact(value.subject.slice(0, 500)), author: redact(value.author.slice(0, 200)), timestamp: value.timestamp, refs: (this.refs.get(value.oid) ?? []).map(name => redact(name.slice(0, 200))) });
+    // A commit with the same change on the other side (a cherry-pick, a rebased copy) says so, as `git log --cherry-mark` does.
+    const commit = (value: HistoryCommit) => ({ oid: value.oid, subject: redact(value.subject.slice(0, 500)), author: redact(value.author.slice(0, 200)), timestamp: value.timestamp, refs: (this.refs.get(value.oid) ?? []).map(name => redact(name.slice(0, 200))), ...(loaded.equivalent?.has(value.oid) ? { equivalent: true } : {}) });
     const page = (value: SideCommits) => ({ count: value.count, offset: value.offset, commits: value.commits.map(commit) });
     const files = loaded.view.files, worktree = files.scope === 'worktree';
     const shown = this.visible(files);
@@ -121,6 +122,7 @@ class ComparePanel {
     });
     return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple, ...(loaded.fork.shallow ? { shallow: true } : {}) } } : {}),
       ...(loaded.leftOnly && loaded.rightOnly ? { sides: { leftOnly: page(loaded.leftOnly), rightOnly: page(loaded.rightOnly) } } : {}),
+      ...(loaded.equivalent?.size ? { equivalentCommits: loaded.equivalent.size } : {}), ...(loaded.equivalentSkipped ? { equivalentSkipped: true } : {}),
       files: { scope: files.scope, ...(loaded.view.commit ? { commit: { oid: loaded.view.commit.oid, subject: redact(loaded.view.commit.subject.slice(0, 500)) } } : {}), ...(files.from ? { from: files.from } : {}), ...(files.to ? { to: files.to } : {}),
         total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
   }
@@ -226,7 +228,7 @@ class ComparePanel {
     const history = this.owner.deps.history;
     if (!right) { const files = this.inFolder(await history.worktreeFiles(this.repositoryId, left.oid, signal)); return { branchFiles: files, view: { files }, offset: 0 }; }
     const result = await history.compareRefs(this.repositoryId, left.oid, right.oid, this.filesMode, signal);
-    return { fork: result.fork, leftOnly: result.leftOnly, rightOnly: result.rightOnly, branchFiles: result.files, view: { files: result.files }, offset: 0 };
+    return { fork: result.fork, leftOnly: result.leftOnly, rightOnly: result.rightOnly, branchFiles: result.files, view: { files: result.files }, offset: 0, ...(result.equivalent ? { equivalent: result.equivalent } : {}), ...(result.equivalentSkipped ? { equivalentSkipped: true as const } : {}) };
   }
   /** Refresh re-resolves the ref names to new pins; a pin chosen as an exact OID stays. */
   private async refresh(signal: AbortSignal): Promise<boolean> {

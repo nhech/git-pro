@@ -153,6 +153,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(
 .commit-hash{flex:none;width:64px;font:12px/22px var(--gp-mono);color:var(--gp-muted)}
 .commit-subject{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden}
 .subject-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.same-change{flex:0 0 auto;height:16px;padding:0 5px;border-radius:var(--gp-radius-sm);background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:11px;font-weight:var(--gp-fw-strong);line-height:16px;cursor:help}
 .ref-badge{flex:0 0 auto;max-width:min(160px,45%);height:16px;padding:0 5px;border-radius:var(--gp-radius-sm);box-shadow:inset 0 0 0 1px var(--gp-ref);font-size:11px;font-weight:var(--gp-fw-strong);line-height:16px;overflow:hidden;text-overflow:ellipsis}
 .commit-author{flex:0 1 140px;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--gp-muted)}
 .commit-date{flex:none;width:72px;font-size:12px;color:var(--gp-muted);text-align:right;font-variant-numeric:tabular-nums}
@@ -227,6 +228,7 @@ body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:var(
 body.vscode-high-contrast :is(.commit-row,.tree-row):hover,body.vscode-high-contrast-light :is(.commit-row,.tree-row):hover{outline:1px dashed var(--vscode-contrastActiveBorder);outline-offset:-1px}
 body.vscode-high-contrast :is(.commit-row,.tree-row)[aria-selected=true],body.vscode-high-contrast-light :is(.commit-row,.tree-row)[aria-selected=true]{outline:1px solid var(--vscode-contrastActiveBorder);outline-offset:-1px}
 body.vscode-high-contrast :is(.icon-button,.radio):hover:not(:disabled),body.vscode-high-contrast-light :is(.icon-button,.radio):hover:not(:disabled){outline:1px dashed var(--vscode-toolbar-hoverOutline,var(--vscode-contrastActiveBorder));outline-offset:-1px}
+body.vscode-high-contrast .same-change,body.vscode-high-contrast-light .same-change{box-shadow:inset 0 0 0 1px var(--vscode-contrastBorder)}
 body.vscode-high-contrast .ref-badge,body.vscode-high-contrast-light .ref-badge{box-shadow:inset 0 0 0 1px var(--vscode-contrastBorder)}
 body.vscode-high-contrast .count,body.vscode-high-contrast-light .count{border:1px solid var(--vscode-contrastBorder);line-height:16px}
 
@@ -245,4 +247,4 @@ body.vscode-high-contrast .count,body.vscode-high-contrast-light .count{border:1
 body:has(#workspace[aria-busy="true"])::before{content:"";position:fixed;top:0;left:0;z-index:20;width:25%;height:2px;background:var(--gp-progress);animation:gp-progress 1.2s linear infinite;pointer-events:none}
 @media (prefers-reduced-motion:reduce){body:has(#workspace[aria-busy="true"])::before{width:100%;opacity:.6}}
 
-@media (forced-colors:active){:is(.commit-row,.tree-row)[aria-selected=true]{outline:1px solid Highlight}.ref-badge,.count{box-shadow:none;border:1px solid CanvasText}.swatch{border:1px solid CanvasText}}
+@media (forced-colors:active){:is(.commit-row,.tree-row)[aria-selected=true]{outline:1px solid Highlight}.ref-badge,.count,.same-change{box-shadow:none;border:1px solid CanvasText}.swatch{border:1px solid CanvasText}}

@@ -32,6 +32,10 @@ export interface RefComparison {
   /** "Commits in left, not in right" and the reverse, first page of 25. */
   readonly leftOnly: SideCommits; readonly rightOnly: SideCommits;
   readonly files: CompareFiles;
+  /** The commits of either side that have the same change on the other side (a cherry-pick, a rebased copy); absent when they were not checked. */
+  readonly equivalent?: ReadonlySet<string>;
+  /** The check was left out (too many commits) or failed, so a commit without a mark is not known to be unique. */
+  readonly equivalentSkipped?: true;
 }
 /** Methods WP4 adds to HistoryService (`HistoryService implements CompareService`). Every OID argument is a pin from an earlier result. */
 export interface CompareService {
