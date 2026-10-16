@@ -63,7 +63,8 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
     item.contextValue = node.branch.remote ? 'gitPro.branch.remote' : current ? 'gitPro.branch.current' : 'gitPro.branch.local';
     const snapshot = this.git.registry.store.get(node.repositoryId), counts = [snapshot?.ahead ? `↑${snapshot.ahead}` : '', snapshot?.behind ? `↓${snapshot.behind}` : ''].filter(Boolean).join(' ');
     const track = current ? counts : node.branch.remote ? '' : this.tracking.get(node.repositoryId)?.value.get(node.branch.ref) ?? '';
-    item.description = (current ? 'Current' : node.branch.remote ? `Remote${node.branch.upstream ? ` · ${redact(node.branch.upstream)}` : ''}` : redact(node.branch.upstream)) + (track ? `${current || node.branch.upstream ? ' · ' : ''}${track}` : '');
+    // The counts come before the upstream's name, which is long and the first thing a narrow view cuts off.
+    item.description = current ? ['Current', track].filter(Boolean).join(' · ') : node.branch.remote ? `Remote${node.branch.upstream ? ` · ${redact(node.branch.upstream)}` : ''}` : [track, redact(node.branch.upstream)].filter(Boolean).join(' · ');
     item.tooltip = redact(`${node.branch.name}\n${node.branch.oid}${node.branch.worktree ? `\nChecked out: ${node.branch.worktree}` : ''}`);
     const visual = branchVisual({ remote: node.branch.remote, current });
     item.iconPath = new vscode.ThemeIcon(visual.icon, new vscode.ThemeColor(visual.color));

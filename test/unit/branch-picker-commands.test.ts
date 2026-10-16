@@ -330,7 +330,7 @@ test('the Branches view shows how far each local branch is ahead of or behind it
   const make = () => new (exports.BranchesProvider as new (git: unknown) => { getChildren(node?: unknown): Promise<unknown[]>; getTreeItem(node: unknown): TreeItem; dispose(): void })(git);
   let provider = make(); const [localGroup] = await provider.getChildren() as { kind: string }[];
   const describe = async () => (await provider.getChildren(localGroup)).map(node => provider.getTreeItem(node).description);
-  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature · ↑2 ↓1', ''].map(text => text || undefined).map(text => text ?? ''), 'main from the status, feature from the tracking read, scratch has nothing to say');
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', '↑2 ↓1 · origin/feature', ''].map(text => text || undefined).map(text => text ?? ''), 'main from the status, feature from the tracking read, scratch has nothing to say');
   assert.equal(reads, 1); await describe(); assert.equal(reads, 1, 'the counts are kept for the listed branches for a short while');
   assert.equal(provider.getTreeItem((await provider.getChildren(await provider.getChildren().then(groups => groups[1])))[0]).description, 'Remote', 'a remote branch has no counts');
   provider.dispose();
@@ -338,7 +338,7 @@ test('the Branches view shows how far each local branch is ahead of or behind it
   slow = true; reads = 0; fired = 0; provider = make(); const started = Date.now();
   assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature', ''], 'drawn without the slow numbers'); assert.ok(Date.now() - started < 3000);
   assert.equal(fired, 0); release(new Map([[feature.ref, '↓4']])); await new Promise(resolve => setImmediate(resolve)); assert.equal(fired, 1, 'drawn again when the counts arrive');
-  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', 'origin/feature · ↓4', ''], 'and the numbers are there'); assert.equal(reads, 1);
+  assert.deepEqual(await describe(), ['Current · ↑1 ↓3', '↓4 · origin/feature', ''], 'and the numbers are there'); assert.equal(reads, 1);
   provider.dispose();
   // A failed read leaves the list as it was.
   slow = false; git.branchTracking = () => Promise.reject(new Error('git failed')); provider = make();
