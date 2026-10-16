@@ -19,7 +19,7 @@ export class BranchesProvider implements vscode.TreeDataProvider<BranchNode>, vs
     if (hit?.key === key && hit.until > Date.now()) return hit.value;
     const entry = { key, until: Date.now() + 15_000, value: new Map<string, string>() };
     this.tracking.set(id, entry);
-    const done = Promise.resolve().then(() => this.git.branchTracking(id, branches.map(branch => branch.ref))).then(found => { for (const [ref, text] of found) entry.value.set(ref, text); }, () => { if (this.tracking.get(id) === entry) this.tracking.delete(id); });
+    const done = Promise.resolve().then(() => this.git.branchTracking(id, branches.filter(branch => branch.upstream).map(branch => branch.ref))).then(found => { for (const [ref, text] of found) entry.value.set(ref, text); }, () => { if (this.tracking.get(id) === entry) this.tracking.delete(id); });
     let late = true; const budget = new Promise<void>(resolve => { setTimeout(resolve, 800); });
     await Promise.race([done.then(() => { late = false; }), budget]);
     if (late) void done.then(() => { if (this.tracking.get(id) === entry && entry.value.size) this.changed.fire(); });

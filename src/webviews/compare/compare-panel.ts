@@ -122,14 +122,14 @@ class ComparePanel {
     const shown = this.visible(files), marked = files.scope === 'commit' ? undefined : this.marks();
     const items = shown.slice(loaded.offset, loaded.offset + FILE_PAGE).map(({ file, index }) => {
       const stat = statFor(files, file), letter = file.status.charAt(0);
-      return { index, status: letter, ...(marked?.has(viewedId(file)) ? { viewed: true } : {}), path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
+      return { index, status: letter, ...(marked?.has(this.markId(files, file)) ? { viewed: true } : {}), path: redact(file.path), ...(file.originalPath ? { originalPath: redact(file.originalPath) } : {}), added: stat ? stat.added : null, removed: stat ? stat.removed : null, binary: stat?.added === null,
         ...(worktree ? { presence: letter === 'A' ? 'worktree' : letter === 'D' ? 'branch' : 'both' } : {}) };
     });
     return { ...base, loading: false, ...(loaded.fork ? { fork: { oid: loaded.fork.oid, multiple: loaded.fork.multiple, ...(loaded.fork.shallow ? { shallow: true } : {}) } } : {}),
       ...(loaded.leftOnly && loaded.rightOnly ? { sides: { leftOnly: page(loaded.leftOnly), rightOnly: page(loaded.rightOnly) } } : {}),
       ...(loaded.equivalent?.size ? { equivalentCommits: loaded.equivalent.size } : {}), ...(loaded.equivalentSkipped ? { equivalentSkipped: true } : {}),
       files: { scope: files.scope, ...(loaded.view.commit ? { commit: { oid: loaded.view.commit.oid, subject: redact(loaded.view.commit.subject.slice(0, 500)) } } : {}), ...(files.from ? { from: files.from } : {}), ...(files.to ? { to: files.to } : {}),
-        total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), ...(marked ? { viewedCount: files.files.filter(file => marked.has(viewedId(file))).length } : {}), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
+        total: shown.length, ...(shown.length === files.files.length ? {} : { unfiltered: files.files.length }), ...(marked ? { viewedCount: files.files.filter(file => marked.has(this.markId(files, file))).length } : {}), offset: loaded.offset, omitted: files.omitted, ...(files.note ? { note: files.note } : {}), binary: shown.filter(({ file }) => statFor(files, file)?.added === null).length, items } };
   }
   /** One request at a time per tab. A task that returns false changed nothing the webview shows, so the revision stays and no state is posted. */
   private async run(task: (signal: AbortSignal) => Promise<boolean>): Promise<void> {
@@ -208,7 +208,7 @@ class ComparePanel {
       case 'viewed': {
         if (loaded.view.files.scope === 'commit') throw new Error('Viewed marks belong to the whole comparison, not to one commit.');
         const marks = this.marks();
-        for (const index of action.indexes) { const id = viewedId(this.file(loaded, index)); if (action.viewed) marks.add(id); else marks.delete(id); }
+        for (const index of action.indexes) { const id = this.markId(loaded.view.files, this.file(loaded, index)); if (action.viewed) marks.add(id); else marks.delete(id); }
         this.owner.viewed.save(this.viewedKey(), marks);
         // Only how the list reads changes: the same revision goes out, so a selection made for Get from Branch is kept.
         await this.post(this.state()); return false;
@@ -230,7 +230,13 @@ class ComparePanel {
       }
     }
   }
-  private viewedKey(): string { return JSON.stringify([this.root, this.mode, this.left.oid, this.right?.oid ?? null, this.folder ?? null]); }
+  /** One comparison: its two commits, the folder, and for two branches whether the list is since the fork or tip to tip (the same file has another diff in each). */
+  private viewedKey(): string { return JSON.stringify([this.root, this.mode, this.left.oid, this.right?.oid ?? null, this.folder ?? null, this.right ? this.filesMode : null]); }
+  /** A file as its marks name it. Commits do not change, but the working tree does while the tab is open: there the change counts are part of the name, so an edited file is no longer the one that was viewed. */
+  private markId(files: CompareFiles, file: ChangedFile): string {
+    if (files.scope !== 'worktree') return viewedId(file);
+    const stat = statFor(files, file); return viewedId(file, `${file.status}:${stat ? stat.added : '-'}:${stat ? stat.removed : '-'}`);
+  }
   private marks(): Set<string> { const key = this.viewedKey(); if (key !== this.viewedFor) { this.viewedFor = key; this.viewed = this.owner.viewed.load(key); } return this.viewed; }
   /** The files the list shows, each with its index in the captured list: actions name that index, never a position in the filtered list. */
   private visible(files: CompareFiles): { file: ChangedFile; index: number }[] {

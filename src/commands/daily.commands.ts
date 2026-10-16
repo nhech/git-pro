@@ -37,9 +37,9 @@ export class DailyCommands implements vscode.Disposable {
     };
     register('gitPro.stage', (arg, selected) => this.fileAction('stage', arg, selected));
     register('gitPro.unstage', (arg, selected) => this.fileAction('unstage', arg, selected));
-    register('gitPro.stageFolder', arg => this.fileAction('stage', arg, undefined));
-    register('gitPro.unstageFolder', arg => this.fileAction('unstage', arg, undefined));
-    register('gitPro.discardFolder', arg => this.fileAction('discard', arg, undefined));
+    register('gitPro.stageFolder', (arg, selected) => this.fileAction('stage', arg, selected));
+    register('gitPro.unstageFolder', (arg, selected) => this.fileAction('unstage', arg, selected));
+    register('gitPro.discardFolder', (arg, selected) => this.fileAction('discard', arg, selected));
     register('gitPro.stageAll', async () => { if (!await git.stageAll(this.active())) vscode.window.setStatusBarMessage('Git Pro: nothing to stage.', 4000); });
     register('gitPro.unstageAll', async () => { if (!await git.unstageAll(this.active())) vscode.window.setStatusBarMessage('Git Pro: nothing staged.', 4000); });
     register('gitPro.diff', arg => this.diff(arg, false)); register('gitPro.diffHead', arg => this.diff(arg, true));
@@ -54,7 +54,7 @@ export class DailyCommands implements vscode.Disposable {
     for (const [name, choice] of [['checkout', 'Checkout'], ['checkoutTracking', 'Checkout Tracking Branch'], ['rename', 'Rename'], ['setUpstream', 'Set Upstream'], ['unsetUpstream', 'Unset Upstream'], ['copyName', 'Copy Name'], ['delete', 'Delete'], ['forceDelete', 'Force Delete']] as const)
       register(`gitPro.branch.${name}`, (arg, selected) => this.branchMenu(choice, arg, selected));
     register('gitPro.createBranch', () => this.createBranch());
-    register('gitPro.copyPath', arg => this.copyPath(arg));
+    register('gitPro.copyPath', (arg, selected) => this.copyPath(arg, selected));
     register('gitPro.init', async () => {
       const folders = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, title: 'Initialize Git Repository' });
       if (!folders?.[0] || folders[0].scheme !== 'file') return;
@@ -70,8 +70,11 @@ export class DailyCommands implements vscode.Disposable {
       const repo = await this.git.registry.resolveFile(arg.fsPath); if (!repo) throw new Error('File is not in an approved repository.');
       return { id: repo.id, paths: [path.relative(repo.root, await canonicalFilePath(arg.fsPath)).replace(/\\/g, '/')], groups: [] };
     }
-    const nodes = Array.isArray(selected) ? selected : arg ? [arg] : this.changesView.selection;
-    // A group row stands for every file in it, as a folder row does for the files under it.
+    let nodes = Array.isArray(selected) ? selected : arg ? [arg] : this.changesView.selection;
+    // A group row stands for every file in it, as a folder row does for the files under it, but only when that is what was asked for: on its own, from its own buttons or menu.
+    // Beside files or folders, or as what the view happens to have selected, it is only a header that was clicked to open or close it, and counts for nothing.
+    const isGroup = (node: unknown) => !!node && typeof node === 'object' && (node as ChangeNode).kind === 'group';
+    if ((!Array.isArray(selected) && !arg) || nodes.some(node => !isGroup(node))) nodes = nodes.filter(node => !isGroup(node));
     const entries = nodes.filter((node: unknown): node is Extract<ChangeNode, { kind: 'file'|'folder'|'group' }> => !!node && typeof node === 'object' && ((node as ChangeNode).kind === 'file'||(node as ChangeNode).kind==='folder'||(node as ChangeNode).kind==='group'));
     if (!entries.length) {
       if(nodes.length)throw new Error('Select changed file or folder entries only.');
@@ -84,8 +87,10 @@ export class DailyCommands implements vscode.Disposable {
     const repo=this.git.registry.list().find(item=>item.id===id);if(!repo)throw new Error('Repository is no longer open.');
     const groups=[...new Set(entries.map(node=>node.kind==='file'?node.change.group:node.group))];
     const snapshot=entries.some(node=>node.kind!=='file')?await this.git.state(id):undefined;
-    const paths=[...new Set(entries.flatMap(node=>node.kind==='file'?[node.change.path]:node.kind==='folder'?changedPathsInFolder(snapshot!.changes,node.group,node.prefix):snapshot!.changes.filter(change=>change.group===node.group).map(change=>change.path)))];
-    if(!paths.length)throw new Error('This folder or group has no changed files in the selected status group. Refresh and try again.');
+    // An untracked directory shown with a trailing slash is a repository of its own, which Stage cannot take without embedding it: a folder or group leaves it out, as Stage All does.
+    const own=(group:ChangeGroup,file:string)=>group==='untracked'&&file.endsWith('/');
+    const paths=[...new Set(entries.flatMap(node=>node.kind==='file'?[node.change.path]:node.kind==='folder'?changedPathsInFolder(snapshot!.changes,node.group,node.prefix).filter(file=>!own(node.group,file)):snapshot!.changes.filter(change=>change.group===node.group&&!own(change.group,change.path)).map(change=>change.path)))];
+    if(!paths.length)throw new Error('This folder or group has no changed files in the selected status group (a nested repository is left out). Refresh and try again.');
     return { id, paths, groups, ...(entries.length===1&&entries[0]!.kind==='file'?{change:entries[0]}:{}) };
   }
   private async fileAction(action: 'stage' | 'unstage' | 'discard', arg: unknown, selected: unknown): Promise<void> {
@@ -281,7 +286,7 @@ export class DailyCommands implements vscode.Disposable {
     if (choice === 'Unset Upstream') { await this.git.branchAction(preview, branch.name, 'unset-upstream'); return; }
     if (await vscode.window.showWarningMessage(`${choice} ${redact(branch.name)} at ${branch.oid.slice(0, 12)}?${choice === 'Force Delete' ? ' Unmerged commits may become unreachable.' : ''}`, { modal: true }, choice) === choice) await this.git.branchAction(preview, branch.name, choice === 'Force Delete' ? 'force-delete' : 'delete');
   }
-  private async copyPath(arg: unknown): Promise<void> { await vscode.env.clipboard.writeText((await this.selection(arg)).paths.join('\n')); }
+  private async copyPath(arg: unknown, selected: unknown): Promise<void> { await vscode.env.clipboard.writeText((await this.selection(arg, selected)).paths.join('\n')); }
   /** Same conflict handling as the trusted wrapper in extension.ts: a pull that stops on conflicts opens Conflicts on the active repository, and the toast offers Abort…. */
   async error(error: unknown): Promise<void> {
     const recovery=recoveryFor(error);this.logger.error(recovery.diagnostic);

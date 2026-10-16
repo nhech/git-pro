@@ -137,3 +137,11 @@ test('group rows carry their repository and a context value per status group', (
   assert.deepEqual(Array.from(groups, node => h.provider.getTreeItem(node).contextValue), ['gitPro.group.staged', 'gitPro.group.working', 'gitPro.group.untracked']);
   assert.deepEqual(Array.from(h.provider.getChildren(groups[1]), node => (h.provider.getTreeItem(node) as { description?: string }).description), [undefined], 'a file at the root has no directory to show');
 });
+
+test('a row carries words after its kind for the menus: no file to open when it is deleted, and Merge… only for a conflict both sides changed or added', () => {
+  const rows = [change('kept.ts'), change('gone.ts', 'working', 'D'), change('removed.ts', 'staged', 'D'), change('new.ts', 'untracked', '?'), change('both.ts', 'conflicts', 'UU'), change('added.ts', 'conflicts', 'AA'), change('mine.ts', 'conflicts', 'DU'), change('theirs.ts', 'conflicts', 'UD'), change('neither.ts', 'conflicts', 'DD')];
+  const h = harness(rows, 'status');
+  const values = Object.fromEntries(h.children().flatMap(group => h.children(group)).map(node => { const item = h.provider.getTreeItem(node); return [item.label, item.contextValue]; }));
+  assert.deepEqual(values, { 'kept.ts': 'gitPro.change.working', 'gone.ts': 'gitPro.change.working nofile', 'removed.ts': 'gitPro.change.staged nofile', 'new.ts': 'gitPro.change.untracked',
+    'both.ts': 'gitPro.change.conflicts merge', 'added.ts': 'gitPro.change.conflicts merge', 'mine.ts': 'gitPro.change.conflicts', 'theirs.ts': 'gitPro.change.conflicts', 'neither.ts': 'gitPro.change.conflicts nofile' });
+});

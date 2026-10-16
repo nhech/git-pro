@@ -326,7 +326,7 @@ test('the Branches view shows how far each local branch is ahead of or behind it
   const feature = { ...branch('feature'), upstream: 'origin/feature' }, local = [branch('main'), feature, branch('scratch')], remote = branch('origin/feature', true);
   const git = { registry: { active: { id: 'owned' }, onDidInvalidate: () => ({ dispose() {} }), store: { get: () => store } },
     branchSearchSnapshot: async () => [...local, remote],
-    branchTracking: (_id: string, refs: string[]) => { reads++; assert.deepEqual(Array.from(refs), local.map(info => info.ref)); return slow ? new Promise<Map<string, string>>(resolve => { release = resolve; }) : Promise.resolve(new Map([[feature.ref, '↑2 ↓1']])); } };
+    branchTracking: (_id: string, refs: string[]) => { reads++; assert.deepEqual(Array.from(refs), [feature.ref], 'only a branch with an upstream has anything to count'); return slow ? new Promise<Map<string, string>>(resolve => { release = resolve; }) : Promise.resolve(new Map([[feature.ref, '↑2 ↓1']])); } };
   const make = () => new (exports.BranchesProvider as new (git: unknown) => { getChildren(node?: unknown): Promise<unknown[]>; getTreeItem(node: unknown): TreeItem; dispose(): void })(git);
   let provider = make(); const [localGroup] = await provider.getChildren() as { kind: string }[];
   const describe = async () => (await provider.getChildren(localGroup)).map(node => provider.getTreeItem(node).description);

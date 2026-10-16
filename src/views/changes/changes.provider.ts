@@ -129,7 +129,9 @@ export class ChangesProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     // a conflict also says its kind, which a letter cannot.
     const parts = [repo && this.grouping(repo) === 'folder' ? '' : folder, node.change.originalPath ? `← ${redact(node.change.originalPath)}` : '', node.change.group === 'conflicts' ? status : ''].filter(Boolean);
     if (parts.length) item.description = parts.join(' · ');
-    item.contextValue = `gitPro.change.${node.change.group}`;
+    // Words after the kind, for the menus: Merge… in the merge editor is for a conflict both sides changed or added, and a row without a file in the working tree (deleted) has none to open.
+    const code = node.change.status, words = node.change.group === 'conflicts' ? (code === 'UU' || code === 'AA' ? ['merge'] : code === 'DD' ? ['nofile'] : []) : code.startsWith('D') ? ['nofile'] : [];
+    item.contextValue = [`gitPro.change.${node.change.group}`, ...words].join(' ');
     item.resourceUri = vscode.Uri.from({ scheme: changeScheme, path: `/${node.change.path}`, query: changeQuery(node.change) });
     item.tooltip = `${path}\n${status}${node.change.group === 'staged' ? ' (staged)' : ''}`;
     item.iconPath = this.asThemeIcon(changeFileVisual(node.change));

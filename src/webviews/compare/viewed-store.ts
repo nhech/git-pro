@@ -26,5 +26,8 @@ export class ViewedStore {
     void this.memento.update(KEY, kept);
   }
 }
-/** A file as the marks name it: a rename is its old and its new path. */
-export function viewedId(file: { readonly path: string; readonly originalPath?: string }): string { return file.originalPath ? `${file.originalPath}\0${file.path}` : file.path; }
+/** A file as the marks name it: a rename is its old and its new path, and a signature, for a file that can change under its mark, is part of the name. */
+export function viewedId(file: { readonly path: string; readonly originalPath?: string }, signature?: string): string {
+  const name = file.originalPath ? `${file.originalPath}\0${file.path}` : file.path;
+  return signature === undefined ? name : `${name}\u0001${signature}`;
+}

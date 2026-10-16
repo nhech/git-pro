@@ -17,7 +17,7 @@ test('manifest localization and menu commands resolve without duplicate contribu
   // The Changes tree has its own menus: inline buttons and a context menu for each kind of row, scoped by the row's context value.
   const changesMenu=itemMenu.filter(item=>item.when.includes('view == gitPro.changes'));
   const offered=(command:string,fragment:string)=>changesMenu.some(item=>item.command===command&&item.when.includes(fragment));
-  for(const [command,fragment] of [['gitPro.stage','working|untracked'],['gitPro.unstage','(staged)'],['gitPro.discard','(working)'],['gitPro.conflicts.merge','(conflicts)'],['gitPro.stageFolder','folder'],['gitPro.stageGroup','gitPro.group.working'],['gitPro.unstageGroup','gitPro.group.staged'],['gitPro.operation.continue','continue']] as const)assert.ok(offered(command,fragment),`${command} is in the Changes menus (${fragment})`);
+  for(const [command,fragment] of [['gitPro.stage','working|untracked'],['gitPro.unstage','(staged)'],['gitPro.discard','(working)'],['gitPro.conflicts.merge','conflicts merge'],['gitPro.stageFolder','folder'],['gitPro.stageGroup','gitPro.group.working'],['gitPro.unstageGroup','gitPro.group.staged'],['gitPro.operation.continue','continue']] as const)assert.ok(offered(command,fragment),`${command} is in the Changes menus (${fragment})`);
   for(const group of ['inline','0_open','1_modify','2_conflict','9_copy'])assert.ok(changesMenu.some(item=>item.group?.startsWith(group)),`the Changes menus have a ${group} group`);
   assert.ok(itemMenu.some(item=>item.command==='gitPro.repositoryTools'&&item.when.includes('gitPro.toolsView')&&item.when.includes('gitPro.tools')),'Repository Tools context action is scoped to its own view items');
 });
@@ -194,4 +194,23 @@ test('keyboard shortcuts are scoped to Git Pro\'s own tabs and views, name regis
   // The context keys the views set are the ones the bindings read.
   const source=readFileSync('src/extension.ts','utf8');
   for(const key of owned)assert.ok(source.includes(`'${key}'`),`${key} is set by extension.ts`);
+});
+
+test('the Changes tree offers Merge… and Open File only on rows they can work on, and takes the words after a row\'s kind',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8'));
+  const items=(manifest.contributes.menus['view/item/context'] as {command:string;when?:string;group?:string}[]).filter(item=>item.when?.includes('view == gitPro.changes'));
+  const shown=(command:string,viewItem:string,group?:string)=>items.some(item=>item.command===command&&(group===undefined||item.group===group)&&when(item.when!,{view:'gitPro.changes',viewItem,listMultiSelection:false}));
+  // A file with something to open, and a deleted one with nothing in the working tree to open; staging and discarding work on both.
+  for(const viewItem of ['gitPro.change.working','gitPro.change.staged','gitPro.change.untracked'])assert.ok(shown('gitPro.openFile',viewItem,'inline@2')&&shown('gitPro.openFile',viewItem,'0_open@3'),`${viewItem} offers Open File`);
+  for(const viewItem of ['gitPro.change.working nofile','gitPro.change.staged nofile','gitPro.change.conflicts nofile'])assert.ok(!shown('gitPro.openFile',viewItem),`${viewItem} offers no Open File`);
+  assert.ok(shown('gitPro.stage','gitPro.change.working nofile')&&shown('gitPro.discard','gitPro.change.working nofile')&&shown('gitPro.diff','gitPro.change.working nofile')&&shown('gitPro.unstage','gitPro.change.staged nofile'),'a deleted row can still be staged, discarded and diffed');
+  // Merge… needs a conflict both sides changed or added; the other conflicts get Resolve Conflicts… in its place.
+  assert.ok(shown('gitPro.conflicts.merge','gitPro.change.conflicts merge','inline@1')&&shown('gitPro.conflicts.merge','gitPro.change.conflicts merge','2_conflict@1')&&!shown('gitPro.conflicts.open','gitPro.change.conflicts merge','inline@1'));
+  for(const viewItem of ['gitPro.change.conflicts','gitPro.change.conflicts nofile']){
+    assert.ok(!shown('gitPro.conflicts.merge',viewItem),`${viewItem} offers no Merge…`); assert.ok(shown('gitPro.conflicts.open',viewItem,'inline@1')&&shown('gitPro.conflicts.open',viewItem,'2_conflict@4'),`${viewItem} offers Resolve Conflicts…`);
+  }
+  for(const viewItem of ['gitPro.change.conflicts','gitPro.change.conflicts merge','gitPro.change.conflicts nofile'])assert.ok(shown('gitPro.conflicts.acceptYours',viewItem)&&shown('gitPro.conflicts.acceptTheirs',viewItem),`${viewItem} takes Accept Yours and Theirs`);
+  assert.ok(shown('gitPro.openFile','gitPro.change.conflicts')&&shown('gitPro.openFile','gitPro.change.conflicts merge'),'a conflict with a file in the working tree offers Open File');
+  // Folder and group rows are not file rows.
+  for(const viewItem of ['gitPro.change.folder.working','gitPro.group.working'])assert.ok(!shown('gitPro.openFile',viewItem)&&!shown('gitPro.conflicts.merge',viewItem),`${viewItem} is not a file row`);
 });

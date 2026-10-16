@@ -30,3 +30,20 @@ test('the tracking read takes up to 200 full local refs and nothing else', () =>
   assert.throws(() => buildReadCommand({ kind: 'branchTracking', refs }), /exceeds its bound/); assert.throws(() => buildReadCommand({ kind: 'branchTracking', refs: [] }), /exceeds its bound/);
   assert.throws(() => buildReadCommand({ kind: 'branchTracking', refs: ['main'] }), /full local branch refs/);
 });
+
+test('many branches with long names are counted in several reads, so the counts do not vanish with the bound of one read', async () => {
+  const f = await advancedFixture();
+  try {
+    const base = await f.commit('a.txt', 'base\n', 'base');
+    const names = Array.from({ length: 150 }, (_, index) => `feature/${'long-name-'.repeat(8)}${index}`);
+    for (const name of names) f.git(['branch', name, base]);
+    // 150 refs of about 100 bytes are past the 12,000 bytes one read takes. Two of them follow the first, which has moved on.
+    f.git(['checkout', names[0]!]); await f.commit('b.txt', 'b\n', 'B'); f.git(['checkout', base]);
+    for (const name of [names[1]!, names[149]!]) { f.git(['config', `branch.${name}.remote`, '.']); f.git(['config', `branch.${name}.merge`, `refs/heads/${names[0]!}`]); }
+    const refs = names.map(name => `refs/heads/${name}`);
+    assert.ok(Buffer.byteLength(refs.join('\0')) > 12000, 'the fixture is wider than one read');
+    assert.throws(() => buildReadCommand({ kind: 'branchTracking', refs }), /exceeds its bound/);
+    const found = await f.gitService.branchTracking(f.id, refs);
+    assert.deepEqual(Object.fromEntries(found), { [refs[1]!]: '↓1', [refs[149]!]: '↓1' });
+  } finally { await f.close(); }
+});

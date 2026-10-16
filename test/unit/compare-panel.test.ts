@@ -531,3 +531,26 @@ test('Mark as Viewed from the native menu is the tab\'s own viewed request for t
     const errors = panel.sent.filter(message => message.type === 'error').length; await run('markViewed', { indexes: '0,x' }); assert.equal(panel.sent.filter(message => message.type === 'error').length, errors + 1, 'a malformed list is refused');
   } finally { await h.cleanup(); }
 });
+
+test('Viewed marks belong to the list they were made in: since fork and tip to tip are two lists, and an edited working file is no longer the one that was viewed', async () => {
+  const stored = new Map<string, unknown>(), workspaceState = { get: (key: string) => stored.get(key), update: async (key: string, value: unknown) => { stored.set(key, JSON.parse(JSON.stringify(value))); } };
+  const viewedIn = (panel: { state: { files: { items: { index: number; viewed?: boolean }[] } } }) => panel.state.files.items.filter(item => item.viewed).map(item => item.index);
+  const h = await harness({ workspaceState });
+  try {
+    await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!;
+    await panel.send({ type: 'viewed', revision: panel.state.revision, indexes: [0], viewed: true }); assert.deepEqual(viewedIn(panel as never), [0]);
+    await panel.send({ type: 'filesMode', revision: panel.state.revision, mode: 'tips' }); assert.deepEqual(viewedIn(panel as never), [], 'the same file has another diff tip to tip');
+    await panel.send({ type: 'filesMode', revision: panel.state.revision, mode: 'fork' }); assert.deepEqual(viewedIn(panel as never), [0], 'and its mark is there again in the list it was made in');
+  } finally { await h.cleanup(); }
+  const worktree = (added: number) => ({ scope: 'worktree', from: LEFT, to: undefined, files: [{ status: 'M', path: 'src/app.ts' }, { status: 'M', path: 'other.ts' }], stats: [{ path: 'src/app.ts', added, removed: 1 }, { path: 'other.ts', added: 1, removed: 1 }], omitted: false });
+  const edited = await harness({ worktree: worktree(1), workspaceState });
+  try {
+    await edited.surface.openWorktree('repo', 'feature'); const panel = edited.panels[0]!;
+    await panel.send({ type: 'viewed', revision: panel.state.revision, indexes: [0, 1], viewed: true }); assert.deepEqual(viewedIn(panel as never), [0, 1]);
+    // The file is edited and saved while the tab is open: the next read of the working tree has other change counts for it, and the file that was not touched keeps its mark.
+    edited.history.worktreeFiles = async () => worktree(4);
+    await panel.send({ type: 'refresh' }); assert.deepEqual(viewedIn(panel as never), [1], 'the edited file is to be viewed again');
+    assert.equal((panel.state.files as unknown as { viewedCount: number }).viewedCount, 1);
+    edited.history.worktreeFiles = async () => worktree(1); await panel.send({ type: 'refresh' }); assert.deepEqual(viewedIn(panel as never), [0, 1], 'and back as it was, it is the file that was viewed');
+  } finally { await edited.cleanup(); }
+});

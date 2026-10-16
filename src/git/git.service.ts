@@ -314,8 +314,15 @@ export class GitService implements RestoreFromSource {
   /** How far each of up to 200 local branches is ahead of and behind its upstream ("↑2 ↓1", or "gone" when the upstream was deleted); a branch with nothing to say is left out. */
   async branchTracking(id:string,refs:readonly string[]):Promise<Map<string,string>>{
     const repo=this.repository(id),found=new Map<string,string>();
-    if(!refs.length)return found;
-    for(const line of (await this.executor.read(repo.root,{kind:'branchTracking',refs})).stdout.toString('utf8').split('\n')){
+    // One read takes at most 200 refs and 12,000 bytes of names; many long branch names go in several reads.
+    const batches:string[][]=[];let batch:string[]=[],bytes=0;
+    for(const ref of refs){
+      const size=Buffer.byteLength(ref)+1;
+      if(batch.length&&(batch.length>=200||bytes+size>10000)){batches.push(batch);batch=[];bytes=0;}
+      batch.push(ref);bytes+=size;
+    }
+    if(batch.length)batches.push(batch);
+    for(const part of batches)for(const line of (await this.executor.read(repo.root,{kind:'branchTracking',refs:part})).stdout.toString('utf8').split('\n')){
       const [ref='',track='']=line.split('\0'),ahead=/ahead (\d+)/.exec(track)?.[1],behind=/behind (\d+)/.exec(track)?.[1];
       const text=track==='gone'?'gone':[ahead?`↑${ahead}`:'',behind?`↓${behind}`:''].filter(Boolean).join(' ');
       if(ref&&text)found.set(ref,text);
