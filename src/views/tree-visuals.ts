@@ -15,17 +15,6 @@ export const changeGroupVisual: Readonly<Record<ChangeGroup, TreeVisual>> = {
   conflicts: { icon: 'warning', color: 'charts.red' },
 };
 
-export function changeFileVisual(change: Pick<FileChange, 'group' | 'status'>): TreeVisual {
-  if (change.group === 'conflicts') return changeGroupVisual.conflicts;
-  if (change.group === 'untracked' || change.status === '?') return changeGroupVisual.untracked;
-  if (change.status.includes('D')) return { icon: 'diff-removed', color: 'charts.red' };
-  if (change.status.includes('R')) return { icon: 'diff-renamed', color: 'charts.blue' };
-  if (change.status.includes('A')) return { icon: 'diff-added', color: 'charts.green' };
-  if (change.status.includes('C')) return { icon: 'copy', color: 'charts.purple' };
-  if (change.status.includes('T')) return { icon: 'symbol-property', color: 'charts.purple' };
-  return changeGroupVisual.working;
-}
-
 /** WebStorm's kind wording (D3): "us" is Yours and "them" is Theirs. */
 export const conflictKindLabels: Readonly<Record<ConflictKind, string>> = {
   bothModified: 'Both modified', bothAdded: 'Both added', deletedByUs: 'Deleted by us', deletedByThem: 'Deleted by them', addedByUs: 'Added by us', addedByThem: 'Added by them', bothDeleted: 'Both deleted',

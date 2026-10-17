@@ -13,7 +13,7 @@ function harness(initial: Change[], mode = 'folder', operation = 'idle', surface
   const file = path.resolve(__dirname, '../../src/views/changes/changes.provider.js'), load = createRequire(file), exports: Record<string, unknown> = {};
   let reads = 0, current = mode; const configListeners: ((event: { affectsConfiguration: (key: string) => boolean }) => void)[] = [];
   class TreeItem { id?: string; description?: string; contextValue?: string; tooltip?: string; iconPath?: unknown; command?: unknown; constructor(readonly label: string, readonly collapsibleState?: number) {} }
-  class ThemeIcon { constructor(readonly id: string, readonly color?: unknown) {} }
+  class ThemeIcon { static readonly File = new ThemeIcon('file'); constructor(readonly id: string, readonly color?: unknown) {} }
   class ThemeColor { constructor(readonly id: string) {} }
   class EventEmitter { private readonly listeners = new Set<() => void>(); event = (listener: () => void) => { this.listeners.add(listener); return { dispose: () => this.listeners.delete(listener) }; }; fire(): void { for (const listener of this.listeners) listener(); } dispose(): void { this.listeners.clear(); } }
   const vscode = { TreeItem, ThemeIcon, ThemeColor, EventEmitter, TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 }, Uri: { file: (value: string) => value, from: (parts: { scheme: string; path: string; query: string }) => parts },
@@ -141,6 +141,9 @@ test('group rows carry their repository and a context value per status group', (
 test('a row carries words after its kind for the menus: no file to open when it is deleted, and Merge… only for a conflict both sides changed or added', () => {
   const rows = [change('kept.ts'), change('gone.ts', 'working', 'D'), change('removed.ts', 'staged', 'D'), change('new.ts', 'untracked', '?'), change('both.ts', 'conflicts', 'UU'), change('added.ts', 'conflicts', 'AA'), change('mine.ts', 'conflicts', 'DU'), change('theirs.ts', 'conflicts', 'UD'), change('neither.ts', 'conflicts', 'DD')];
   const h = harness(rows, 'status');
+  // Every file row, whatever changed in it, has the icon of its file in the user's file icon theme; the status is the colour and the letter of the row.
+  const icons = new Set(h.children().flatMap(group => h.children(group)).map(node => h.provider.getTreeItem(node).iconPath as { id: string; color?: unknown }));
+  assert.equal(icons.size, 1, 'one shared object'); assert.equal([...icons][0]!.id, 'file'); assert.equal([...icons][0]!.color, undefined);
   const values = Object.fromEntries(h.children().flatMap(group => h.children(group)).map(node => { const item = h.provider.getTreeItem(node); return [item.label, item.contextValue]; }));
   assert.deepEqual(values, { 'kept.ts': 'gitPro.change.working', 'gone.ts': 'gitPro.change.working nofile', 'removed.ts': 'gitPro.change.staged nofile', 'new.ts': 'gitPro.change.untracked',
     'both.ts': 'gitPro.change.conflicts merge', 'added.ts': 'gitPro.change.conflicts merge', 'mine.ts': 'gitPro.change.conflicts', 'theirs.ts': 'gitPro.change.conflicts', 'neither.ts': 'gitPro.change.conflicts nofile' });

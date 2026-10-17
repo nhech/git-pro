@@ -7,7 +7,7 @@ import { redact } from '../../security/redaction';
 import { createSurfaces, type Surfaces } from '../../conflicts/surfaces';
 import { operationBanner, type OperationBanner } from '../../conflicts/operation-text';
 import { unlistedChanges } from './unlisted';
-import { changeFileVisual, changeGroupVisual, changeStatusLabel } from '../tree-visuals';
+import { changeGroupVisual, changeStatusLabel } from '../tree-visuals';
 import { changeQuery, changeScheme } from './change-decorations';
 export type ChangeNode = { kind: 'group'; repositoryId: string; group: ChangeGroup } | {kind:'folder';repositoryId:string;group:ChangeGroup;prefix:string} | { kind: 'file'; repositoryId: string; change: FileChange } | { kind: 'message'; message: string }
   /** The operation in progress (a merge, a rebase…), as the first row of the view, with its actions. */
@@ -134,7 +134,8 @@ export class ChangesProvider implements vscode.TreeDataProvider<Node>, vscode.Di
     item.contextValue = [`gitPro.change.${node.change.group}`, ...words].join(' ');
     item.resourceUri = vscode.Uri.from({ scheme: changeScheme, path: `/${node.change.path}`, query: changeQuery(node.change) });
     item.tooltip = `${path}\n${status}${node.change.group === 'staged' ? ' (staged)' : ''}`;
-    item.iconPath = this.asThemeIcon(changeFileVisual(node.change));
+    // The icon is the file's own, from the user's file icon theme (it follows the name in resourceUri); what changed is said by the letter and the colour of the URI's decoration.
+    item.iconPath = vscode.ThemeIcon.File;
     // A conflicted file has no diff to show (Git refuses one during an operation).
     item.command = node.change.group === 'conflicts' ? { command: 'gitPro.resolveConflict', title: 'Resolve Conflict', arguments: [node] } : { command: 'gitPro.diff', title: 'Open Diff', arguments: [node] };
     return item;

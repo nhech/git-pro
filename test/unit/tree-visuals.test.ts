@@ -1,17 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { branchVisual, changeFileVisual, changeGroupVisual, changeStatusLabel, conflictKindLabels, repositoryToolVisual, repositoryVisual } from '../../src/views/tree-visuals';
+import { branchVisual, changeGroupVisual, changeStatusLabel, conflictKindLabels, repositoryToolVisual, repositoryVisual } from '../../src/views/tree-visuals';
 
-test('change tree uses distinct vivid theme colors and semantic icon per Git status', () => {
+test('the groups of the change tree have their own vivid theme colors and icons', () => {
   assert.equal(changeGroupVisual.staged.color, 'charts.green');
-  assert.deepEqual(changeFileVisual({ group: 'untracked', status: '?' }), { icon: 'new-file', color: 'charts.green' });
-  assert.deepEqual(changeFileVisual({ group: 'working', status: 'M' }), { icon: 'diff-modified', color: 'charts.orange' });
-  assert.deepEqual(changeFileVisual({ group: 'staged', status: 'A' }), { icon: 'diff-added', color: 'charts.green' });
-  assert.deepEqual(changeFileVisual({ group: 'staged', status: 'D' }), { icon: 'diff-removed', color: 'charts.red' });
-  assert.deepEqual(changeFileVisual({ group: 'staged', status: 'R' }), { icon: 'diff-renamed', color: 'charts.blue' });
-  assert.deepEqual(changeFileVisual({ group: 'staged', status: 'C' }), { icon: 'copy', color: 'charts.purple' });
-  assert.deepEqual(changeFileVisual({ group: 'working', status: 'T' }), { icon: 'symbol-property', color: 'charts.purple' });
-  assert.deepEqual(changeFileVisual({ group: 'conflicts', status: 'UU' }), changeGroupVisual.conflicts);
+  assert.deepEqual(changeGroupVisual.untracked, { icon: 'new-file', color: 'charts.green' });
+  assert.deepEqual(changeGroupVisual.working, { icon: 'diff-modified', color: 'charts.orange' });
+  assert.deepEqual(changeGroupVisual.conflicts, { icon: 'warning', color: 'charts.red' });
 });
 
 test('change tree uses plain-language statuses while preserving unknown codes', () => {
@@ -37,7 +32,6 @@ test('conflict rows name their kind in WebStorm words, with Yours and Theirs swa
   assert.equal(changeStatusLabel({ group: 'conflicts', status: 'DU' }), 'Conflict');
   assert.equal(changeStatusLabel({ group: 'conflicts', status: 'DD' }), 'Both deleted');
   assert.equal(changeStatusLabel({ group: 'conflicts', status: 'XY' }, 'merging'), 'Conflict');
-  assert.deepEqual(changeFileVisual({ group: 'conflicts', status: 'DU' }), changeGroupVisual.conflicts, 'every kind keeps the conflict colour and icon');
 });
 
 test('branch, repository and repository-tool icons reinforce labels with theme colors', () => {

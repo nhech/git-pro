@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Changes shows each file's own icon** from your file icon theme (TypeScript, Markdown, images and so on), as the built-in Source Control does. Version 0.3.0 gave every row the same icon for its status; the status is now the coloured letter at the end of the row, and the colour of the name.
+
 ## 0.3.0 — 2026-10-16
 
 Changes is now VS Code's own tree, Branches shows how far each branch has moved, and Compare reads more like a code review.
