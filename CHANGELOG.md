@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-10-17
 
+Changes shows each file's own icon, a binary file opens in the built-in diff, and Repositories moves to the bottom of the sidebar.
+
+- **A binary file opens in the built-in diff.** Clicking a changed image, PDF or other file that Git Pro's text diff cannot show used to end in "Binary revision: open the file through native Source Control". It now opens that diff itself, and the same goes for a file that is too large, a symlink or submodule, and text that is not UTF-8. The message appears only when the built-in Source Control cannot show the file either. A file that is staged and changed again opens as its working-tree change.
+- **The Repositories view is the last view of the sidebar**, after Branches and Repository Tools: with one repository it adds little, and Commit and Changes now come first. VS Code keeps the order you already have; drag the view, or reset it with **View: Reset Location of All Views**, to see the new one.
 - **Changes shows each file's own icon** from your file icon theme (TypeScript, Markdown, images and so on), as the built-in Source Control does. Version 0.3.0 gave every row the same icon for its status; the status is now the coloured letter at the end of the row, and the colour of the name.
 
 ## 0.3.0 — 2026-10-16
