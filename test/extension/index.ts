@@ -20,6 +20,7 @@ import { RebasePlanner } from '../../src/webviews/rebase/rebase-planner';
 import { verifyConflictsHost } from './conflicts-host';
 import { verifyCompareHost } from './compare-host';
 import { verifyBranchCompareHost } from './branch-picker-native';
+import { verifyBinaryDiffHost } from './binary-diff-host';
 async function webviewTab(label: string): Promise<void> {
   const exists = () => vscode.window.tabGroups.all.flatMap(group => group.tabs).some(tab => tab.input instanceof vscode.TabInputWebview && tab.label === label);
   if (exists()) return;
@@ -123,6 +124,7 @@ async function runHostChecks(): Promise<void> {
     assert.equal(path.normalize(vscode.window.activeTextEditor?.document.uri.fsPath ?? ''), path.normalize(path.join(root,'changed.txt')), 'Open File opened the row\'s file');
     await vscode.commands.executeCommand('gitPro.fileHistory', row);
     await webviewTab('Git Pro: File History');
+    await verifyBinaryDiffHost(api, root);
     assert.equal(vscode.workspace.getConfiguration('gitPro').get('blame.enabled'),false);
     await vscode.commands.executeCommand('gitPro.toggleBlame');
     const lensUri = vscode.Uri.file(path.join(root, 'changed.txt'));

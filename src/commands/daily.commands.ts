@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { GitService, DailyError, type BranchInfo } from '../git/git.service';
 import type { CommitRequest } from '../git/daily-backend';
 import { DiffService } from '../git/diff/diff.service';
+import { NativeDiffError } from '../git/diff/native-diff-error';
 import { RevisionProvider } from '../documents/revision-provider';
 import type { ChangeNode } from '../views/changes/changes.provider';
 import type { BranchNode } from '../views/branches/branches.provider';
@@ -114,10 +115,28 @@ export class DailyCommands implements vscode.Disposable {
     const status = await this.git.state(id);
     const entry = change?.kind === 'file' ? status.changes.find(item => item.path === change.change.path && item.group === change.change.group) : status.changes.find(item => item.path === paths[0] && item.group !== 'staged') ?? status.changes.find(item => item.path === paths[0]);
     if (!entry) throw new Error('No local diff for this file.');
-    const prepared = await this.diffs.prepare(id, entry, withHead, { head: status.oid });
+    let prepared: Awaited<ReturnType<DiffService['prepare']>>;
+    try { prepared = await this.diffs.prepare(id, entry, withHead, { head: status.oid }); }
+    catch (error) {
+      // What Git Pro's text diff cannot show (a binary file, one that is too large, a link, text that is not UTF-8) VS Code's own Source Control can: open it there.
+      // The error is for when that cannot be done either.
+      if (error instanceof NativeDiffError && await this.openNativeChange(id, entry.path)) return;
+      throw error;
+    }
     const left = this.revisions.add(prepared.left, entry.originalPath ?? entry.path);
     const right = prepared.workingPath ? vscode.Uri.file(prepared.workingPath) : this.revisions.add(prepared.right ?? Buffer.alloc(0), entry.path);
     await vscode.commands.executeCommand('vscode.diff', left, right, redact(prepared.title));
+  }
+  /**
+   * The diff of the built-in Git extension for a changed file. It takes the file's URI and finds the file in its own working tree or index group, so a file that is both
+   * staged and changed again opens as its working-tree change. Returns whether a diff of the file is open afterwards: the command quietly does nothing for a file it does not know.
+   */
+  private async openNativeChange(id: string, file: string): Promise<boolean> {
+    try {
+      await vscode.commands.executeCommand('git.openChange', vscode.Uri.file(await this.git.authorizePath(id, file)));
+      const name = path.basename(file);
+      return vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label.startsWith(`${name} (`)));
+    } catch { return false; }
   }
   async commit(id: string, message: string, options: CommitRequest, push: boolean): Promise<boolean> {
     const preview = await this.git.preview(id);
