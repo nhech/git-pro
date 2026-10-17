@@ -814,11 +814,6 @@
     "views": {
       "gitPro": [
         {
-          "id": "gitPro.repositories",
-          "name": "%view.gitPro.repositories.name%",
-          "visibility": "collapsed"
-        },
-        {
           "id": "gitPro.commitView",
           "name": "%view.gitPro.commitView.name%",
           "type": "webview",
@@ -837,6 +832,11 @@
         {
           "id": "gitPro.toolsView",
           "name": "%view.gitPro.toolsView.name%",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "gitPro.repositories",
+          "name": "%view.gitPro.repositories.name%",
           "visibility": "collapsed"
         }
       ]

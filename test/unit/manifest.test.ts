@@ -214,3 +214,8 @@ test('the Changes tree offers Merge… and Open File only on rows they can work 
   // Folder and group rows are not file rows.
   for(const viewItem of ['gitPro.change.folder.working','gitPro.group.working'])assert.ok(!shown('gitPro.openFile',viewItem)&&!shown('gitPro.conflicts.merge',viewItem),`${viewItem} is not a file row`);
 });
+
+test('the Git Pro sidebar lists the views a day of work uses first, and Repositories, which a single repository hardly needs, last',()=>{
+  const manifest=JSON.parse(readFileSync('package.json','utf8'));
+  assert.deepEqual((manifest.contributes.views.gitPro as {id:string}[]).map(view=>view.id),['gitPro.commitView','gitPro.changes','gitPro.branchesView','gitPro.toolsView','gitPro.repositories']);
+});
