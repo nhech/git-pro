@@ -12,7 +12,7 @@ The composer uses the current index and preserves partial staging performed in n
 
 **Hunk Actions** checks a reviewed text patch before applying only that hunk. Unsaved files or stale reviews block the action. Binary, new/deleted, rename and mode-change cases use native SCM guidance. **Commit File** commits the full saved version of one file with Git's `commit --only`, preserving unrelated staged files.
 
-Enable active-line blame to see author, UTC author date, hash and summary. Dirty buffers suppress on-disk attribution; uncommitted lines have no commit link. Optional CodeLens opens File History for saved regular files in open trusted repositories.
+**Toggle File Blame** (Command Palette) shows the blame of the whole saved file in the gutter: before each block of lines the commit's short hash, its author and how long ago, on a tint that runs from warm (changed in the last day) through green and blue to grey (more than two years), down all the lines that commit wrote; a line that is not committed yet says so. Hover the gutter for a card with the author, the date, the subject and links to open the commit in History, copy its hash and open it on the remote. An edit takes the blame away until the file is saved, because the lines no longer match it, and a new HEAD reads it again. It works on a regular file of at most 1 MiB and 20,000 lines. Enable active-line blame to see author, UTC author date, hash and summary. Dirty buffers suppress on-disk attribution; uncommitted lines have no commit link. Optional CodeLens opens File History for saved regular files in open trusted repositories.
 
 ## Sync and branches
 

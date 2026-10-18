@@ -132,14 +132,3 @@ export function gitUndoBackend(git: GitService): UndoBackend {
     exists: async (root, oid) => { try { await git.executor.read(root, { kind: 'ref', ref: validateOid(oid) }); return true; } catch { return false; } },
   };
 }
-
-/** "just now", "5 minutes ago", "3 hours ago", "2 days ago". */
-export function describeAge(time: number, now: number): string {
-  const minutes = Math.max(0, Math.floor((now - time) / 60_000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
-}

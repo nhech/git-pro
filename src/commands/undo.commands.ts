@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import type { FeatureDeps, TrustedCommand } from '../conflicts/surfaces';
 import type { AdvancedCommands } from './advanced.commands';
-import { describeAge, type DiscardEntry, type PushEntry, type ResetEntry, type UndoEntry } from '../git/undo/undo.service';
+import type { DiscardEntry, PushEntry, ResetEntry, UndoEntry } from '../git/undo/undo.service';
+import { describeAge } from '../utils/age';
 import { redact } from '../security/redaction';
 
 type UndoDeps = Pick<FeatureDeps, 'registry' | 'git' | 'undo'>;

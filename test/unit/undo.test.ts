@@ -6,7 +6,8 @@ import { runInNewContext } from 'node:vm';
 import * as path from 'node:path';
 import { buildUndoMutation } from '../../src/git/undo/undo-builders';
 import { buildMutationCommand } from '../../src/git/command-builders';
-import { UndoService, UndoUnavailable, describeAge, parseUndoEntries, undoLimit, undoMaxAge, type UndoBackend, type UndoEntry, type UndoMemento } from '../../src/git/undo/undo.service';
+import { describeAge } from '../../src/utils/age';
+import { UndoService, UndoUnavailable, parseUndoEntries, undoLimit, undoMaxAge, type UndoBackend, type UndoEntry, type UndoMemento } from '../../src/git/undo/undo.service';
 
 const oid = (digit: string) => digit.repeat(40);
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

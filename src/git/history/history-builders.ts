@@ -11,7 +11,7 @@ export type HistoryReadCommand = { kind: 'history' | 'historyWindow'; tips: read
   { kind: 'commitMetadata' | 'commitMessage' | 'containingRefs'; oid: string } |
   { kind: 'changedFiles' | 'numstat'; from?: string; to: string; paths?: readonly string[] } |
   {kind:'mergeBase';left:string;right:string} | {kind:'worktreeDiff'|'worktreeNumstat';oid:string;paths?:readonly string[]} |
-  { kind: 'blame'; path: string; line: number; oid?: string };
+  { kind: 'blame'; path: string; line: number; oid?: string } | { kind: 'blameFile'; path: string };
 function bounded(value: string, maximum = 500): string {
   if (typeof value !== 'string' || value.includes('\0') || value.length > maximum) throw new Error('Invalid history filter.');
   return value;
@@ -85,6 +85,8 @@ export function buildHistoryRead(command: HistoryReadCommand): string[] {
     // One OID and no second tree: Git compares it with the working tree (tracked files, staged plus unstaged).
     case 'worktreeDiff': case 'worktreeNumstat':
       return [...prefix,'diff',validateOid(command.oid),'--no-ext-diff','--no-textconv','-M','-l1000',command.kind==='worktreeDiff'?'--name-status':'--numstat','-z','--',...(command.paths??[]).map(historyPath)];
+    // The whole file, once: `--porcelain` repeats a commit's details only the first time it appears, so a long file stays small.
+    case 'blameFile': return [...prefix, 'blame', '--no-textconv', '--porcelain', '--', historyPath(command.path)];
     case 'blame': {
       if (!Number.isInteger(command.line) || command.line < 1 || command.line > 10_000_000) throw new Error('Invalid blame line.');
       // Like every other content read, never run the repository's textconv programs.

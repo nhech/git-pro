@@ -81,6 +81,8 @@ test('conflict and compare contributions use stable menus, owned context keys, l
     ...(manifest.contributes.menus['webview/context'] as Item[]).map(item=>item.command),
     // The same for the entries of the Branches, Repositories and Repository Tools views' own menus: they take the item they were opened on.
     ...(menus['view/item/context'] as Item[]).map(item=>item.command).filter(command=>/^gitPro\.(?:branch|repository|tools)\./.test(command)),
+    // The links of a file blame card name the commit they were made for.
+    'gitPro.blame.openCommit','gitPro.blame.copyHash','gitPro.blame.openOnRemote',
     // The Changes view's own: a group row stages everything in it, and the title switches between a list and a tree.
     'gitPro.stageGroup','gitPro.unstageGroup','gitPro.changes.viewAsTree','gitPro.changes.viewAsList'];
   assert.deepEqual(menus.commandPalette!.filter(item=>item.when==='false').map(item=>item.command).sort(),[...argumentOnly].sort(),'argument-only commands are hidden from the palette');

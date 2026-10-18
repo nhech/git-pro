@@ -7,6 +7,7 @@ import { parseHistory, verifiedLinearPrefix, parseChangedFiles, parseNumstat, pa
 import type { CompareFiles, CompareFilesMode, CompareService, MergeBase, RefComparison } from '../../webviews/compare/compare-contract';
 import { initialFileCursor, advanceFileCursor, parseLineageHistory, parseHistoryEdges, type FileCursor } from './file-lineage';
 import { parseBlame } from './blame-parser';
+import { parseBlameFile, type BlameFile } from './blame-file';
 import { parseStatus } from '../git-parser';
 import { validateOid } from '../../security/refs';
 import { ReadScheduler } from '../../utils/read-scheduler';
@@ -225,6 +226,13 @@ export class HistoryService implements CompareService {
     const info = await lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 5 * 1024 * 1024 || (await this.registry.resolveFile(absolute))?.id !== id) throw new Error('Blame requires a bounded regular file in this repository.');
     return parseBlame(await this.read(id, { kind: 'blame', path: file, line }, signal));
+  }
+  /** The blame of every line of a file of at most 1 MiB and 20,000 lines; what is not committed yet reads as not committed. */
+  async blameFile(id: string, file: string, signal?: AbortSignal): Promise<BlameFile> {
+    const repo = this.repository(id); const absolute = await this.policy.authorizeFile(repo.root, file);
+    const info = await lstat(absolute);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 1024 * 1024 || (await this.registry.resolveFile(absolute))?.id !== id) throw new Error('Blame needs a regular file of at most 1 MiB in this repository.');
+    return parseBlameFile(await this.read(id, { kind: 'blameFile', path: file }, signal));
   }
   async revision(id: string, oid: string | undefined, file: string, signal?: AbortSignal): Promise<Buffer> {
     historyPath(file); this.repository(id); this.policy.checkTrust();

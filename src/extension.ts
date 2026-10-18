@@ -28,6 +28,7 @@ import { HistoryService } from './git/history/history.service';
 import { HistoryPanel } from './webviews/graph/history-panel';
 import * as path from 'node:path';
 import { BlameController } from './editor/blame-controller';
+import { FileBlame } from './editor/file-blame';
 import { HistoryCodeLens } from './editor/history-codelens';
 import { AdvancedService } from './git/advanced/advanced.service';
 import { AdvancedCommands } from './commands/advanced.commands';
@@ -126,6 +127,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       hosts: id => { const repo = registry.list().find(item => item.id === id); return vscode.workspace.getConfiguration('gitPro', repo ? vscode.Uri.file(repo.root) : undefined).get('remoteHosts'); } });
     const historyPanels = new HistoryPanel(context, history, revisions, surfaces.menus, links);
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
+    const fileBlame = new FileBlame(history, registry, links, (id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
     const daily = new DailyCommands(git, revisions, adapter, changesView, logger, surfaces, undo);
@@ -139,7 +141,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       providers.repositories, providers.changes, statusbar,
       vscode.window.createTreeView('gitPro.repositories', { treeDataProvider: providers.repositories }),
       changesView, new ChangeDecorationProvider(),
-      revisions, daily, branches, composer, autoFetch, history, historyPanels, blame,
+      revisions, daily, branches, composer, autoFetch, history, historyPanels, blame, fileBlame,
       vscode.workspace.registerTextDocumentContentProvider('git-pro-revision', revisions),
       branchesView, trackSelection(branchesView, 'gitPro.branchesView.item', item => branches.getTreeItem(item).contextValue),
       vscode.window.registerWebviewViewProvider('gitPro.commitView', composer));
@@ -193,6 +195,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await configuration.update('blame.enabled', !configuration.get('blame.enabled', false), target);
     });
     command('gitPro.openBlameCommit',async()=>blame.openCurrentCommit());
+    // Blame of the whole file in the gutter, and the links of its hover card (which name a commit of a repository that is open).
+    command('gitPro.blame.toggleFile',()=>fileBlame.toggle());
+    command('gitPro.blame.openCommit',async argument=>fileBlame.open(argument));
+    command('gitPro.blame.copyHash',argument=>fileBlame.copyHash(argument));
+    command('gitPro.blame.openOnRemote',argument=>fileBlame.openOnRemote(argument));
     /** The row of the Changes view a menu was opened on (a file row), or nothing. */
     const changedFile = (value: unknown): { repositoryId: string; path: string } | undefined => {
       const row = value as { kind?: unknown; repositoryId?: unknown; change?: { path?: unknown } } | undefined;

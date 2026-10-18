@@ -282,6 +282,26 @@
         "category": "%command.category%"
       },
       {
+        "command": "gitPro.blame.toggleFile",
+        "title": "%command.gitPro.blame.toggleFile.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.blame.openCommit",
+        "title": "%command.gitPro.blame.openCommit.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.blame.copyHash",
+        "title": "%command.gitPro.blame.copyHash.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.blame.openOnRemote",
+        "title": "%command.gitPro.blame.openOnRemote.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "gitPro.openBlameCommit",
         "title": "%command.gitPro.openBlameCommit.title%",
         "category": "%command.category%"
@@ -1546,6 +1566,18 @@
         {
           "command": "gitPro.operation.skip",
           "when": "gitPro.operation =~ /^(rebasing|cherry-picking|reverting)$/"
+        },
+        {
+          "command": "gitPro.blame.openCommit",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.blame.copyHash",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.blame.openOnRemote",
+          "when": "false"
         },
         {
           "command": "gitPro.menu.commit.checkoutDetached",

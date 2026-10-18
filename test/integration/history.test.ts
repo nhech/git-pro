@@ -362,3 +362,34 @@ test('commit details too large to list keep metadata and say what was left out',
     await assert.rejects(f.service.details(f.id, oid), /timed out/, 'other failures remain errors');
   } finally { await f.close(); }
 });
+
+test('whole-file blame reads every line in one pass, marks what is not committed, and refuses what it cannot bound', async () => {
+  const f = await historyFixture();
+  try {
+    const first = await f.commit('file.txt', 'one\ntwo\nthree\n', 'first');
+    const second = await f.commit('file.txt', 'one\nTWO\nthree\nfour\n', 'second: change two, add four');
+    const committed = await f.service.blameFile(f.id, 'file.txt');
+    assert.equal(committed.lines, 4);
+    assert.deepEqual(committed.blocks.map(block => [block.start, block.length, block.commit.oid, block.commit.summary]), [[0, 1, first, 'first'], [1, 1, second, 'second: change two, add four'], [2, 1, first, 'first'], [3, 1, second, 'second: change two, add four']]);
+    assert.equal(committed.blocks[1]!.commit.author, 'Fixture'); assert.ok(committed.blocks.every(block => !block.commit.uncommitted));
+    assert.equal(committed.blocks[0]!.commit, committed.blocks[2]!.commit, 'a commit seen again reuses its details');
+    await writeFile(path.join(f.root, 'file.txt'), 'one\nTWO\nthree changed\nfour\n');
+    const working = await f.service.blameFile(f.id, 'file.txt');
+    assert.deepEqual(working.blocks.map(block => [block.start, block.commit.uncommitted]), [[0, false], [1, false], [2, true], [3, false]], 'only the edited line is not committed yet');
+    assert.equal(working.blocks[2]!.commit.oid, '0'.repeat(40));
+    // The repository's textconv program does not run; a path outside, a missing file, a too large one and one with too many lines are refused.
+    const marker = path.join(f.parent, 'textconv-ran.txt').split(path.sep).join('/');
+    await writeFile(path.join(f.root, '.gitattributes'), '*.txt diff=probe\n'); f.git(['config', 'diff.probe.textconv', `sh -c 'echo ran >> "${marker}"; cat "$1"' -`]);
+    await f.service.blameFile(f.id, 'file.txt'); assert.equal(await readFile(marker, 'utf8').catch(() => ''), '');
+    await assert.rejects(f.service.blameFile(f.id, '../outside.txt'), /Invalid/); await assert.rejects(f.service.blameFile(f.id, '.git/config'));
+    await assert.rejects(f.service.blameFile(f.id, 'missing.txt'));
+    await writeFile(path.join(f.root, 'big.txt'), 'x'.repeat(1024 * 1024 + 1)); f.git(['add', 'big.txt']); f.git(['commit', '-m', 'big']);
+    await assert.rejects(f.service.blameFile(f.id, 'big.txt'), /at most 1 MiB/);
+    const lines = Array.from({ length: 20_001 }, (_, index) => `l${index}`).join('\n') + '\n'; await writeFile(path.join(f.root, 'long.txt'), lines); f.git(['add', 'long.txt']); f.git(['commit', '-m', 'long']);
+    await assert.rejects(f.service.blameFile(f.id, 'long.txt'), /too many lines/);
+    await writeFile(path.join(f.root, 'empty.txt'), ''); f.git(['add', 'empty.txt']); f.git(['commit', '-m', 'empty']);
+    assert.deepEqual((await f.service.blameFile(f.id, 'empty.txt')).blocks, []);
+    const controller = new AbortController(); controller.abort(); await assert.rejects(f.service.blameFile(f.id, 'file.txt', controller.signal), /cancelled/);
+    await f.registry.sync([]); await assert.rejects(f.service.blameFile(f.id, 'file.txt'), /no longer open/);
+  } finally { await f.close(); }
+});

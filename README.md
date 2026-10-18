@@ -63,7 +63,7 @@ Selecting a file does not stage it. The composer commits the current index, incl
 | Changes and commits | A native Changes tree with file and folder staging, native diffs, reviewed discard, commit, amend and signoff |
 | Branches and sync | Branch and upstream actions from the view's own right-click menu, how far each branch is ahead of or behind its upstream, fetch, explicit pull strategy, push, init and clone |
 | History | Commit graph, filters, details, merge-parent selection, comparison and rename-aware File History; commit actions in the right-click menu |
-| File review | Text hunk actions, saved-file commits and optional active-line blame and CodeLens |
+| File review | Text hunk actions, saved-file commits, whole-file blame in the gutter with age colours and a hover card, optional active-line blame and CodeLens |
 | Conflicts | Conflicts tab with Yours/Theirs by branch, bulk Accept Yours/Theirs, Merge… in VS Code's merge editor, Continue/Abort banner |
 | Compare | Any branch, tag or revision such as `HEAD~3` against another; a branch, tag or revision against the working tree or one folder of it; commits on each side, with cherry-picked copies marked; changed files as a nested tree with diffs opened beside the list and files marked as viewed; Open All Changes; Get from Branch |
 | Advanced operations | Merge, rebase, cherry-pick, revert, reset and operation recovery; interactive linear rebase with a right-click menu on each step |
