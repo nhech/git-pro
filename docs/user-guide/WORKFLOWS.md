@@ -8,6 +8,8 @@ The composer uses the current index and preserves partial staging performed in n
 
 ## File review
 
+**Single lines** are staged with VS Code's own commands, which work in the diff Git Pro opens for a changed file (Index ↔ Working Tree): select the lines in the right-hand editor, right-click, and choose **Stage Selected Ranges** or **Revert Selected Ranges**. To unstage single lines of a file that is already staged, use the built-in Source Control view, whose diff offers **Unstage Selected Ranges**.
+
 **Hunk Actions** checks a reviewed text patch before applying only that hunk. Unsaved files or stale reviews block the action. Binary, new/deleted, rename and mode-change cases use native SCM guidance. **Commit File** commits the full saved version of one file with Git's `commit --only`, preserving unrelated staged files.
 
 Enable active-line blame to see author, UTC author date, hash and summary. Dirty buffers suppress on-disk attribution; uncommitted lines have no commit link. Optional CodeLens opens File History for saved regular files in open trusted repositories.
