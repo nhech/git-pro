@@ -8,16 +8,16 @@ What Git Pro costs, as measured, and where it is bounded by design. Everything h
 
 | What | Result |
 |---|---|
-| First page of History (100 commits) of the 100,000-commit history, cold | 131 ms |
-| The same page, five warm runs | median 116 ms, slowest 136 ms |
-| Reading and parsing the 10,000 branches | 1.5 s |
-| Searching the 10,000 branches again, from the cache | 1.6 ms |
-| Reading and parsing the status of 5,000 changed files | 93 ms |
+| First page of History (100 commits) of the 100,000-commit history, cold | 120 ms |
+| The same page, five warm runs | median 111 ms, slowest 127 ms |
+| Reading and parsing the 10,000 branches | 1.4 s |
+| Searching the 10,000 branches again, from the cache | 2.3 ms |
+| Reading and parsing the status of 5,000 changed files | 81 ms |
 | 500 repository change events fired at once | 1 status read |
-| Memory of the whole Node process that held the repositories and ran the test | 97 MB |
-| Size of the package | 343 KB, 40 files, 1.2 MB unpacked; no runtime dependencies |
+| Memory of the whole Node process that held the repositories and ran the test | 98 MB |
+| Size of the package | 344 KB, 40 files, 1.2 MB unpacked; no runtime dependencies |
 
-Run on 2026-10-18, version 0.3.1, Windows 11, an 11th Gen Intel Core i5-11400F at 2.6 GHz, Git 2.36.0 for Windows (the oldest Git that Git Pro supports is 2.32), Node 24. Your repository, disk, antivirus and Git will give other numbers; the figures above are one machine's, not a promise.
+Run on 2026-10-19, version 0.4.0, Windows 11, an 11th Gen Intel Core i5-11400F at 2.6 GHz, Git 2.36.0 for Windows (the oldest Git that Git Pro supports is 2.32), Node 24. Your repository, disk, antivirus and Git will give other numbers; the figures above are one machine's, not a promise.
 
 What this measures is Git Pro's own path: starting Git, reading its output with the bounds below, and parsing it. It does not measure VS Code's start-up, the time the extension takes to activate inside VS Code, the memory of the extension host, or how fast a webview draws. Those depend on the machine and on the other extensions that are installed, and no figure for them is published here.
 
