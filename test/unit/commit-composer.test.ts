@@ -78,3 +78,72 @@ test('Ctrl+Enter in the message box commits like the Commit button, and only whe
   receive!({data:{type:'state',session:'s',repositoryId:'repo',repository:'repo',message:'',busy:false,staged:1,operation:'merging',subjectLimit:72,history:[]}});
   assert.equal(elements.get('staged')!.textContent,'merging in progress · resolve in Git Pro Conflicts');assert.equal(elements.get('commit')!.disabled,true);
 });
+
+test('the Conventional Commits choice reads and rewrites only the prefix of the first line, for the types the setting lists',()=>{
+  let receive:((event:{data:unknown})=>void)|undefined;const posted:Record<string,unknown>[]=[];
+  class Control{
+    value='';textContent='';title='';placeholder='';checked=false;disabled=false;hidden=false;open=false;isConnected=true;children:{text:string;value:string}[]=[];dataset:Record<string,string>={};attributes=new Map<string,string>();handlers=new Map<string,((event:Record<string,unknown>)=>void)[]>();
+    focus(){document.activeElement=this;}setAttribute(key:string,value:string){this.attributes.set(key,value);}addEventListener(type:string,callback:(event:Record<string,unknown>)=>void){this.handlers.set(type,[...(this.handlers.get(type)??[]),callback]);}fire(type:string){for(const callback of this.handlers.get(type)??[])callback({type});}
+    dispatchEvent(event:{type:string}){this.fire(event.type);}click(){this.fire('click');}replaceChildren(...children:{text:string;value:string}[]){this.children=children;}querySelector(){return undefined;}contains(){return false;}
+  }
+  const ids=['repository','staged','message','warning','amend','signoff','noVerify','commit','commit-label','advanced-label','push','history','clearHistory','result','conventional','cc-type','cc-scope','cc-breaking','commit-menu'];
+  const body=new Control(),elements=new Map(ids.map(id=>[id,new Control()]));body.dataset.session='s';
+  const document={body,activeElement:body as Control,hasFocus:()=>true,addEventListener:()=>undefined,getElementById:(id:string)=>elements.get(id)};
+  runInNewContext(readFileSync('media/commit.js','utf8'),{document,window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},navigator:{platform:'Win32'},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>posted.push(value)}),Option:class{constructor(readonly text:string,readonly value:string){}},Event:class{constructor(readonly type:string){}}});
+  const message=elements.get('message')!,type=elements.get('cc-type')!,scope=elements.get('cc-scope')!,breaking=elements.get('cc-breaking')!,menu=elements.get('commit-menu')!,group=elements.get('conventional')!;
+  const state=(extra:Record<string,unknown>={})=>receive!({data:{type:'state',session:'s',repositoryId:'repo',repository:'repo',message:'',busy:false,staged:1,operation:'idle',subjectLimit:72,history:[],conventionalTypes:['feat','fix','docs','my-type'],...extra}});
+  const typed=(value:string)=>{message.value=value;message.fire('input');};
+  const choose=(value:string)=>{type.value=value;type.fire('change');};
+  state();
+  assert.equal(group.hidden,false);assert.deepEqual(type.children.map(item=>item.text),['No type','feat — a new feature','fix — a bug fix','docs — documentation only','my-type']);assert.deepEqual(type.children.map(item=>item.value),['','feat','fix','docs','my-type']);
+  assert.equal(scope.disabled,true,'a scope needs a type');assert.equal(breaking.disabled,true);
+  const options=type.children;state();assert.equal(type.children,options,'a refresh with the same types leaves the open drop-down alone');
+
+  typed('add parser');assert.equal(type.value,'');
+  menu.open=true;choose('feat');
+  assert.equal(message.value,'feat: add parser');assert.equal(posted.filter(item=>item.type==='draft').at(-1)?.message,'feat: add parser','the draft follows the rewrite');
+  assert.equal(menu.open,false,'choosing a type closes the menu');assert.equal(document.activeElement,message,'and returns to the message');assert.equal(scope.disabled,false);assert.equal(breaking.disabled,false);
+  scope.value='api';scope.fire('change');assert.equal(message.value,'feat(api): add parser');
+  breaking.checked=true;breaking.fire('change');assert.equal(message.value,'feat(api)!: add parser');
+  scope.value=' (a)(b)\n ';scope.fire('change');assert.equal(message.value,'feat(ab)!: add parser','brackets and line breaks cannot end up in the scope');
+  scope.value='';scope.fire('change');assert.equal(message.value,'feat!: add parser');
+
+  // Only the first line changes; the body is kept as it is.
+  typed('feat(api)!: add parser\n\nBody text\nsecond: line');
+  assert.deepEqual([type.value,scope.value,breaking.checked],['feat','api',true],'the controls read the message');
+  choose('fix');assert.equal(message.value,'fix(api)!: add parser\n\nBody text\nsecond: line');
+  choose('');assert.equal(message.value,'add parser\n\nBody text\nsecond: line');assert.deepEqual([type.value,scope.value,breaking.checked,scope.disabled],['','',false,true]);
+
+  // A prefix that is not one of the listed types is part of the subject, not a type.
+  typed('note: keep this');choose('fix');assert.equal(message.value,'fix: note: keep this');
+  typed('wip(x): y');assert.equal(type.value,'');typed('Feat: capital');assert.equal(type.value,'');typed('feat:no space');assert.deepEqual([type.value],['feat']);
+  typed('my-type(x): y');assert.equal(type.value,'my-type');typed('feat (x): y');assert.equal(type.value,'','a space before the scope is not a prefix');
+  typed('');choose('docs');assert.equal(message.value,'docs: ','an empty message gets just the prefix');
+
+  // A draft restored by a refresh (the message box is not focused) is read too; the settings decide what is offered, and none hides the choice.
+  document.activeElement=body;state({message:'fix(core): restored'});assert.deepEqual([type.value,scope.value],['fix','core']);
+  state({conventionalTypes:['feat']});assert.deepEqual(type.children.map(item=>item.value),['','feat']);assert.equal(type.value,'','fix is no longer a type');
+  state({conventionalTypes:['Feat','x'.repeat(30),5,null,'ok-1']});assert.deepEqual(type.children.map(item=>item.value),['','ok-1'],'only lower-case words of at most 20 characters');
+  state({conventionalTypes:[]});assert.equal(group.hidden,true);state({conventionalTypes:undefined});assert.equal(group.hidden,true);
+
+  // Nothing is rewritten while a commit runs or without a repository.
+  state({message:'add'});const before=message.value;state({busy:true,message:'add'});assert.equal(type.disabled,true);choose('feat');assert.equal(message.value,before);
+  state({repositoryId:'',repository:'Choose a repository'});assert.equal(type.disabled,true);
+});
+
+test('the composer sends the renderer only the commit types the setting holds that are valid, and none without a repository',async()=>{
+  const file=path.resolve(__dirname,'../../src/webviews/commit/commit-composer.js'),load=createRequire(file),exports:Record<string,unknown>={};
+  const disposable={dispose:()=>undefined},messages:Record<string,unknown>[]=[],state=new Map<string,unknown>();let active:{id:string;root:string}|undefined={id:'repo',root:'fixture'};
+  const vscode={workspace:{onDidChangeConfiguration:()=>disposable,getConfiguration:()=>({get:(key:string)=>key==='commit.conventionalTypes'?['feat','Bad',5,'fix','feat']:undefined})},Uri:{file:(value:string)=>value,joinPath:(_root:unknown,...parts:string[])=>parts.join('/')}};
+  runInNewContext(readFileSync(file,'utf8'),{exports,require:(name:string)=>name==='vscode'?vscode:load(name)});
+  const context={extensionUri:'owned',workspaceState:{get:(key:string,fallback:unknown)=>state.get(key)??fallback,update:async(key:string,value:unknown)=>{state.set(key,value);}}};
+  const git={registry:{get active(){return active;},onDidChange:()=>disposable,store:new Map([['repo',{changes:[],operation:'idle',head:'main'}]])},repository:()=>({root:'fixture'})};
+  type Composer={resolveWebviewView(view:unknown):Promise<void>;update():Promise<void>;dispose():void};
+  const Constructor=exports.CommitComposer as new(context:unknown,git:unknown,commit:()=>Promise<boolean>)=>Composer;
+  const composer=new Constructor(context,git,async()=>true);
+  const view={visible:true,webview:{html:'',asWebviewUri:String,cspSource:'owned:',onDidReceiveMessage:()=>disposable,postMessage:async(value:Record<string,unknown>)=>{messages.push(value);return true;}},onDidDispose:()=>disposable};
+  try{
+    await composer.resolveWebviewView(view);assert.deepEqual(messages.filter(item=>item.type==='state').at(-1)!.conventionalTypes,['feat','fix']);
+    active=undefined;await composer.update();assert.equal(JSON.stringify(messages.filter(item=>item.type==='state').at(-1)!.conventionalTypes),'[]');
+  }finally{composer.dispose();}
+});

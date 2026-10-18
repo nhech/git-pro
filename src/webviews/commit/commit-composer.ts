@@ -4,7 +4,7 @@ import type { GitService } from '../../git/git.service';
 import { parseCommitMessage } from '../protocol';
 import { redact } from '../../security/redaction';
 import { commitHtml } from './commit-html';
-import { boundedInteger } from '../../utils/settings';
+import { boundedInteger, conventionalTypes } from '../../utils/settings';
 import { recoveryFor } from '../../utils/recovery';
 import { silentLogger, type Logger } from '../../utils/logging';
 
@@ -78,14 +78,14 @@ export class CommitComposer implements vscode.WebviewViewProvider, vscode.Dispos
     // A hidden view has no renderer; it sends `ready` and receives fresh state when shown again.
     if (!this.view || this.disposed || this.view.visible === false) return;
     if (!repo) {
-      await this.view.webview.postMessage({ type: 'state', session: this.session, repositoryId: '', repository: 'Choose a repository', message: '', staged: 0, busy: false, operation: 'idle', subjectLimit: 72, history: [], branch: '' }); return;
+      await this.view.webview.postMessage({ type: 'state', session: this.session, repositoryId: '', repository: 'Choose a repository', message: '', staged: 0, busy: false, operation: 'idle', subjectLimit: 72, history: [], branch: '', conventionalTypes: [] }); return;
     }
     const snapshot = this.git.registry.store.get(repo.id);
     const config=vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)),limit=boundedInteger(config.get('commit.subjectLimit'),72,20,200),historyLimit=boundedInteger(config.get('commit.messageHistoryLimit'),20,0,100);
     await this.view.webview.postMessage({ type: 'state', session: this.session, repositoryId: repo.id, repository: redact(repo.root),
       message: this.drafts.get(repo.id) ?? this.context.workspaceState.get(this.key(repo.id), ''),
       staged: (snapshot?.changes.filter(change => change.group === 'staged').length ?? 0) + (snapshot?.omitted?.filter(change => change.group === 'staged').length ?? 0), busy: this.busy,
-      operation: snapshot?.operation ?? 'idle', subjectLimit: limit,
+      operation: snapshot?.operation ?? 'idle', subjectLimit: limit, conventionalTypes: conventionalTypes(config.get('commit.conventionalTypes')),
       history: this.context.workspaceState.get<string[]>(`gitPro.messages:${repo.id}`, []).slice(0,historyLimit),
       // The placeholder names the branch, as native Source Control does; detached HEAD shows none.
       branch: snapshot?.head && snapshot.head !== '(detached)' ? snapshot.head : '' });
