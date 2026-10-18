@@ -37,8 +37,8 @@ function harness(failure?: 'read' | 'show', surfaces?: unknown) {
   const registry = { active: original as typeof original | undefined, list: () => repositories, onDidChange: registryChanged.listen, store: { get: () => snapshot } };
   let repositories = [original], readCount = 0, inputCount = 0;
   const read = deferred<readonly BranchInfo[]>(), commands = new Map<string, (...args: unknown[]) => Promise<void>>(), errors: string[] = [], copied: string[] = [], actionTitles: string[] = [];
-  const actionItems: readonly Item[][] = [], operations: unknown[][] = [], warnings: { text: string; choices: string[] }[] = [], executed: unknown[][] = [], errorButtons: string[][] = [];
-  const settings = { autoOpen: 'gitPro' as unknown, errorChoice: undefined as string | undefined, checkoutError: undefined as unknown };
+  const actionItems: readonly Item[][] = [], operations: unknown[][] = [], warnings: { text: string; choices: string[]; detail?: string }[] = [], executed: unknown[][] = [], errorButtons: string[][] = [];
+  const settings = { autoOpen: 'gitPro' as unknown, protectedBranches: [] as unknown, errorChoice: undefined as string | undefined, checkoutError: undefined as unknown };
   let actionChoice: string | undefined = 'Copy Name', confirmation: string | undefined;
   let refs = [branch('feature/ux')];
   const git = { registry, repository: (id: string) => { assert.equal(id, original.id); return original; },
@@ -47,13 +47,13 @@ function harness(failure?: 'read' | 'show', surfaces?: unknown) {
     branchAction: async (...args: unknown[]) => { operations.push(['branchAction', ...args]); },
     branchSearchSnapshot: () => { assert.equal(shown, 1, 'picker must open before the metadata read starts'); readCount++; if (failure === 'read') throw new Error('owned synchronous read failure'); return read.promise; } };
   const vscode = { ProgressLocation: { Window: 10 }, QuickPickItemKind: { Separator: -1 }, Uri: { file: (fsPath: string) => ({ scheme: 'file', fsPath }) },
-    workspace: { getConfiguration: (section: string, scope: { fsPath: string }) => { assert.equal(section, 'gitPro'); assert.equal(scope.fsPath, original.root); return { get: (key: string) => { assert.equal(key, 'conflicts.autoOpen'); return settings.autoOpen; } }; } },
+    workspace: { getConfiguration: (section: string, scope: { fsPath: string }) => { assert.equal(section, 'gitPro'); assert.equal(scope.fsPath, original.root); return { get: (key: string) => { assert.ok(key === 'conflicts.autoOpen' || key === 'protectedBranches', key); return key === 'protectedBranches' ? settings.protectedBranches : settings.autoOpen; } }; } },
     ThemeIcon: class { constructor(readonly id: string, readonly color?: { id: string }) {} }, ThemeColor: class { constructor(readonly id: string) {} }, commands: {
     registerCommand: (id: string, fn: (...args: unknown[]) => Promise<void>) => { commands.set(id, fn); return { dispose: () => commands.delete(id) }; }, executeCommand: async (...args: unknown[]) => { executed.push(args); },
   }, window: { createQuickPick: () => picker, withProgress: (_options: unknown, run: () => Promise<void>) => run(),
     showErrorMessage: async (text: string, ...buttons: string[]) => { errors.push(text); errorButtons.push(buttons); return settings.errorChoice; },
     showQuickPick: async (offered: readonly Item[], options: { title: string }) => { actionTitles.push(options.title); (actionItems as Item[][]).push([...offered]); return offered.find(item => (typeof item === 'string' ? item : item.label) === actionChoice); },
-    showWarningMessage: async (text: string, _options: unknown, ...choices: string[]) => { warnings.push({ text, choices }); return confirmation; },
+    showWarningMessage: async (text: string, options: { detail?: string }, ...choices: string[]) => { warnings.push({ text, choices, ...(options.detail === undefined ? {} : { detail: options.detail }) }); return confirmation; },
     showInputBox: async () => { inputCount++; return undefined; },
   }, env: { clipboard: { writeText: async (text: string) => { copied.push(text); } } } };
   const source = path.resolve(__dirname, '../../src/commands/daily.commands.js'), load = createRequire(source), exports: Record<string, unknown> = {};
@@ -117,6 +117,16 @@ test('branch deletion keeps plain modal identities, fresh-ref guard and explicit
   const warningCount = h.warnings.length;
   await h.action(selected, 'Delete', 'Delete', false); assert.equal(h.operations.length, 2); assert.equal(h.warnings.length, warningCount);
   assert.equal(h.errors.length, 1); h.instance.dispose();
+});
+
+test('deleting a branch listed in gitPro.protectedBranches says so in the modal, and an unlisted one does not', async () => {
+  const h = harness(), selected = branch('release/1.1');
+  await h.action(selected, 'Delete', 'Delete'); assert.doesNotMatch(h.warnings.at(-1)!.text, /protected/); assert.equal(h.warnings.at(-1)!.detail, undefined);
+  h.settings.protectedBranches = ['release/*', 'main'];
+  await h.action(selected, 'Delete', 'Delete'); assert.match(h.warnings.at(-1)!.text, /^Delete protected branch release\/1\.1 at /); assert.match(h.warnings.at(-1)!.detail!, /gitPro\.protectedBranches/); assert.equal(h.operations.at(-1)![3], 'delete', 'a confirmed deletion still happens');
+  await h.action(selected, 'Force Delete', 'Force Delete'); assert.match(h.warnings.at(-1)!.text, /^Force Delete protected branch release/);
+  await h.action(selected, 'Copy Name'); assert.equal(h.warnings.length, 3, 'only deletion asks');
+  h.instance.dispose();
 });
 
 test('the Branches view menu runs the same choices as the Branch Actions Quick Pick on the clicked branch, without opening it', async () => {
