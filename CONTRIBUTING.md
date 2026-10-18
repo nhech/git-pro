@@ -26,6 +26,29 @@ Keep changes focused and describe observable behavior in commit messages. Includ
 
 Keep generated packages, logs, local credentials and internal planning or measurement reports out of Git. The installation package contains runtime assets and user documentation only.
 
+## Publishing
+
+A release is built from a clean checkout of the release commit, so work in progress in the working tree is never packaged:
+
+```sh
+git worktree add --detach ../git-pro-release HEAD   # then link or install node_modules there
+npm run check
+node scripts/package-public-candidate.cjs           # writes artifacts/git-pro-<version>-public-candidate.vsix
+```
+
+The README links its screenshots to the commit the package was built from, so push that commit before the package is uploaded.
+
+**Visual Studio Marketplace.** Upload the package on the publisher's Manage page: the `...` menu of Git Pro, then **Update**.
+
+**Open VSX** (VSCodium, Gitpod, and the gallery that Cursor installs from). This needs the owner's accounts, so it is done by hand, once and then for every release:
+
+1. Sign in to <https://open-vsx.org> with GitHub, link an Eclipse Foundation account and sign the Publisher Agreement.
+2. Create an access token under *Settings → Access Tokens*, and keep it in an environment variable, never in a file or the command history (`$env:OVSX_PAT = '…'`, or `export OVSX_PAT=…`).
+3. Claim the namespace once: `npx --yes ovsx@1.2.0 create-namespace longtd -p "$OVSX_PAT"` (PowerShell: `-p $env:OVSX_PAT`).
+4. Publish each release: `npx --yes ovsx@1.2.0 publish artifacts/git-pro-<version>-public-candidate.vsix -p "$OVSX_PAT"`.
+
+Add the Open VSX link to the README and the website once the listing is live. Git Pro has not been checked in Cursor or VSCodium yet: Cursor 2.6 is built on VS Code 1.105 and ships the built-in Git extension, which meets the requirements, but Cursor did not run the extension-host tests (they stopped before Git Pro loaded), so a manual check is needed first: install the package, open the Git Pro view in a repository, then stage, commit and open a diff.
+
 ## Issue bot
 
 Issues are opened from forms (bug report, feature request, question). A GitHub Actions bot (`.github/workflows/issue-bot.yml`, logic and tests in `.github/scripts/issue-bot.cjs` and `test/unit/issue-bot.test.ts`) triages them:

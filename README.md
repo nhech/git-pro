@@ -71,6 +71,8 @@ Selecting a file does not stage it. The composer commits the current index, incl
 
 Right-click menus are VS Code's own, so they look and behave like the rest of the workbench. Hover a row for inline actions. Icons, theme colors and right-aligned status labels distinguish changes. Discard, delete, reset, rebase and force push show what they will do and ask first. Auto-fetch, blame and CodeLens are off by default.
 
+If you come from a JetBrains IDE: the Conflicts tab names the two sides Yours and Theirs, as the merge tool of those IDEs does, and offers Accept Yours, Accept Theirs and Merge… for the files you select. JetBrains, IntelliJ IDEA and WebStorm are trademarks of JetBrains s.r.o. Git Pro is an independent project, not affiliated with or endorsed by JetBrains.
+
 Read [getting started](docs/user-guide/GETTING_STARTED.md), [workflows and recovery](docs/user-guide/WORKFLOWS.md) and [settings](docs/user-guide/SETTINGS.md).
 
 ## License

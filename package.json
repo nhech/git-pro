@@ -50,7 +50,11 @@
     "merge editor",
     "git graph",
     "git blame",
-    "git tools"
+    "git tools",
+    "code review",
+    "jetbrains",
+    "intellij",
+    "webstorm"
   ],
   "main": "./dist/extension.js",
   "extensionKind": [
