@@ -12,6 +12,7 @@ import type { HistoryPanel } from '../webviews/graph/history-panel';
 import type { RevisionProvider } from '../documents/revision-provider';
 import type { ToolsService } from '../git/tools/tools.service';
 import type { RemoteLinks } from '../git/remote-links.service';
+import type { UndoService } from '../git/undo/undo.service';
 import type { Logger } from '../utils/logging';
 import { MenuRouter } from '../webviews/menu-context';
 
@@ -39,7 +40,7 @@ export interface FeatureDeps {
   readonly registry: RepositoryRegistry; readonly policy: PathPolicy; readonly executor: GitExecutor; readonly logger: Logger;
   readonly git: GitService; readonly advanced: AdvancedService; readonly conflicts: ConflictsService; readonly tools: ToolsService;
   readonly history: HistoryService; readonly historyPanels: HistoryPanel; readonly revisions: RevisionProvider;
-  readonly links: RemoteLinks; readonly surfaces: Surfaces;
+  readonly links: RemoteLinks; readonly undo: UndoService; readonly surfaces: Surfaces;
 }
 /** Setting `gitPro.conflicts.autoOpen`; anything unknown reads as the default. */
 export type ConflictsAutoOpen = 'gitPro' | 'always' | 'never';

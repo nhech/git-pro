@@ -10,6 +10,7 @@ import { validateOid } from '../security/refs';
 import { isProtectedBranch } from '../security/protected-branches';
 import * as path from 'node:path';
 import { LeaseService } from '../git/advanced/lease.service';
+import type { PushEntry, UndoEntry, UndoService } from '../git/undo/undo.service';
 import { InteractiveService } from '../git/rebase/interactive.service';
 import { validateRebasePlan, nativeContinueCommand, type RebaseStep, type RebaseAction } from '../git/rebase/rebase-plan';
 import type { RebasePlanner } from '../webviews/rebase/rebase-planner';
@@ -45,7 +46,7 @@ export const confirmAndControl:ConfirmAndControl=async(advanced,snapshot,action,
 export class AdvancedCommands {
   readonly conflicts:ConflictsService;
   readonly leases:LeaseService;
-  constructor(readonly advanced:AdvancedService,private readonly revisions:RevisionProvider,private readonly interactive:InteractiveService,private readonly planner:RebasePlanner,private readonly extensionUri:vscode.Uri,private readonly surfaces:Surfaces=createSurfaces()){this.conflicts=new ConflictsService(advanced,surfaces.conflictSources);this.leases=new LeaseService(advanced);}
+  constructor(readonly advanced:AdvancedService,private readonly revisions:RevisionProvider,private readonly interactive:InteractiveService,private readonly planner:RebasePlanner,private readonly extensionUri:vscode.Uri,private readonly surfaces:Surfaces=createSurfaces(),private readonly undo?:UndoService){this.conflicts=new ConflictsService(advanced,surfaces.conflictSources);this.leases=new LeaseService(advanced);}
   private active():string {const id=this.advanced.git.registry.active?.id;if(!id)throw new Error('Select a repository first.');return id;}
   private editMessage(initial:string,title:string):Promise<string|undefined>{return editMessage(initial,title);}
   async forcePush():Promise<void>{
@@ -53,10 +54,29 @@ export class AdvancedCommands {
     const names=await this.advanced.git.remotes(id),remote=await vscode.window.showQuickPick(names.map(item=>({label:redact(item.name),name:item.name})),{title:'Git Pro: Force-with-lease remote'});if(!remote)return;
     const branch=await vscode.window.showInputBox({title:'Remote branch to replace',value:this.advanced.git.registry.store.get(id)?.head??'',prompt:'Review the exact remote branch and current OID before rewriting history.'});if(!branch)return;
     const preview=await this.leases.preview(id,remote.name,branch);
-    // A protected branch asks first, apart from the lease review that every force push gets.
-    if(isProtectedBranch(branch,vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)).get('protectedBranches'))&&await vscode.window.showWarningMessage(`Rewrite the history of protected branch ${redact(branch)}?`,{modal:true,detail:'It is listed in gitPro.protectedBranches. Everyone who follows it will have to repair their copy.'},'Continue')!=='Continue')return;
-    if(await vscode.window.showWarningMessage('Replace remote branch history with an explicit lease?',{modal:true,detail:redact(`${repo.root}\n${preview.url}\nrefs/heads/${branch}\nExpected remote: ${preview.expected}\nReplacement: ${preview.source}\nThe push will fail if the remote branch has changed.`)},'Push with lease')!=='Push with lease')return;
+    if(!await this.protectedBranchOk(repo.root,branch))return;
+    // The commit the remote branch has now is what the push loses: when this repository has it, Git Pro keeps it so that Undo… can put it back.
+    const keepable=this.undo!==undefined&&await this.undo.holds(repo.root,preview.expected);
+    const note=this.undo===undefined?'':keepable?'\nGit Pro keeps the remote branch\'s current commit, so Undo… can put it back.':'\nThat commit is not in this repository, so Undo… cannot put it back.';
+    if(await vscode.window.showWarningMessage('Replace remote branch history with an explicit lease?',{modal:true,detail:redact(`${repo.root}\n${preview.url}\nrefs/heads/${branch}\nExpected remote: ${preview.expected}\nReplacement: ${preview.source}\nThe push will fail if the remote branch has changed.${note}`)},'Push with lease')!=='Push with lease')return;
+    const kept=keepable?await this.undo!.save(id,repo.root,{kind:'push',label:`Force pushed ${redact(branch)} to ${redact(remote.name)}`,remote:remote.name,url:preview.url,branch,oldTip:preview.expected,newTip:preview.source}).catch(()=>undefined):undefined;
     await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:'Git Pro: Push with lease'},()=>this.leases.push(preview));
+    if(kept)this.offerUndo(id,kept);
+  }
+  /** A protected branch asks first, apart from the lease review that every force push gets. */
+  private async protectedBranchOk(root:string,branch:string):Promise<boolean>{
+    if(!isProtectedBranch(branch,vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(root)).get('protectedBranches')))return true;
+    return await vscode.window.showWarningMessage(`Rewrite the history of protected branch ${redact(branch)}?`,{modal:true,detail:'It is listed in gitPro.protectedBranches. Everyone who follows it will have to repair their copy.'},'Continue')==='Continue';
+  }
+  /** Undo of a force push: the same lease review, with the commit the remote branch had before as the replacement. Resolves false on cancel. */
+  async restorePush(id:string,entry:PushEntry):Promise<boolean>{
+    const repo=this.advanced.git.repository(id),preview=await this.leases.preview(id,entry.remote,entry.branch,entry.oldTip);
+    if(preview.url!==entry.url)throw new Error('The address of this remote has changed since the force push. Review the remote, then use Force Push with Lease.');
+    if(!await this.protectedBranchOk(repo.root,entry.branch))return false;
+    const moved=preview.expected===entry.newTip?'':`\nThe remote branch has changed since your force push (Git Pro pushed ${entry.newTip}). Putting the old commit back replaces what was pushed since.`;
+    if(await vscode.window.showWarningMessage(`Put ${redact(entry.branch)} on ${redact(entry.remote)} back to ${entry.oldTip.slice(0,10)}?`,{modal:true,detail:redact(`${repo.root}\n${preview.url}\nrefs/heads/${entry.branch}\nExpected remote: ${preview.expected}\nReplacement: ${preview.source}${moved}\nThe push will fail if the remote branch has changed.`)},'Push with lease')!=='Push with lease')return false;
+    await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:'Git Pro: Push with lease'},()=>this.leases.push(preview));
+    return true;
   }
   async actions():Promise<void>{
     const id=this.active(),snapshot=await this.advanced.snapshot(id);
@@ -113,15 +133,21 @@ export class AdvancedCommands {
     await this.review(id,{kind,oids:[oid],...(parent!==undefined?{parent}:{})},kind==='cherryPick'?'Cherry-pick':'Revert');
   }
   /** Reviews a fresh, pinned preview of an advanced command and applies it after a modal confirmation. Shared by Advanced Actions and the commit menus of History and Compare. */
-  async review(id:string,command:AdvancedMutation,action:string):Promise<void>{
+  async review(id:string,command:AdvancedMutation,action:string,options:{readonly note?:string;/** No toast with an Undo button afterwards: the command is an undo itself. */readonly quiet?:boolean}={}):Promise<boolean>{
     const preview=await this.advanced.preview(id,command),label=action==='Reset'?`${action} (${command.kind==='reset'?command.mode:''})`:action;
     const target='oid' in command?command.oid:command.kind==='cherryPick'||command.kind==='revert'?command.oids.join('\n'):'';
     const warning=command.kind==='reset'&&command.mode==='hard'?'\nHard reset can also remove untracked files that obstruct tracked target paths. Reviewed content will be discarded.':'';
     const local=preview.snapshot.status.changes.map(change=>`${change.group}: ${change.path}`);
     const rebase=preview.rebaseContext?`\nLocal-only commits: ${preview.rebaseContext.localCount} · first ${preview.rebaseContext.candidates.length} shown\n${preview.rebaseContext.candidates.map(commit=>`${commit.oid.slice(0,10)} ${commit.subject.slice(0,200)}`).join('\n')}\nTopology context: Git may flatten merges or skip equivalent commits.`:'';
     const merge=preview.mergeContext?`\nTopology: ${preview.mergeContext.headOnly} HEAD-only / ${preview.mergeContext.targetOnly} target-only commits\nResulting history depends on the selected merge strategy.`:'';
-    const detail=redact(`${this.advanced.git.repository(id).root}\nHEAD: ${preview.snapshot.head}\nTarget(s): ${target}\n${preview.filesNote?'Changed files are not listed: some paths are not valid UTF-8':`${preview.files.length} changed files between HEAD and target`}\n${preview.files.slice(0,20).map(file=>file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0,20).join('\n')}${warning}${rebase}${merge}`);
-    if(await vscode.window.showWarningMessage(`${label}?`,{modal:true,detail},'Apply')!=='Apply')return;
+    const detail=redact(`${this.advanced.git.repository(id).root}\nHEAD: ${preview.snapshot.head}\nTarget(s): ${target}\n${preview.filesNote?'Changed files are not listed: some paths are not valid UTF-8':`${preview.files.length} changed files between HEAD and target`}\n${preview.files.slice(0,20).map(file=>file.path).join('\n')}\nLocal changes: ${local.length}\n${local.slice(0,20).join('\n')}${warning}${rebase}${merge}${options.note?`\n${options.note}`:''}`);
+    if(await vscode.window.showWarningMessage(`${label}?`,{modal:true,detail},'Apply')!=='Apply')return false;
+    // A hard reset throws away the tracked changes and moves HEAD: both are kept first, so Undo… can bring them back.
+    let kept:UndoEntry|undefined;
+    if(command.kind==='reset'&&command.mode==='hard'&&this.undo&&preview.snapshot.head){
+      const branch=preview.snapshot.status.head;
+      kept=await this.undo.save(id,this.advanced.git.repository(id).root,{kind:'reset',label:`Hard reset${branch&&branch!=='(detached)'?` of ${redact(branch)}`:''} from ${preview.snapshot.head.slice(0,10)}`,head:preview.snapshot.head,...(branch&&branch!=='(detached)'?{branch}:{})}).catch(()=>undefined);
+    }
     try{await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:`Git Pro: ${label}`},()=>this.advanced.execute(preview));}
     catch(error){
       // A squash merge writes no MERGE_HEAD, so only this record tells the Conflicts tab where its idle conflicts came from.
@@ -129,6 +155,12 @@ export class AdvancedCommands {
       throw error;
     }
     if(command.kind==='merge'&&command.strategy==='squash'){await vscode.window.showInformationMessage('Squash changes are staged. Review and commit them in the composer.');await vscode.commands.executeCommand('gitPro.commitView.focus');}
+    if(kept&&!options.quiet)this.offerUndo(id,kept);
+    return true;
+  }
+  /** A toast with an Undo button, for what is hard to take back; it does not hold up the command that raised it. */
+  private offerUndo(id:string,entry:UndoEntry):void{
+    void Promise.resolve(vscode.window.showInformationMessage(`${entry.label}.`,'Undo')).then(choice=>choice==='Undo'?vscode.commands.executeCommand('gitPro.undo',{repositoryId:id,id:entry.id}):undefined).then(undefined,()=>undefined);
   }
   /** `from` skips the question when the base is already chosen (Interactive Rebase from Here in History and Compare). */
   async rebasePlan(from?:{readonly repositoryId:string;readonly base:string}):Promise<void>{

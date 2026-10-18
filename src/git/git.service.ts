@@ -279,6 +279,11 @@ export class GitService implements RestoreFromSource {
       this.fetchTimes.set(id, Date.now()); this.fetched.fire(id);
     });
   }
+  /** Applies a safety copy of the tracked working changes (the commit `git stash create` made) to the working tree; nothing is stashed, and the stash list is untouched. */
+  applySafetyCopy(id: string, oid: string): Promise<void> {
+    validateOid(oid);
+    return this.run(id, async ({ repo }) => { await this.executor.mutate(repo.root, { kind: 'stashApply', oid, index: false }); });
+  }
   /**
    * Brings pull request `number` of `remote` in as `refs/gitpro/pr/<remote>/<number>` and returns that ref. The built-in Git does the transfer, so its credentials apply, and nothing else
    * in the repository changes: no branch, no working tree, no status.

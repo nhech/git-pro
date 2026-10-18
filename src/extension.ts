@@ -36,6 +36,8 @@ import { workspaceRebaseJournal } from './git/rebase/workspace-journal';
 import { RebasePlanner } from './webviews/rebase/rebase-planner';
 import { ToolsService } from './git/tools/tools.service';
 import { RemoteLinks } from './git/remote-links.service';
+import { UndoService, gitUndoBackend } from './git/undo/undo.service';
+import { registerUndo } from './commands/undo.commands';
 import { WorktreeService } from './git/tools/worktree.service';
 import { ToolsCommands } from './commands/tools.commands';
 import { ToolsProvider } from './views/tools/tools.provider';
@@ -109,7 +111,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       workspaceRebaseJournal(context.workspaceState));
     advanced.setEditorJobs(interactive);
     const planner=new RebasePlanner(context,surfaces.menus);context.subscriptions.push(planner);
-    const advancedCommands = new AdvancedCommands(advanced,revisions,interactive,planner,context.extensionUri,surfaces);
+    // What a discard, a hard reset or a force push would lose is kept first, for Undo….
+    const undo = new UndoService(gitUndoBackend(git), context.workspaceState);
+    const advancedCommands = new AdvancedCommands(advanced,revisions,interactive,planner,context.extensionUri,surfaces,undo);
     const fileActions = new FileActionsCommands(advanced,revisions);
     const tools = new ToolsService(advanced);
     const toolsProvider = new ToolsProvider(tools);
@@ -124,7 +128,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
-    const daily = new DailyCommands(git, revisions, adapter, changesView, logger, surfaces);
+    const daily = new DailyCommands(git, revisions, adapter, changesView, logger, surfaces, undo);
     const branches = new BranchesProvider(git);
     // Ctrl/Shift-click selects two branches for Compare Branches; a click only selects, and the branch's actions are in its menu.
     const branchesView = vscode.window.createTreeView('gitPro.branchesView', { treeDataProvider: branches, canSelectMany: true });
@@ -217,8 +221,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await refuseGitMetadata(repo, relative, file);
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
-    const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,links,surfaces};
-    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands,selectedTool:()=>toolsView.selection.length===1?toolsView.selection[0]:undefined});
+    const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,links,undo,surfaces};
+    registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerUndo(deps,command,advancedCommands);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands,selectedTool:()=>toolsView.selection.length===1?toolsView.selection[0]:undefined});
     let syncTail: Promise<void> = Promise.resolve();
     const synchronize = () => {
       syncTail = syncTail.then(async () => {

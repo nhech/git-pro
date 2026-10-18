@@ -9,6 +9,7 @@ import type { BranchInfo } from '../../src/git/git.service';
 import type { ChangedFile } from '../../src/git/history/history-parser';
 import { loadWithVscode } from './compare-loader';
 import { parseRemoteUrl } from '../../src/git/remote-link';
+import { UndoUnavailable } from '../../src/git/undo/undo.service';
 
 type Exports = Record<string, unknown>;
 /** Runs a compiled command module against a stand-in `vscode`; every other import is the real compiled module unless stubbed. */
@@ -229,7 +230,7 @@ function getFromBranchHarness() {
   const trees = new Map([['keep.txt', blob('keep.txt')], ['old.txt', blob('old.txt')], ['link', `120000 blob ${oid('2')}\tlink`], ['sub', `160000 commit ${oid('3')}\tsub`], ['dir', `040000 tree ${oid('4')}\tdir`]]);
   const documents: { uri: { scheme: string; fsPath: string }; isDirty: boolean }[] = [], warnings: { text: string; detail: string; choices: string[] }[] = [];
   const state = { confirm: 'Get from Branch' as string | undefined, onModal: undefined as (() => void) | undefined, previewError: undefined as Error | undefined, restoreError: undefined as Error | undefined,
-    conflicts: false, changes: [] as { group: string; status: string; path: string; originalPath?: string }[], merging: new Set<string>(), tracked: new Set(['keep.txt', 'new.txt', 'added.txt']), previews: [] as { paths: string[] }[], restores: [] as unknown[][] };
+    conflicts: false, undoError: undefined as Error | undefined, saves: [] as unknown[][], order: [] as string[], changes: [] as { group: string; status: string; path: string; originalPath?: string }[], merging: new Set<string>(), tracked: new Set(['keep.txt', 'new.txt', 'added.txt']), previews: [] as { paths: string[] }[], restores: [] as unknown[][] };
   // Merge editors are tabs whose input has base, input1, input2 and result (TabInputTextMerge, duck-typed).
   const uri = (fsPath: string) => ({ scheme: 'file', fsPath }), tabGroups = { get all() { return [{ tabs: [...state.merging].map(file => ({ input: { base: uri('b'), input1: uri('1'), input2: uri('2'), result: uri(file) } })) }]; } };
   const git = { repository: () => repo, authorizePath: async (_id: string, file: string) => path.join(root, file),
@@ -237,14 +238,15 @@ function getFromBranchHarness() {
       if (state.previewError) throw state.previewError;
       const preview = { repositoryId, paths: [...paths], status: { changes: state.conflicts ? [{ group: 'conflicts', path: 'x.txt' }] : state.changes } }; state.previews.push(preview); return preview;
     },
-    restoreFromSource: async (preview: unknown, at: string) => { if (state.restoreError) throw state.restoreError; state.restores.push([preview, at]); } };
+    restoreFromSource: async (preview: unknown, at: string) => { state.order.push('restore'); if (state.restoreError) throw state.restoreError; state.restores.push([preview, at]); } };
   const vscode = { workspace: { textDocuments: documents }, window: { tabGroups, showWarningMessage: async (text: string, options: { detail: string }, ...choices: string[]) => { warnings.push({ text, detail: options.detail, choices }); state.onModal?.(); return state.confirm; } } };
   const module = load('get-from-branch.js', vscode, { '../editor/open-files': loadWithVscode(path.resolve(__dirname, '../../src/editor/open-files.js'), vscode) });
   const read = async (_root: string, command: { kind: string; path: string; paths: string[] }) => {
     if (command.kind === 'index') return { stdout: Buffer.from(command.paths.filter(file => state.tracked.has(file)).map(file => `100644 ${oid('1')} 0\t${file}\0`).join('')) };
     assert.equal(command.kind, 'tree'); return { stdout: Buffer.from(trees.get(command.path) ?? '') };
   };
-  const deps = { git, executor: { read } };
+  const undo = { save: async (...args: unknown[]) => { state.order.push('save'); state.saves.push(args); if (state.undoError) throw state.undoError; } };
+  const deps = { git, executor: { read }, undo };
   const run = (files: readonly ChangedFile[], at = oid('b')) => (module.getFromBranch as (...args: unknown[]) => Promise<boolean>)(deps, { repositoryId: 'owned', oid: at, name: 'feature', files });
   return { root, documents, warnings, state, run, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -392,5 +394,19 @@ test('Compare Pull Request fetches the ref the host publishes and opens it again
     target = { remote: 'origin', web: parseRemoteUrl('https://github.com/o/r.git') }; git.branchSearchSnapshot = async () => [branch('main'), branch('upstream/main', true)];
     await assert.rejects(h.run('gitPro.comparePullRequest'), /No branch of origin is downloaded yet/);
     assert.equal(fetched.length, before, 'none of these fetched anything');
+  } finally { h.cleanup(); }
+});
+
+test('Get from Branch keeps a copy of the local edits it replaces, after the modal and before the restore, and only for files that are here', async () => {
+  const h = getFromBranchHarness();
+  try {
+    assert.equal(await h.run(rows), true);
+    assert.deepEqual(h.state.order, ['save', 'restore'], 'the copy first');
+    assert.equal(h.state.saves.length, 1); assert.deepEqual(plain(h.state.saves[0]), ['owned', h.root, { kind: 'discard', label: 'Replaced 4 files with the feature version', paths: ['keep.txt', 'new.txt', 'added.txt'] }], 'the files on disk, not old.txt, which the working tree did not have');
+    // Declining keeps nothing. A working tree with no changes to keep is no reason to stop; any other failure is.
+    h.state.order.length = 0; h.state.saves.length = 0; h.state.confirm = undefined; assert.equal(await h.run(rows), false); assert.deepEqual(h.state.order, []);
+    h.state.confirm = 'Get from Branch'; h.state.undoError = new UndoUnavailable('Git has no copy of the changes to keep.'); assert.equal(await h.run(rows), true); assert.deepEqual(h.state.order, ['save', 'restore']);
+    h.state.order.length = 0; h.state.undoError = new Error('cannot lock ref'); await assert.rejects(h.run(rows), /could not keep a copy of your changes first, so nothing was replaced/); assert.deepEqual(h.state.order, ['save'], 'no restore without a copy');
+    h.state.order.length = 0; h.state.undoError = undefined; assert.equal(await h.run([{ status: 'D', path: 'old.txt' }]), true); assert.deepEqual(h.state.order, ['restore'], 'nothing of old.txt is here, so there is nothing to keep');
   } finally { h.cleanup(); }
 });

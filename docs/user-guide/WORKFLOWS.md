@@ -57,6 +57,8 @@ Canceling an operation may leave Git state changed. Refresh and inspect the repo
 
 No automatic destructive retry is performed.
 
+**Undo…** (Command Palette) brings back what Git Pro was about to throw away. After you confirm a **Discard**, a **hard reset** or a **force push with lease**, and before it runs, Git Pro keeps a copy: the unstaged changes of the tracked files (a commit made like `git stash create`, which touches neither the working tree, the index nor the stash list), the HEAD that the reset moves, or the remote commit that the push replaces. Undo… lists the last 20 copies of the repository, newest first, from the past 30 days. Restoring a discard puts the saved edits back into the files (and deletes again a file that was deleted), after naming the ones that have changed since. Restoring a hard reset goes through the reviewed hard reset back to the old HEAD and then applies the saved changes; it keeps a copy of what it replaces. Restoring a force push is the same lease review, with the old commit as the replacement, and refuses a remote whose address has changed. A discard is not run when no copy can be kept. A copy is a ref under `refs/gitpro/undo/`, so Git does not collect it; Git Pro lets it go after 20 copies or 30 days, and `git update-ref -d refs/gitpro/undo/<name>` removes one by hand. The copies do not hold untracked files, which Discard never touches, and a restored change comes back unstaged.
+
 ## Interactive rebase
 
 Run **Interactive Rebase Planner** from the Command Palette (or Advanced Actions → Interactive Rebase) and enter the ancestor to rewrite after; the default is `HEAD~1`. The planner lists the commits after it, oldest first, for a linear range of 1–200 commits. A range that contains merges needs native Git.

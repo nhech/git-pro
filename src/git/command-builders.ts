@@ -2,6 +2,7 @@ import { buildHistoryRead, type HistoryReadCommand } from './history/history-bui
 import { buildAdvancedMutation, type AdvancedMutation } from './advanced/advanced-builders';
 import { validateRemoteUrl } from '../security/remotes';
 import { buildToolsRead, buildToolsMutation, type ToolsRead, type ToolsMutation } from './tools/tools-builders';
+import { buildUndoMutation, type UndoMutation } from './undo/undo-builders';
 export const markers = ['MERGE_HEAD', 'rebase-merge', 'rebase-apply', 'CHERRY_PICK_HEAD',
   'REVERT_HEAD', 'BISECT_LOG', 'sequencer'] as const;
 export type Marker = typeof markers[number];
@@ -76,7 +77,7 @@ export type MutationCommand = {kind:'applyHunk';paths:readonly string[];directio
   { kind: 'renameBranch'; oldName: string; newName: string } | { kind: 'unsetUpstream'; branch: string } |
   { kind: 'integrate'; strategy: 'ff-only' | 'merge' | 'rebase'; oid: string } |
   { kind: 'acceptConflict'; side: 'ours'|'theirs'; paths: readonly string[] } |
-  { kind: 'deleteConflict'; paths: readonly string[] } | {kind:'restoreFromSource';oid:string;paths:readonly string[]} | {kind:'pushLease';url:string;branch:string;source:string;expected:string} | AdvancedMutation | ToolsMutation;
+  { kind: 'deleteConflict'; paths: readonly string[] } | {kind:'restoreFromSource';oid:string;paths:readonly string[]} | {kind:'pushLease';url:string;branch:string;source:string;expected:string} | AdvancedMutation | ToolsMutation | UndoMutation;
 export function buildMutationCommand(command: MutationCommand): string[] {
   const prefix = ['--literal-pathspecs', '--no-pager', '-c', 'color.ui=false'];
   switch (command.kind) {
@@ -111,6 +112,7 @@ export function buildMutationCommand(command: MutationCommand): string[] {
       return buildAdvancedMutation(command);
     case 'stashCreate': case 'stashApply': case 'stashDrop': case 'stashBranch': case 'tagCreate': case 'tagDelete': case 'tagCheckout': case 'tagBranch': case 'tagPush': case 'tagRemoteDelete': case 'remoteAdd': case 'remoteRemove': case 'remoteRename': case 'remoteSetUrl': case 'remotePrune': case 'branchPush': case 'worktreeAdd': case 'worktreeRemove': case 'worktreePrune':
       return buildToolsMutation(command);
+    case 'undoSnapshot': case 'undoKeep': case 'undoDrop': return buildUndoMutation(command);
     default: throw new Error('Unsupported mutation.');
   }
 }

@@ -10,13 +10,15 @@ export class LeaseService {
     const result=decode((await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'remoteUrls',remote,push:true})).stdout).trim().split(/\r?\n/);
     if(result.length!==1)throw new Error('Force-with-lease requires exactly one push URL.');return validateRemoteUrl(result[0]!);
   }
-  async preview(id:string,remote:string,branch:string):Promise<LeasePreview>{
+  /** `source` is the commit that replaces the remote branch: the current branch's tip, or (to undo a force push) the commit the branch had before it. */
+  async preview(id:string,remote:string,branch:string,source?:string):Promise<LeasePreview>{
     validateBranchName(remote);validateBranchName(branch);const snapshot=await this.advanced.snapshot(id);
+    if(source!==undefined)await this.advanced.resolve(id,validateOid(source));
     if(snapshot.operation!=='idle'||!snapshot.head||snapshot.status.head==='(detached)')throw new Error('Finish current Git operations and select a local branch first.');
     const url=await this.url(id,remote),output=decode((await this.advanced.git.executor.read(this.advanced.git.repository(id).root,{kind:'remoteRef',url,branch},{timeoutMs:120_000})).stdout);
     const lines=output.trim().split('\n'),expected=lines[0]?.split('\t');
     if(lines.length!==1||expected?.[1]!==`refs/heads/${branch}`)throw new Error('Remote branch does not have a unique current commit. Use normal publish for a new branch.');
-    const preview=Object.freeze({snapshot,remote,url,branch,source:snapshot.head,expected:validateOid(expected[0]!)});this.previews.add(preview);return preview;
+    const preview=Object.freeze({snapshot,remote,url,branch,source:source??snapshot.head,expected:validateOid(expected[0]!)});this.previews.add(preview);return preview;
   }
   push(preview:LeasePreview):Promise<void>{
     if(!this.previews.has(preview))return Promise.reject(new Error('Force push preview expired.'));

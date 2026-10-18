@@ -17,6 +17,7 @@ import { recoveryFor } from '../utils/recovery';
 import { changedPathsInFolder } from '../views/changes/folder-selection';
 import { hasChanges, type ChangeGroup } from '../git/git-parser';
 import { branchVisual } from '../views/tree-visuals';
+import type { UndoService } from '../git/undo/undo.service';
 import { createSurfaces, conflictsAutoOpen, isConflictFailure, openConflictsAfterFailure, type Surfaces } from '../conflicts/surfaces';
 
 type BranchChoice = 'Checkout' | 'Checkout Tracking Branch' | 'Compare with Current' | 'Show Diff with Working Tree' | 'Compare with Another Branch…' | 'Merge into Current…' | 'Rebase Current onto This…' | 'Rename' | 'Set Upstream' | 'Unset Upstream' | 'Copy Name' | 'Delete' | 'Force Delete';
@@ -29,7 +30,7 @@ export class DailyCommands implements vscode.Disposable {
   branchesView: { readonly selection: readonly unknown[] } | undefined;
   constructor(private readonly git: GitService, private readonly revisions: RevisionProvider,
     private readonly adapter: BuiltinGitAdapter, private readonly changesView: { readonly selection: readonly ChangeNode[] }, private readonly logger: Logger,
-    private readonly surfaces: Surfaces = createSurfaces()) {
+    private readonly surfaces: Surfaces = createSurfaces(), private readonly undo?: UndoService) {
     this.diffs = new DiffService(git);
     const register = (id: string, action: (...args: unknown[]) => Promise<unknown>) => {
       this.subscriptions.push(vscode.commands.registerCommand(id, async (...args: unknown[]) => {
@@ -108,7 +109,16 @@ export class DailyCommands implements vscode.Disposable {
       const placeholders = skipped.length ? `\n\nLeft out, because they were added with "git add -N" and Git keeps no copy of their content:\n${redact(skipped.join('\n'))}` : '';
       if (!targets.length) throw new Error(`${redact(skipped[0]!)} was added with "git add -N", so Git has no copy of its content and Discard would empty it. Stage it first, or delete it yourself.`);
       const preview = await this.git.preview(id, targets);
-      if (await vscode.window.showWarningMessage(`Discard unstaged changes in ${targets.length} files? Staged content is kept.\n${redact(targets.join('\n'))}${placeholders}`, { modal: true }, 'Discard') === 'Discard') await this.git.discard(preview);
+      if (await vscode.window.showWarningMessage(`Discard unstaged changes in ${targets.length} files? Staged content is kept.\n${redact(targets.join('\n'))}${placeholders}`, { modal: true }, 'Discard') !== 'Discard') return;
+      // A copy of what the discard throws away is kept first, so Undo… can put it back; when none can be made, nothing is discarded.
+      const label = `Discarded ${targets.length === 1 ? redact(targets[0]!) : `${targets.length} files`}`;
+      let kept: Awaited<ReturnType<UndoService['save']>> | undefined;
+      if (this.undo) {
+        try { kept = await this.undo.save(id, this.git.repository(id).root, { kind: 'discard', label, paths: targets }); }
+        catch (error) { throw new Error(`Git Pro could not keep a copy of these changes first, so nothing was discarded. ${recoveryFor(error).message}`); }
+      }
+      await this.git.discard(preview);
+      if (kept) vscode.window.setStatusBarMessage(`Git Pro: ${label}. Run Git Pro: Undo… to bring ${targets.length === 1 ? 'it' : 'them'} back.`, 15000);
     }
   }
   async diff(arg: unknown, withHead: boolean): Promise<void> {

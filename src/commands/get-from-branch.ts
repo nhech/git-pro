@@ -8,6 +8,8 @@ import { intentToAdd } from '../git/git.service';
 import { refuseUnsaved } from '../editor/open-files';
 import { redact } from '../security/redaction';
 import { validateOid } from '../security/refs';
+import { recoveryFor } from '../utils/recovery';
+import { UndoUnavailable, type UndoService } from '../git/undo/undo.service';
 
 /** Rows of the Compare tab's working-tree mode (§3.8): `git diff <oid>`, so `originalPath` of a rename is the branch-side name and `path` the working-tree one. `name` is for display only. */
 export interface GetFromBranchInput { readonly repositoryId: string; readonly oid: string; readonly name: string; readonly files: readonly ChangedFile[] }
@@ -17,7 +19,7 @@ export interface GetFromBranchInput { readonly repositoryId: string; readonly oi
  * removed and the branch name restored together; paths the branch lacks are deleted. Only regular files on both sides qualify, as for revisions and conflicts.
  * GitService.restoreFromSource re-checks the idle state and the reviewed working content inside its coordinator slot. Resolves false when the user cancels.
  */
-export async function getFromBranch(deps: Pick<FeatureDeps, 'git' | 'executor'>, request: GetFromBranchInput): Promise<boolean> {
+export async function getFromBranch(deps: Pick<FeatureDeps, 'git' | 'executor'> & { readonly undo?: UndoService }, request: GetFromBranchInput): Promise<boolean> {
   const oid = validateOid(request.oid);
   if (!request.files.length || request.files.length > 100) throw new Error('Select between 1 and 100 files.');
   const repo = deps.git.repository(request.repositoryId), name = request.name;
@@ -59,6 +61,12 @@ export async function getFromBranch(deps: Pick<FeatureDeps, 'git' | 'executor'>,
   if (await vscode.window.showWarningMessage(redact(`Get ${subject} from ${name}?`), { modal: true, detail }, 'Get from Branch') !== 'Get from Branch') return false;
   // The modal can stay open while an editor changes; check again right before Git writes.
   await refuseUnsaved(targets);
+  // The local edits of the files that are here are what this replaces: a copy is kept so that Undo… can bring them back. Files that were not here have nothing to keep, and with no changes to the
+  // tracked files there is no copy to make; any other failure stops the replacement.
+  if (deps.undo && present.size) {
+    try { await deps.undo.save(repo.id, repo.root, { kind: 'discard', label: redact(`Replaced ${subject} with the ${name} version`), paths: [...present] }); }
+    catch (error) { if (!(error instanceof UndoUnavailable)) throw new Error(`Git Pro could not keep a copy of your changes first, so nothing was replaced. ${recoveryFor(error).message}`); }
+  }
   await deps.git.restoreFromSource(preview, oid);
   return true;
 }
