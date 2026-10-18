@@ -24,8 +24,10 @@ const exec = (id: string, ...args: unknown[]) => vscode.commands.executeCommand(
 const allTabs = () => vscode.window.tabGroups.all.flatMap(group => group.tabs);
 
 const pointer = {
+  /** Where the pointer last was, in the picture: the capture does not show it, and the animated tours draw it back in. */
+  at: { x: size.width - 40, y: size.height - 40 },
   /** Positions are those of the picture; the window starts `trim` pixels above it. */
-  move: (x: number, y: number) => must('xdotool', 'mousemove', '--sync', x, y + trim),
+  move: (x: number, y: number) => { pointer.at = { x, y }; return must('xdotool', 'mousemove', '--sync', x, y + trim); },
   click: async (x: number, y: number, button = 1) => { pointer.move(x, y); await sleep(150); must('xdotool', 'click', button); await sleep(450); },
   drag: async (fromX: number, fromY: number, toX: number, toY: number) => {
     pointer.move(fromX, fromY); await sleep(250); must('xdotool', 'mousedown', 1); await sleep(250);
@@ -75,6 +77,19 @@ async function capture(name: string, quick = false): Promise<void> {
   // A probe named _raw… keeps the title bar, to measure how much of it to cut off.
   must('import', '-window', 'root', ...(name.startsWith('_raw') ? [] : ['-crop', `${size.width}x${size.height}+0+${trim}`, '+repage']), file);
   console.log(`captured ${name}`);
+}
+
+/**
+ * A frame of an animated tour (the GIFs of the README), saved as `gif-<tour>-<number>-h<hold>-x<pointer x>y<pointer y>.png`: the same picture as a screenshot, how many beats
+ * to hold it for, and where the pointer was, which scripts/screenshots/inner.cjs draws before it joins the frames into `<tour>.gif`.
+ */
+let frames = 0;
+async function frame(tour: string, hold = 1): Promise<void> {
+  if (only && !only.includes(tour)) return;
+  frames++;
+  const file = path.join(outDir, `gif-${tour}-${String(frames).padStart(2, '0')}-h${hold}-x${pointer.at.x}y${pointer.at.y}.png`);
+  must('import', '-window', 'root', '-crop', `${size.width}x${size.height}+${0}+${trim}`, '+repage', file);
+  console.log(`frame ${frames} of ${tour}`);
 }
 
 /** Opens the Git Pro side bar and tidies the rest of the window: nothing but the side bar, the editors and the status bar. */
@@ -167,11 +182,52 @@ async function merging(): Promise<void> {
   await capture('conflicts');
 }
 
+/** The Compare tab at work, as a GIF: a commit chosen to see only its files, a file opened beside the list and marked as viewed, the other file marked too, then tip to tip. */
+async function compareTour(api: ExtensionDiagnostics): Promise<void> {
+  await arrange(); await exec('workbench.action.closeSidebar'); await sleep(800);
+  const branch = 'feature/checkout', ref = `refs/heads/${branch}`;
+  await exec('gitPro.compareWithCurrent', { kind: 'branch', repositoryId: api.activeRepository(), branch: { name: branch, ref, oid: git('rev-parse', ref), remote: false, upstream: `origin/${branch}`, worktree: '' } });
+  await webviewTab('Compare'); await sleep(2500); await clearToasts(); pointer.park();
+  await frame('compare-tour', 3);
+  // A commit row, hovered, then chosen: only its files are listed.
+  pointer.move(486, 339); await sleep(500); await frame('compare-tour', 1);
+  await pointer.click(486, 339); await sleep(1500); await frame('compare-tour', 2);
+  await pointer.click(1755, 312); await sleep(1200); await frame('compare-tour', 1);
+  // The first file opens its diff beside the list, and V marks it as viewed.
+  await pointer.click(1377, 447); await sleep(2500); pointer.move(343, 909); await sleep(300); await frame('compare-tour', 2);
+  await keys('v'); await sleep(900); await frame('compare-tour', 1);
+  await pointer.click(306, 953); await sleep(2000); await frame('compare-tour', 2);
+  await keys('v'); await sleep(900); await frame('compare-tour', 2);
+  await exec('workbench.action.closeEditorsInOtherGroups'); await sleep(2500); await clearToasts();
+  await pointer.click(1444, 210); await sleep(1500); await frame('compare-tour', 2);
+  await pointer.click(1297, 210); await sleep(1500); pointer.park(); await frame('compare-tour', 2);
+}
+
+/**
+ * The Conflicts tab at work, as a GIF: a file merged in VS Code's merge editor, the result applied and staged, the next file the same, and the merge ready to continue.
+ * Nothing here asks a question in a dialog, because a VS Code that runs a test (this one does) refuses to show one.
+ */
+async function conflictsTour(): Promise<void> {
+  await arrange(); await exec('workbench.action.closeSidebar'); await sleep(800);
+  await exec('gitPro.conflicts.open'); await webviewTab('Conflicts'); await sleep(2500); await clearToasts(); pointer.park();
+  await frame('conflicts-tour', 3);
+  await pointer.click(274, 299); await sleep(900); await frame('conflicts-tour', 1);
+  await pointer.click(1957, 352); await sleep(5000); await capture('_c-merge', true); await frame('conflicts-tour', 3);
+  // Both sides kept, Yours first, from the lens over the conflict; then the result is applied and staged, and the next conflicted file opens.
+  await pointer.click(572, 294); await sleep(1500); await capture('_c-accept', true); await frame('conflicts-tour', 3);
+  await exec('gitPro.mergeEditor.apply'); await sleep(4000); await frame('conflicts-tour', 3);
+  // The next conflicted file opens by itself; this one takes theirs from the lens, and applying it ends the merge editor tour.
+  await pointer.click(1381, 327); await sleep(1500); await frame('conflicts-tour', 2);
+  await exec('gitPro.mergeEditor.apply'); await sleep(4000);
+  await exec('gitPro.conflicts.open'); await webviewTab('Conflicts'); await sleep(2500); await clearToasts();
+  pointer.move(1714, 127); await sleep(500); await capture('_c-done', true); await frame('conflicts-tour', 4);
+}
+
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro');
   if (!extension) throw new Error('Git Pro is not installed in the test host.');
   const api = await extension.activate();
   await waitFor(() => api.repositories() === 1 && api.activeSnapshot()?.changes.length, 'the repository and its changes');
   await fitWindow();
-  if (scenario === 'merging') await merging(); else if (scenario === 'light') await light(); else await project(api);
+  if (scenario === 'merging') await merging(); else if (scenario === 'light') await light(); else if (scenario === 'compare-tour') await compareTour(api); else if (scenario === 'conflicts-tour') await conflictsTour(); else await project(api);
 }

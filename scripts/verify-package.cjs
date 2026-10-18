@@ -7,7 +7,7 @@ const output = path.resolve(process.argv[3] || 'artifacts/package-check.json');
 const guides = ['GETTING_STARTED.md', 'WORKFLOWS.md', 'SETTINGS.md', 'RELEASE_STATUS.md'];
 const docs = ['docs/GIT_API_PROVENANCE.md', ...guides.map(name => `docs/user-guide/${name}`)];
 // The README screenshots live in the repository and load from GitHub at the commit the package was built from; they are not shipped inside the package.
-const images = ['docs/images/changes-and-commit.jpg', 'docs/images/file-actions.jpg', 'docs/images/branches.jpg', 'docs/images/history.jpg', 'docs/images/compare.jpg', 'docs/images/conflicts.jpg'];
+const images = ['docs/images/changes-and-commit.jpg', 'docs/images/file-actions.jpg', 'docs/images/branches.jpg', 'docs/images/history.jpg', 'docs/images/compare-tour.gif', 'docs/images/conflicts-tour.gif'];
 const required = ['readme.md', 'changelog.md', 'dist/extension.js', 'package.json', 'LICENSE.txt', 'package.nls.json', 'package.nls.vi.json', 'THIRD_PARTY_NOTICES.txt', ...docs,
   'media/icon.png', 'media/codicons/codicon.css', 'media/codicons/codicon.ttf', 'media/git-pro.svg', 'media/commit.js', 'media/commit.css',
   'media/history.js', 'media/history.css', 'media/rebase.js', 'media/rebase.css', 'media/conflicts.js', 'media/conflicts.css', 'media/compare.js', 'media/compare.css',
@@ -83,7 +83,9 @@ async function verify() {
   // The screenshots are checked where they live (the repository), not in the package, which carries only links to them.
   const imageChecks = images.map(name => {
     const bytes = fs.readFileSync(path.resolve(__dirname, '..', name));
-    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9) throw new Error(`Invalid documentation JPEG: ${name}`);
+    // The two animated tours are GIFs (they end with the trailer byte 0x3b); the screenshots are JPEGs.
+    const gif = name.endsWith('.gif');
+    if (gif ? bytes.length < 16 || !/^GIF8[79]a$/.test(bytes.subarray(0, 6).toString('latin1')) || bytes.at(-1) !== 0x3b : bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9) throw new Error(`Invalid documentation ${gif ? 'GIF' : 'JPEG'}: ${name}`);
     return { name, bytes: bytes.length, sha256: sha256(bytes), packaged: false };
   });
   // The Marketplace refuses SVG extension icons; it needs a PNG of at least 128 × 128 pixels.

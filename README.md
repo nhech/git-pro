@@ -38,13 +38,13 @@ Follow the commit graph, select a commit for details and changed files, or compa
 
 Compare any two branches, tags or revisions: the commits on each side, with cherry-picked copies marked ≈, and the changed files as a nested tree. Mark files as viewed as you go; the marks are kept for that comparison.
 
-![Git Pro Compare tab for feature/checkout and main: commits on each side with copies of the same change marked, a nested tree of changed files and two of three files marked as viewed](docs/images/compare.jpg)
+![Animation of the Git Pro Compare tab for feature/checkout and main: a commit chosen to list only its files, a file opened beside the list and marked as viewed with V, a second file marked, and the files read from the fork point or tip to tip](docs/images/compare-tour.gif)
 
 ### Resolve conflicts in one place
 
 When a merge, pull or rebase stops on conflicts, Yours and Theirs are named after their branches. Accept a side for many files at once, or open Merge… in VS Code's merge editor.
 
-![Git Pro Conflicts tab for a merge of promo/spring-sale into main, with two conflicted files selected and the Accept Yours, Accept Theirs and Merge actions](docs/images/conflicts.jpg)
+![Animation of the Git Pro Conflicts tab for a merge of promo/spring-sale into main: Merge… opens a file in VS Code's merge editor, applying the result stages it and opens the next conflicted file, and when both are resolved Continue Merge is ready](docs/images/conflicts-tour.gif)
 
 ## Get started
 

@@ -12,6 +12,7 @@
 - **Blame of the whole file in the gutter.** **Toggle File Blame** (Command Palette) shows, before each block of lines, the commit's short hash, author and age on a tint from warm (recent) to cool (old). Hover the gutter for a card with the author, date and subject, and links to open the commit in History, copy its hash or open it on the remote. An edit hides it until the file is saved, and a new HEAD reads it again; files over 1 MiB or 20,000 lines are refused.
 - **Performance notes.** [docs/user-guide/PERFORMANCE.md](docs/user-guide/PERFORMANCE.md) publishes what `npm run test:stress` measures (the first History page of 100,000 commits in about 130 ms, the status of 5,000 changed files in about 90 ms, 10,000 branches in 1.5 s, the 343 KB package) with the machine it ran on, and lists the limits that bound every read.
 - **Vietnamese.** With the Vietnamese Language Pack installed, VS Code shows Git Pro's command titles, menus, view names and setting descriptions in Vietnamese (`package.nls.vi.json`). The panels (History, Compare, Conflicts) stay in English. A test keeps the two files in step, so a new string cannot ship without its translation.
+- **Two animated tours in the README.** The Compare and Conflicts sections of the README and the Marketplace page show a GIF of the tab at work (a commit chosen, files marked as viewed, tip to tip; a merge resolved in the merge editor and ready to continue), recorded by the screenshot script (`npm run screenshots -- --only=compare-tour,conflicts-tour`).
 
 ## 0.3.1 — 2026-10-17
 

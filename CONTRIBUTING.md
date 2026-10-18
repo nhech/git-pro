@@ -18,7 +18,10 @@ The images in `docs/images/` (README and Marketplace) and `site/img/` (landing p
 ```sh
 npm run screenshots                # builds, then writes docs/images/*.jpg and site/img/*-1080|1600.jpg
 npm run screenshots -- --skip-build
+npm run screenshots -- --only=compare-tour,conflicts-tour   # the two animated tours: docs/images/compare-tour.gif and conflicts-tour.gif
 ```
+
+The two GIFs in the README are tours of the Compare and Conflicts tabs: each step of the tour saves a frame (`frame()` in `test/extension/screenshots.ts`), and `scripts/screenshots/gifs.cjs` draws the pointer where it was, since a capture does not show it, and joins the frames. A VS Code that runs a test refuses to show a dialog, so a tour cannot confirm one: the Conflicts tour resolves in the merge editor instead of with Accept Yours.
 
 It needs Docker. In a container, a virtual 2160 × 1350 display (device scale 2) runs a real VS Code with the extension and the demo repositories of `test/fixtures/demo-repository.ts`; the tour that clicks through it is `test/extension/screenshots.ts`, and the container side is in `scripts/screenshots/`. The first run builds the image and downloads VS Code into a Docker volume. Look at every image before you commit it: raw captures and tuning probes (names starting with `_`) stay in `.shots/`, which is ignored by Git.
 

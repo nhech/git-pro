@@ -11,6 +11,9 @@ const scenarios = [
   { name: 'project', workspace: 'project', shots: ['changes-and-commit', 'branches', 'history', 'compare'] },
   { name: 'light', workspace: 'project', shots: ['file-actions'], settings: { 'workbench.colorTheme': 'Default Light Modern' } },
   { name: 'merging', workspace: 'merging', shots: ['conflicts'] },
+  // The animated tours change what they show (files marked as viewed, conflicts resolved), so they come last and each has its own VS Code.
+  { name: 'compare-tour', workspace: 'project', shots: ['compare-tour'] },
+  { name: 'conflicts-tour', workspace: 'merging', shots: ['conflicts-tour'] },
 ];
 
 const settings = {
@@ -54,6 +57,9 @@ const settings = {
   // /shots is a mount of .shots on the host: clear the old PNGs, keep the directory.
   await fs.mkdir(out, { recursive: true });
   for (const name of await fs.readdir(out)) if (name.endsWith('.png') && (!only || name.startsWith('_'))) await fs.rm(path.join(out, name));
+  // The frames of a tour that runs again are taken again.
+  const runs = scenario => !only || only.split(',').some(name => scenario.shots.includes(name));
+  for (const name of await fs.readdir(out)) if (name.startsWith('gif-') && scenarios.some(scenario => runs(scenario) && scenario.shots.some(shot => name.startsWith(`gif-${shot}-`)))) await fs.rm(path.join(out, name));
   const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'gitconfig'), GIT_PRO_SHOTS_OUT: out, GIT_PRO_SHOTS_PROJECT: demo.project };
   for (const scenario of scenarios) {
     if (only && !only.split(',').some(name => scenario.shots.includes(name))) continue;
@@ -75,10 +81,13 @@ const settings = {
   await fs.mkdir('/out/docs', { recursive: true }); await fs.mkdir('/out/site', { recursive: true });
   const magick = (args) => { const result = spawnSync('convert', args, { encoding: 'utf8' }); if (result.status !== 0) throw new Error(`convert ${args.join(' ')}: ${result.stderr}`); };
   // Names starting with an underscore are probes for tuning the tour; they stay where they are.
-  for (const file of (await fs.readdir(out)).filter(name => name.endsWith('.png') && !name.startsWith('_')).sort()) {
+  for (const file of (await fs.readdir(out)).filter(name => name.endsWith('.png') && !name.startsWith('_') && !name.startsWith('gif-')).sort()) {
     const name = file.replace(/\.png$/, ''), source = path.join(out, file);
     magick([source, '-strip', '-interlace', 'Plane', '-quality', '90', `/out/docs/${name}.jpg`]);
     for (const width of [1080, 1600]) magick([source, '-resize', `${width}x`, '-strip', '-interlace', 'Plane', '-quality', '84', `/out/site/${name}-${width}.jpg`]);
     console.log(`${name}.jpg`);
   }
+
+  // The frames of the animated tours become docs/images/<tour>.gif.
+  await require('./gifs.cjs').buildGifs(out, '/out/docs');
 })().catch(error => { console.error(error); process.exitCode = 1; });
