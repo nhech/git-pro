@@ -234,6 +234,9 @@ async function verify(): Promise<void> {
   await typeText('fe'); await keys('Return'); await sleep(1000); await capture('_verify-conventional-scope', true);
   await typeText('api'); await keys('Return'); await sleep(1000); await capture('_verify-conventional-breaking', true);
   await keys('Return'); await sleep(1200); await capture('_verify-conventional-done', true);
+  // The commands that need a repository's remote or earlier work say what is missing, in a toast and not in a failure of the command.
+  await clearToasts(); void exec('gitPro.undo'); await sleep(1500); await capture('_verify-undo', true);
+  await clearToasts(); void exec('gitPro.comparePullRequest'); await sleep(1500); await capture('_verify-pull-request', true);
   await exec('workbench.action.closeSidebar'); await sleep(600);
   await exec('vscode.open', vscode.Uri.file(path.join(projectRoot, 'src', 'cart.ts'))); await sleep(2000);
   await exec('gitPro.blame.toggleFile'); await sleep(4000);
