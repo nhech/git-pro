@@ -8,11 +8,14 @@ import { parseHistoryAction } from './history-protocol';
 import { layoutGraph, type GraphRow } from './graph-layout';
 import { redact } from '../../security/redaction';
 import type { MenuRouter } from '../menu-context';
+import type { RemoteLinks } from '../../git/remote-links.service';
 
 export class HistoryPanel implements vscode.Disposable {
   private readonly panels = new Set<vscode.WebviewPanel>();
-  constructor(private readonly context: vscode.ExtensionContext, private readonly history: HistoryService, private readonly revisions: RevisionProvider, private readonly menus?: MenuRouter) {}
+  constructor(private readonly context: vscode.ExtensionContext, private readonly history: HistoryService, private readonly revisions: RevisionProvider, private readonly menus?: MenuRouter, private readonly links?: RemoteLinks) {}
   get activePanelCount():number{return this.panels.size;}
+  /** What the panel may offer for the remote of the repository: nothing without a web address, else the button on a commit and the reference prefixes that have pages. */
+  private async hasLinks(repositoryId: string): Promise<{ prefixes: string } | undefined> { return this.links?.pages(repositoryId); }
   open(repositoryId: string, path?: string,initialRef='HEAD',selectTip=false): void {
     const panel = vscode.window.createWebviewPanel('gitPro.history', path ? 'Git Pro: File History' : 'Git Pro: History & Compare', vscode.ViewColumn.Active,
       { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')], retainContextWhenHidden: false });
@@ -114,6 +117,15 @@ export class HistoryPanel implements vscode.Disposable {
           await post({ type: 'busy', busy: false, canCancel: false });
           return;
         }
+        if (action.type === 'openRemote' || action.type === 'openReference') {
+          // Only a commit this panel shows, and a link built from the remote's address: the page opens in the browser because the user asked for it.
+          if (!this.links) throw new Error('Links to the remote are not available.');
+          if (selected !== action.oid && !comparisonCommits.has(action.oid) && !commits.some(commit => commit.oid === action.oid)) throw new Error('Select a loaded commit.');
+          if (!await this.links.web(repositoryId)) throw new Error(this.links.help);
+          const url = action.type === 'openRemote' ? await this.links.commit(repositoryId, action.oid) : await this.links.reference(repositoryId, action.prefix, action.number);
+          if (!url) throw new Error('This host has no page for that reference.');
+          if (!disposed) await vscode.env.openExternal(vscode.Uri.parse(url, true)); return;
+        }
         if(action.type==='copy'){
           if(selected!==action.oid&&!commits.some(commit=>commit.oid===action.oid))throw new Error('Copy requires a loaded commit.');
           const content=action.field==='hash'?action.oid:await this.history.message(repositoryId,action.oid);
@@ -176,7 +188,7 @@ export class HistoryPanel implements vscode.Disposable {
           if(action.type==='ready'&&selectTip&&pinned.tips[0]){
             const details=await this.history.details(repositoryId,pinned.tips[0],0,signal);if(current!==generation||disposed)return;
             selected=details.commit.oid;comparison={...(details.parent?{from:details.parent}:{}),to:details.commit.oid,files:details.files};
-            detailMessage={type:'details',details,parentIndex:0,historicalPath:historicalPaths.get(selected)};
+            detailMessage={type:'details',details,parentIndex:0,historicalPath:historicalPaths.get(selected),links:await this.hasLinks(repositoryId)};
             await post({type:'selection',oid:selected});await post(detailMessage);lookupRefs(selected);
           }
         } else if (action.type === 'more') {
@@ -187,7 +199,7 @@ export class HistoryPanel implements vscode.Disposable {
           if (current !== generation || disposed) return;
           selected = action.oid; comparison = { ...(details.parent ? { from: details.parent } : {}), to: action.oid, files: details.files };
           sidePages=undefined;comparisonInputs=undefined;comparisonCommits.clear();
-          detailMessage={ type: 'details', details, parentIndex: action.parent, historicalPath: historicalPaths.get(action.oid) };await post(detailMessage);lookupRefs(action.oid);
+          detailMessage={ type: 'details', details, parentIndex: action.parent, historicalPath: historicalPaths.get(action.oid), links: await this.hasLinks(repositoryId) };await post(detailMessage);lookupRefs(action.oid);
         } else if (action.type === 'compare') {
           const result = await this.history.compare(repositoryId, action.from, action.to, signal);
           if (current !== generation || disposed) return;

@@ -432,6 +432,16 @@
         "category": "%command.category%"
       },
       {
+        "command": "gitPro.menu.commit.openOnRemote",
+        "title": "%command.gitPro.menu.commit.openOnRemote.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.commit.copyRemoteUrl",
+        "title": "%command.gitPro.menu.commit.copyRemoteUrl.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "gitPro.menu.commit.copyHash",
         "title": "%command.gitPro.menu.commit.copyHash.title%",
         "category": "%command.category%"
@@ -1538,6 +1548,14 @@
           "when": "false"
         },
         {
+          "command": "gitPro.menu.commit.openOnRemote",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.commit.copyRemoteUrl",
+          "when": "false"
+        },
+        {
           "command": "gitPro.menu.commit.copyHash",
           "when": "false"
         },
@@ -1876,6 +1894,16 @@
           "group": "3_compare@2"
         },
         {
+          "command": "gitPro.menu.commit.openOnRemote",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "8_remote@1"
+        },
+        {
+          "command": "gitPro.menu.commit.copyRemoteUrl",
+          "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
+          "group": "8_remote@2"
+        },
+        {
           "command": "gitPro.menu.commit.copyHash",
           "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
           "group": "9_copy@1"
@@ -2138,6 +2166,21 @@
           "maxItems": 100,
           "scope": "resource",
           "description": "%setting.gitPro.protectedBranches.description%"
+        },
+        "gitPro.remoteHosts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "github",
+              "gitlab",
+              "bitbucket",
+              "gitea"
+            ]
+          },
+          "default": {},
+          "scope": "resource",
+          "description": "%setting.gitPro.remoteHosts.description%"
         },
         "gitPro.pull.strategy": {
           "type": "string",

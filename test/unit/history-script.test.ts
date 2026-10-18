@@ -372,3 +372,35 @@ test('History retains current overlap nodes and actions while bounding structura
   viewport.scrollTop=15*ROW;viewport.listeners.get('scroll')!({});assert.equal(rows.children.length,15);assert.equal(rows.children[0],initial[14],'The retained overlapping commit keeps its actual node');assert.equal(rows.children[0]!.getAttribute('aria-posinset'),'15');assert.ok(moves<=2,`Almost-disjoint scroll should move the small retained overlap, observed ${moves} row moves`);rows.children[0]!.listeners.get('click')!({});assert.equal(sent.at(-1)?.oid,commits[14]!.oid);
   moves=0;viewport.scrollTop=0;viewport.listeners.get('scroll')!({});assert.deepEqual(rows.children,initial);assert.equal(rows.children.at(-1),initial[14]);assert.ok(moves<=2,`Reverse almost-disjoint scroll should preserve overlap with bounded moves, observed ${moves}`);rows.children[0]!.listeners.get('click')!({});assert.equal(sent.at(-1)?.oid,commits[0]!.oid);rows.children.at(-1)!.listeners.get('contextmenu')!({});assert.equal(sent.at(-1)?.oid,commits[14]!.oid);assert.equal(created.length,createdAfterPage,'Row rotations allocate no replacement elements');
 });
+
+test('History details turn #123 into a button and offer Open on Remote only when the host says the remote has pages',()=>{
+  const elements=new Map(['viewport','rows','spacer','details','status','filters','compare','more','pagination','filter-disclosure','filter-summary','snapshot','zoom','workspace','cancel-read'].map(id=>[id,new Element()]));
+  const sent:Record<string,unknown>[]=[];let receive:((event:{data:unknown})=>void)|undefined;
+  runInNewContext(readFileSync('media/history.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[]},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value)})});
+  const oid='1'.repeat(40),commit={oid,parents:[],subject:'Fix crash (#12) and !7',author:'Fixture',email:'',timestamp:1700000000};
+  const graph=layoutGraph([commit]);receive!({data:{type:'page',session:'s',commits:[commit],rows:graph.rows,tips:[oid],refs:[],filters:{},hasMore:false}});
+  const message='Fix crash (#12) and !7\n\nRefs #34, see issue#5, https://x.test/#9, #123456789 and <b>#8</b>';
+  const show=(links?:{prefixes:string})=>{receive!({data:{type:'details',session:'s',details:{commit,parent:'',files:[],stats:[],refs:[],message},parentIndex:0,...(links?{links}:{})}});const [heading,,actions,,body]=elements.get('details')!.children as [Element,Element,Element,Element,Element];return {heading,actions,body:elements.get('details')!.children.find(node=>node.className==='details-message')??body};};
+  const summary=(node:Element)=>node.children.map(child=>child.className==='reference'?`[${child.textContent}]`:child.textContent).join('|');
+
+  const plain=show();
+  assert.equal(plain.heading.textContent,'Fix crash (#12) and !7');assert.equal(plain.heading.children.length,0,'without a remote the subject is plain text');
+  assert.deepEqual(plain.actions.children.map(button=>button.children[1]!.textContent),['Copy Hash','Copy Message']);
+  assert.equal(plain.body.textContent,message.slice(message.indexOf('Refs')),'the body is plain text too');
+
+  const github=show({prefixes:'#'});
+  assert.equal(summary(github.heading),'Fix crash (|[#12]|) and !7','! has no page on this host, so it stays text');
+  assert.deepEqual(github.actions.children.map(button=>button.children[1]!.textContent),['Copy Hash','Copy Message','Open on Remote']);
+  github.actions.children[2]!.listeners.get('click')!({});assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'openRemote',session:'s',oid});
+  // Only a reference that stands alone is a link: not issue#5, not a URL anchor, not a number too long to be one, and nothing inside markup becomes an element.
+  assert.equal(summary(github.body),'Refs |[#34]|, see issue#5, https://x.test/#9, #123456789 and <b>|[#8]|</b>');
+  github.body.children[1]!.listeners.get('click')!({});assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'openReference',session:'s',oid,prefix:'#',number:34});
+  github.heading.children[1]!.listeners.get('click')!({});assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'openReference',session:'s',oid,prefix:'#',number:12});
+  assert.equal(github.heading.children[1]!.title,'Open #12 on the remote');
+
+  const gitlab=show({prefixes:'#!'});assert.equal(summary(gitlab.heading),'Fix crash (|[#12]|) and |[!7]');
+  gitlab.heading.children[3]!.listeners.get('click')!({});assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'openReference',session:'s',oid,prefix:'!',number:7});
+
+  // A button does nothing while the panel is loading.
+  receive!({data:{type:'busy',session:'s',busy:true}});const count=sent.length;gitlab.heading.children[1]!.listeners.get('click')!({});gitlab.actions.children[2]!.listeners.get('click')!({});assert.equal(sent.length,count);
+});

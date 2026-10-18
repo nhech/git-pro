@@ -232,6 +232,10 @@ body.vscode-high-contrast .refs,body.vscode-high-contrast-light .refs{box-shadow
 .details-actions button:disabled{opacity:.5;cursor:default}
 .details-actions .codicon{color:var(--gp-icon-fg)}
 .details-message{margin:12px 0 0;padding:0;font:13px/20px var(--gp-font);white-space:pre-wrap;color:var(--gp-fg);background:none}
+.reference{display:inline;padding:0;border:0;background:none;color:var(--vscode-textLink-foreground);font:inherit;cursor:pointer}
+.reference:hover:not(:disabled){color:var(--vscode-textLink-activeForeground);text-decoration:underline}
+.reference:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:1px}
+.reference:disabled{opacity:.5;cursor:default}
 .details-guidance{padding-top:8px}
 .details-guidance h2{display:flex;align-items:center;gap:6px}
 .details-guidance .codicon{color:var(--gp-muted)}

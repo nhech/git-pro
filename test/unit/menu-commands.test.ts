@@ -12,18 +12,18 @@ const session = '3f2a9c1e-0000-4000-8000-123456789abc';
 
 /** The compiled registerMenus against a stand-in vscode: `command` records every registration so a test can run any of them. */
 function harness() {
-  const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>(), executed: unknown[][] = [], clipboard: string[] = [], selected: string[] = [], calls: unknown[][] = [], opened: unknown[][] = [];
-  const vscode = { env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }, commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); } }, Uri: { file: (fsPath: string) => ({ fsPath }) } };
+  const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>(), executed: unknown[][] = [], clipboard: string[] = [], selected: string[] = [], calls: unknown[][] = [], opened: unknown[][] = [], browser: string[] = [], remote: { url: string | undefined } = { url: `https://github.com/o/r/commit/${oid('a')}` };
+  const vscode = { env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } }, openExternal: async (uri: { value: string }) => { browser.push(uri.value); return true; } }, commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); } }, Uri: { file: (fsPath: string) => ({ fsPath }), parse: (value: string, strict: boolean) => { assert.equal(strict, true, 'a link is parsed strictly'); return { value }; } } };
   const source = path.resolve(__dirname, '../../src/commands/menu.commands.js'), load = createRequire(source), exports: Record<string, unknown> = {};
   runInNewContext(readFileSync(source, 'utf8'), { exports, require: (name: string) => name === 'vscode' ? vscode : load(name) });
   const menus = new MenuRouter(), repositories = [{ id: 'repo-1', root: '/work/repo' }];
   const view = { tool: undefined as unknown };
   const record = (name: string) => async (...args: unknown[]) => { calls.push([name, ...args]); };
   const compare = { openRefs: async (...args: unknown[]) => { opened.push(['refs', ...args]); }, openWorktree: async (...args: unknown[]) => { opened.push(['worktree', ...args]); } };
-  const deps = { surfaces: { menus, compare }, registry: { list: () => repositories, select: (id: string) => { selected.push(id); } }, history: { message: async () => 'Subject\n\nBody' } };
+  const deps = { surfaces: { menus, compare }, registry: { list: () => repositories, select: (id: string) => { selected.push(id); } }, history: { message: async () => 'Subject\n\nBody' }, links: { commit: async () => remote.url, help: 'No web address for this remote.' } };
   const flows = { advanced: { applyCommit: record('applyCommit'), rebasePlan: record('rebasePlan') }, tools: { checkoutCommit: record('checkoutCommit'), branchFromCommit: record('branchFromCommit'), tagAtCommit: record('tagAtCommit'), menu: record('toolsMenu') }, selectedTool: () => view.tool };
   (exports.registerMenus as (...args: unknown[]) => void)({}, deps, (id: string, action: (...args: unknown[]) => Promise<unknown>) => { handlers.set(id, action); }, flows);
-  return { handlers, executed, clipboard, selected, calls, opened, menus, view, run: (id: string, ...args: unknown[]) => handlers.get(id)!(...args) };
+  return { handlers, executed, clipboard, selected, calls, opened, browser, remote, menus, view, run: (id: string, ...args: unknown[]) => handlers.get(id)!(...args) };
 }
 
 test('every menu command the manifest contributes for the panels and views is registered, and nothing else', () => {
@@ -73,6 +73,11 @@ test('commit menu commands act on the commit a live panel confirms, through the 
   await h.run('gitPro.menu.commit.compareWithCurrent', argument()); await h.run('gitPro.menu.commit.compareWithWorkingTree', argument());
   assert.deepEqual(h.opened, [['refs', 'repo-1', oid('a'), 'HEAD'], ['worktree', 'repo-1', oid('a')]]);
   await h.run('gitPro.menu.commit.copyHash', argument()); await h.run('gitPro.menu.commit.copyMessage', argument()); assert.deepEqual(h.clipboard, [oid('a'), 'Subject\n\nBody']);
+  // The remote's page opens or is copied only from a commit the panel shows, and a repository without a web address says how to name its host.
+  await h.run('gitPro.menu.commit.openOnRemote', argument()); await h.run('gitPro.menu.commit.copyRemoteUrl', argument());
+  assert.deepEqual(h.browser, [`https://github.com/o/r/commit/${oid('a')}`]); assert.equal(h.clipboard.at(-1), `https://github.com/o/r/commit/${oid('a')}`);
+  await assert.rejects(h.run('gitPro.menu.commit.openOnRemote', argument({ oid: oid('b') })), /no longer shown/); assert.equal(h.browser.length, 1);
+  h.remote.url = undefined; await assert.rejects(h.run('gitPro.menu.commit.openOnRemote', argument()), /No web address/); await assert.rejects(h.run('gitPro.menu.commit.copyRemoteUrl', argument()), /No web address/); assert.equal(h.browser.length, 1);
   const before = h.calls.length;
   await assert.rejects(h.run('gitPro.menu.commit.cherryPick', argument({ oid: oid('b') })), /no longer shown/, 'a commit the panel never showed');
   await assert.rejects(h.run('gitPro.menu.commit.cherryPick', argument({ webview: 'gitPro.conflicts' })), /Git Pro panel menu/, 'a panel without commits');

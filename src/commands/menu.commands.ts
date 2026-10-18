@@ -32,6 +32,10 @@ export function registerMenus(_context: vscode.ExtensionContext, deps: FeatureDe
   onCommit('rebaseFromHere', (id, oid) => flows.advanced.rebasePlan({ repositoryId: id, base: `${oid}~1` }));
   onCommit('compareWithCurrent', (id, oid) => compare().openRefs(id, oid, 'HEAD'));
   onCommit('compareWithWorkingTree', (id, oid) => compare().openWorktree(id, oid));
+  // The page of the commit on the remote's host, built from the remote's address and opened or copied only because the user chose it here.
+  const remoteUrl = async (id: string, oid: string) => { const url = await deps.links.commit(id, oid); if (!url) throw new Error(deps.links.help); return url; };
+  onCommit('openOnRemote', async (id, oid) => { await vscode.env.openExternal(vscode.Uri.parse(await remoteUrl(id, oid), true)); });
+  onCommit('copyRemoteUrl', async (id, oid) => { await vscode.env.clipboard.writeText(await remoteUrl(id, oid)); });
   onCommit('copyHash', async (_id, oid) => { await vscode.env.clipboard.writeText(oid); });
   onCommit('copyMessage', async (id, oid) => { await vscode.env.clipboard.writeText(await deps.history.message(id, oid)); });
   for (const name of ['showFiles', 'showInHistory']) onPanel('compare', 'commit', name);

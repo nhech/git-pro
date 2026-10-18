@@ -8,6 +8,7 @@ Open VS Code Settings and search for `gitPro`. Resource settings apply to the se
 | `gitPro.commit.confirmBeforeCommit` | `false` | true / false | resource | Confirm each staged-only commit. |
 | `gitPro.confirmBeforePush` | `false` | true / false | resource | Confirm pushes to the configured upstream. |
 | `gitPro.protectedBranches` | `[]` | list of glob patterns | resource | Branches that ask before you commit on them, push them, force push them or delete them. `*` matches within one path segment (`release/*`), `**` crosses segments, `?` is one character. |
+| `gitPro.remoteHosts` | `{}` | object of host → github, gitlab, bitbucket or gitea | resource | Hosts that Open on Remote and the `#123` links of History should know besides github.com, gitlab.com, bitbucket.org and codeberg.org, for example `{ "git.example.com": "gitlab" }`. Nothing is requested from the host: the links are built from the address of the remote and opened only when you click them. |
 | `gitPro.pull.strategy` | `"ff-only"` | ff-only, merge, rebase | resource | Pull strategy. Divergence requires an explicit merge or rebase choice. |
 | `gitPro.commit.subjectLimit` | `72` | 20–200 | resource | Commit subject warning length. |
 | `gitPro.commit.messageHistoryLimit` | `20` | 0–100 | resource | Maximum messages stored per repository in workspace state. |

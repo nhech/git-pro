@@ -17,19 +17,19 @@ for(const total of [2000,2001])test(`History distinguishes exact ${total}-commit
   await h.send({type:'ready'});assert.equal(h.last('page')?.limitReached,total===2001);
   await h.send({type:'query',ref:'HEAD',path:'',text:'',author:'',from:'',to:''});assert.equal((h.last('page')?.commits as unknown[]).length,25);assert.equal(h.last('page')?.limitReached,false);h.host.dispose();
 });
-function harness(history:Record<string,unknown>,executeCommand=async()=>undefined,filePath:string|undefined='new.txt'){
+function harness(history:Record<string,unknown>,executeCommand=async()=>undefined,filePath:string|undefined='new.txt',links?:unknown){
   const file=path.resolve(__dirname,'../../src/webviews/graph/history-panel.js'),load=createRequire(file),exports:Record<string,unknown>={};
   const sent:Record<string,unknown>[]=[],disposable={dispose:()=>undefined};
   let receive:(value:unknown)=>Promise<void>=async()=>undefined,onDispose=()=>undefined;
   const panel={webview:{html:'',cspSource:'owned:',asWebviewUri:(uri:unknown)=>String(uri),postMessage:async(value:Record<string,unknown>)=>{sent.push(value);return true;},onDidReceiveMessage:(callback:typeof receive)=>{receive=callback;return disposable;}},onDidDispose:(callback:typeof onDispose)=>{onDispose=callback;return disposable;},dispose:()=>onDispose()};
-  const settings={pageSize:25},clipboard:string[]=[];
-  const vscode={window:{createWebviewPanel:()=>panel},commands:{executeCommand},ViewColumn:{Active:1},Uri:{file:(value:string)=>value,joinPath:(_root:unknown,...parts:string[])=>parts.join('/')},workspace:{getConfiguration:()=>({get:()=>settings.pageSize})},env:{clipboard:{writeText:async(value:string)=>{clipboard.push(value);}}}};
+  const settings={pageSize:25},clipboard:string[]=[],opened:string[]=[];
+  const vscode={window:{createWebviewPanel:()=>panel},commands:{executeCommand},ViewColumn:{Active:1},Uri:{file:(value:string)=>value,parse:(value:string)=>value,joinPath:(_root:unknown,...parts:string[])=>parts.join('/')},workspace:{getConfiguration:()=>({get:()=>settings.pageSize})},env:{clipboard:{writeText:async(value:string)=>{clipboard.push(value);}},openExternal:async(value:string)=>{opened.push(value);return true;}}};
   runInNewContext(readFileSync(file,'utf8'),{exports,AbortController,require:(name:string)=>name==='vscode'?vscode:load(name)});
   type Host={open(repo:string,file?:string):void;dispose():void;activePanelCount:number};
-  const Constructor=exports.HistoryPanel as new(context:unknown,history:unknown,revisions:unknown)=>Host;
-  const host=new Constructor({extensionUri:'owned'},{root:()=>'.',...history},{add:()=> 'owned revision'});host.open('repo',filePath);
+  const Constructor=exports.HistoryPanel as new(context:unknown,history:unknown,revisions:unknown,menus?:unknown,links?:unknown)=>Host;
+  const host=new Constructor({extensionUri:'owned'},{root:()=>'.',...history},{add:()=> 'owned revision'},undefined,links);host.open('repo',filePath);
   const session=/data-session="([^"]+)"/.exec(panel.webview.html)![1]!;
-  return {host,sent,settings,clipboard,send:(value:Record<string,unknown>)=>receive({session,...value}),last:(type:string)=>sent.slice().reverse().find(value=>value.type===type)};
+  return {host,sent,settings,clipboard,opened,send:(value:Record<string,unknown>)=>receive({session,...value}),last:(type:string)=>sent.slice().reverse().find(value=>value.type===type)};
 }
 
 test('History renderer readiness preserves pinned file cursor, merge-parent details and explicit refresh semantics',async()=>{
@@ -204,4 +204,21 @@ test('History details do not wait for or fail on containing refs',async()=>{
     const posted=h.sent.filter(value=>value.type==='refs').length;lookups[1]!.resolve(['refs/heads/stale']);await settle();assert.equal(h.sent.filter(value=>value.type==='refs').length,posted);
     lookups[2]!.resolve(['refs/heads/main']);await settle();assert.deepEqual({oid:h.last('refs')?.oid,refs:h.last('refs')?.refs},{oid:oid(1),refs:['refs/heads/main']});
   }finally{h.host.dispose();}
+});
+
+test('History opens a commit or a reference on the remote only for a commit it shows, and tells the renderer what the remote offers',async()=>{
+  const asked:string[]=[];let web:{prefixes:string}|undefined={prefixes:'#'};
+  const links={help:'Name the host.',web:async()=>web?{kind:'github'}:undefined,pages:async()=>web,commit:async(_id:string,value:string)=>{asked.push('commit '+value);return `https://example.test/commit/${value}`;},reference:async(_id:string,prefix:string,number:number)=>{asked.push(`reference ${prefix}${number}`);return prefix==='!'?undefined:`https://example.test/issues/${number}`;}};
+  const h=harness({pin:async()=>({tips:[oid(1)],filters:{}}),checkPinnedQuery:()=>undefined,page:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false}),window:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false}),details:async(_id:string,id:string)=>({commit:commit(Number(id)),parent:oid(2),files:[],stats:[],refs:[],message:'Fix (#12)'})},async()=>undefined,'',links);
+  await h.send({type:'ready'});await h.send({type:'select',oid:oid(1),parent:0});
+  assert.deepEqual(h.last('details')?.links,{prefixes:'#'},'the renderer is told which references have pages');
+  await h.send({type:'openRemote',oid:oid(1)});await h.send({type:'openReference',oid:oid(1),prefix:'#',number:12});
+  assert.deepEqual(h.opened,[`https://example.test/commit/${oid(1)}`,'https://example.test/issues/12']);
+  await h.send({type:'openRemote',oid:oid(9)});assert.match(String(h.last('error')?.message),/loaded commit/);assert.equal(h.opened.length,2,'a commit the panel never showed');
+  await h.send({type:'openReference',oid:oid(1),prefix:'!',number:3});assert.match(String(h.last('error')?.message),/no page for that reference/);assert.equal(h.opened.length,2);
+  web=undefined;await h.send({type:'openRemote',oid:oid(1)});assert.equal(h.last('error')?.message,'Name the host.');assert.equal(h.opened.length,2);
+  await h.send({type:'select',oid:oid(1),parent:0});assert.equal(h.last('details')?.links,undefined,'no web address, no links offered');
+  h.host.dispose();
+  const bare=harness({pin:async()=>({tips:[oid(1)],filters:{}}),checkPinnedQuery:()=>undefined,page:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false}),window:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false})},async()=>undefined,'');
+  await bare.send({type:'ready'});await bare.send({type:'openRemote',oid:oid(1)});assert.match(String(bare.last('error')?.message),/not available/);assert.deepEqual(bare.opened,[]);bare.host.dispose();
 });

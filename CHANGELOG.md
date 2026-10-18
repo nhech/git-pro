@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Protected branches.** List branches in `gitPro.protectedBranches` (`main`, `release/*`, `hotfix/**`) and Git Pro asks, in its own words, before it commits on one, pushes it, force pushes it or deletes it.
+- **Open on Remote and `#123` links.** A commit's menu in History and Compare has Open on Remote and Copy Remote URL, and History's details have an Open on Remote button. `#123` in a commit's subject or message becomes a link to that issue or pull request (`!123` to a merge request on GitLab). The links are built from the address of the remote and opened only when you click; a company GitHub, GitLab, Bitbucket or Gitea/Forgejo server is named in `gitPro.remoteHosts`.
+
 ## 0.3.1 — 2026-10-17
 
 Changes shows each file's own icon, a binary file opens in the built-in diff, and Repositories moves to the bottom of the sidebar.

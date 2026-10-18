@@ -37,6 +37,12 @@ test('single-commit metadata is a bounded validated read without graph traversal
   assert.ok(!args.includes('--topo-order'));assert.ok(!args.includes('--max-count=1'));
   for(const oid of ['HEAD','--all',a+'\0extra',a+':secret'])assert.throws(()=>buildReadCommand({kind:'commitMetadata',oid}));
 });
+test('history protocol accepts the remote actions only with a real object name and a bounded reference', () => {
+  assert.deepEqual(parseHistoryAction({type:'openRemote',session:'s',oid:a,extra:1}),{type:'openRemote',session:'s',oid:a});
+  assert.deepEqual(parseHistoryAction({type:'openReference',session:'s',oid:a,prefix:'#',number:123}),{type:'openReference',session:'s',oid:a,prefix:'#',number:123});
+  assert.deepEqual(parseHistoryAction({type:'openReference',session:'s',oid:a,prefix:'!',number:9_999_999}),{type:'openReference',session:'s',oid:a,prefix:'!',number:9_999_999});
+  for(const forged of [{type:'openRemote',oid:'--all'},{type:'openRemote',oid:'HEAD'},{type:'openRemote'},{type:'openReference',oid:a,prefix:'?',number:1},{type:'openReference',oid:a,prefix:'#',number:0},{type:'openReference',oid:a,prefix:'#',number:10_000_000},{type:'openReference',oid:a,prefix:'#',number:1.5},{type:'openReference',oid:a,prefix:'#',number:'12'},{type:'openReference',oid:a,prefix:'#/../x',number:1},{type:'openReference',oid:'--all',prefix:'#',number:1}])assert.throws(()=>parseHistoryAction({session:'s',...forged}),String(JSON.stringify(forged)));
+});
 test('history protocol rejects forged paths, refs, indexes and non-loaded action shapes', () => {
   assert.deepEqual(parseHistoryAction({type:'select',session:'s',oid:a,parent:1}), {type:'select',session:'s',oid:a,parent:1});
   assert.throws(() => parseHistoryAction({type:'select',session:'s',oid:'--all',parent:0}));

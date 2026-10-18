@@ -35,6 +35,7 @@ import { InteractiveService } from './git/rebase/interactive.service';
 import { workspaceRebaseJournal } from './git/rebase/workspace-journal';
 import { RebasePlanner } from './webviews/rebase/rebase-planner';
 import { ToolsService } from './git/tools/tools.service';
+import { RemoteLinks } from './git/remote-links.service';
 import { WorktreeService } from './git/tools/worktree.service';
 import { ToolsCommands } from './commands/tools.commands';
 import { ToolsProvider } from './views/tools/tools.provider';
@@ -117,7 +118,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     context.subscriptions.push(toolsProvider,toolsView,trackSelection(toolsView,'gitPro.toolsView.item',item=>toolsProvider.getTreeItem(item).contextValue));
     const history = new HistoryService(registry, executor, policy);
     const toolsCommands = new ToolsCommands(tools,new WorktreeService(tools,policy),history,revisions,surfaces);
-    const historyPanels = new HistoryPanel(context, history, revisions, surfaces.menus);
+    const links = new RemoteLinks({ remotes: id => tools.remotes(id), upstream: id => registry.store.get(id)?.upstream || undefined,
+      hosts: id => { const repo = registry.list().find(item => item.id === id); return vscode.workspace.getConfiguration('gitPro', repo ? vscode.Uri.file(repo.root) : undefined).get('remoteHosts'); } });
+    const historyPanels = new HistoryPanel(context, history, revisions, surfaces.menus, links);
     const blame = new BlameController(history, registry,(id,oid)=>historyPanels.open(id,undefined,oid,true));
     const historyCodeLens = new HistoryCodeLens(registry, policy);
     context.subscriptions.push(historyCodeLens, vscode.languages.registerCodeLensProvider({scheme:'file'}, historyCodeLens));
@@ -214,7 +217,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await refuseGitMetadata(repo, relative, file);
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
     });
-    const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,surfaces};
+    const deps:FeatureDeps={registry,policy,executor,logger,git,advanced,conflicts:advancedCommands.conflicts,tools,history,historyPanels,revisions,links,surfaces};
     registerOperation(context,deps,command);registerConflicts(context,deps,command);registerCompare(context,deps,command);registerMenus(context,deps,command,{advanced:advancedCommands,tools:toolsCommands,selectedTool:()=>toolsView.selection.length===1?toolsView.selection[0]:undefined});
     let syncTail: Promise<void> = Promise.resolve();
     const synchronize = () => {

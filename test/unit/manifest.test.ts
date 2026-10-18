@@ -160,7 +160,7 @@ test('webview context menus: every item names a panel and a section, is hidden f
     assert.ok(messages[`command.${item.command}.title`],`${item.command} has a localized title`);
   }
   const commit=menu.filter(item=>item.when?.includes("webviewSection == 'commit'")&&item.command.startsWith('gitPro.menu.commit.'));
-  assert.deepEqual(commit.map(item=>item.group).sort(),['1_checkout@1','1_checkout@2','1_checkout@3','2_modify@1','2_modify@2','2_modify@3','3_compare@1','3_compare@2','9_copy@1','9_copy@2'],'groups never collide, so the order is stable');
+  assert.deepEqual(commit.map(item=>item.group).sort(),['1_checkout@1','1_checkout@2','1_checkout@3','2_modify@1','2_modify@2','2_modify@3','3_compare@1','3_compare@2','8_remote@1','8_remote@2','9_copy@1','9_copy@2'],'groups never collide, so the order is stable');
   assert.ok(commit.every(item=>item.when?.includes("webviewId == 'gitPro.history'")&&item.when.includes("webviewId == 'gitPro.compare'")),'History and Compare share the commit menu');
   // Whatever one panel adds to its own rows takes a group of its own, so the order of a menu never depends on how VS Code breaks a tie.
   for(const panel of ['history','compare','conflicts','rebasePlanner'])for(const section of ['commit','file','conflict','step']){

@@ -32,8 +32,24 @@
   const send = value => api.postMessage({ ...value, session });
   const text = (parent, tag, value) => { const node = document.createElement(tag); node.textContent = value; parent.append(node); return node; };
   const icon = (parent, kind) => {
-    const glyph = document.createElement('span'); glyph.className = `codicon codicon-${{ copy: 'copy', branch: 'git-branch', remote: 'cloud', tag: 'tag', ref: 'link', commit: 'git-commit', info: 'info' }[kind]}`;
+    const glyph = document.createElement('span'); glyph.className = `codicon codicon-${{ copy: 'copy', branch: 'git-branch', remote: 'cloud', tag: 'tag', ref: 'link', external: 'link-external', commit: 'git-commit', info: 'info' }[kind]}`;
     glyph.setAttribute('aria-hidden', 'true'); parent.append(glyph);
+  };
+  // `#123` and `!123` in a message become buttons when the host says the remote has pages for them (item.links.prefixes); the pattern is findReferences in src/git/remote-link.ts.
+  const referencePattern = /(?<![\w/#&!.-])([#!])(\d{1,7})(?![\w-])/g;
+  const withReferences = (parent, value, oid, links) => {
+    if (!links) { parent.textContent = value; return parent; }
+    let last = 0, count = 0;
+    for (const match of value.matchAll(referencePattern)) {
+      if (++count > 50) break;
+      if (!links.prefixes.includes(match[1])) continue;
+      if (match.index > last) text(parent, 'span', value.slice(last, match.index));
+      const button = text(parent, 'button', match[0]); button.className = 'reference'; button.title = `Open ${match[0]} on the remote`;
+      button.addEventListener('click', () => { if (!busy && button.isConnected) send({ type: 'openReference', oid, prefix: match[1], number: Number(match[2]) }); });
+      last = match.index + match[0].length;
+    }
+    if (last < value.length) text(parent, 'span', value.slice(last));
+    return parent;
   };
   const showGuidance = () => {
     details.replaceChildren(); const guidance = document.createElement('div'); guidance.className = 'details-guidance';
@@ -208,7 +224,7 @@
     if (item.type === 'details') {
       comparisonScope = ''; comparisonExpanded = false; workspace.className = 'split'; details.replaceChildren(); const value = item.details;
       selected = commits.findIndex(commit => commit.oid === value.commit.oid); draw();
-      const heading = text(details, 'h2', value.commit.subject); heading.setAttribute('tabindex', '-1'); heading.dataset.focusKey = 'details-heading';
+      const heading = withReferences(text(details, 'h2', ''), value.commit.subject, value.commit.oid, item.links); heading.setAttribute('tabindex', '-1'); heading.dataset.focusKey = 'details-heading';
       const metadata = document.createElement('div'); metadata.className = 'details-metadata';
       const hash = text(metadata, 'code', value.commit.oid.slice(0, 8)); hash.title = value.commit.oid; hash.setAttribute('aria-label', `Commit ${value.commit.oid}`);
       text(metadata, 'span', `${value.commit.author}${value.commit.email ? ` <${value.commit.email}>` : ''} · ${new Date(value.commit.timestamp * 1000).toLocaleString()}`); details.append(metadata);
@@ -216,13 +232,15 @@
       for (const [label, field] of [['Copy Hash', 'hash'], ['Copy Message', 'message']]) {
         const button = document.createElement('button'); icon(button, 'copy'); text(button, 'span', label); button.disabled = busy;
         button.addEventListener('click', () => { if (!busy && button.isConnected) send({ type: 'copy', oid: value.commit.oid, field }); }); actions.append(button);
-      } details.append(actions);
+      }
+      if (item.links) { const button = document.createElement('button'); icon(button, 'external'); text(button, 'span', 'Open on Remote'); button.disabled = busy; button.addEventListener('click', () => { if (!busy && button.isConnected) send({ type: 'openRemote', oid: value.commit.oid }); }); actions.append(button); }
+      details.append(actions);
       if (item.historicalPath) text(details, 'p', `Historical file: ${item.historicalPath}`);
       const refsSection = document.createElement('section'); refsSection.className = 'details-refs'; details.append(refsSection); refsSlot = { oid: value.commit.oid, container: refsSection }; showRefs(refsSection, value.refs, value.refsError);
       const newline = value.message.indexOf('\n'), firstLine = newline < 0 ? value.message : value.message.slice(0, newline);
       // The blank line Git keeps between subject and body is not part of the body.
       const body = firstLine === value.commit.subject ? newline < 0 ? '' : value.message.slice(newline + 1).replace(/^(?:\r?\n)+/, '') : value.message;
-      if (body) { const message = text(details, 'pre', body); message.className = 'details-message'; }
+      if (body) { const message = withReferences(text(details, 'pre', ''), body, value.commit.oid, item.links); message.className = 'details-message'; }
       if (value.messageOmitted) text(details, 'p', 'The full message is too large to show here. Use native Git to read it.').className = 'refs-note';
       if (value.commit.parents.length > 1) { const label = text(details, 'label', 'Compare merge parent'); const control = document.createElement('select'); control.dataset.focusKey = 'details-parent'; value.commit.parents.forEach((oid, index) => { const option = text(control, 'option', `${index + 1}: ${oid.slice(0, 8)}`); option.value = String(index); }); control.value = String(item.parentIndex); control.addEventListener('change', () => { if (!busy) send({ type: 'select', oid: value.commit.oid, parent: Number(control.value) }); }); label.append(control); }
       if (value.filesOmitted) { text(details, 'h3', 'Changed files'); text(details, 'p', value.filesNote === 'nonUtf8Path' ? 'Some changed paths are not valid UTF-8, so the file list is unavailable here. Use native Git to review this commit.' : 'Too many changed files to list here. Use native Git to review this commit.').className = 'refs-note'; }

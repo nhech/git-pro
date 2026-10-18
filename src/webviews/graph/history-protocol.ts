@@ -6,6 +6,8 @@ export type HistoryAction = { type: 'ready' | 'more' | 'cancel'; session: string
   { type: 'compare'; session: string; from: string; to: string } |
   { type: 'comparePage'; session:string; side:'left'|'right';offset:number } |
   { type: 'copy'; session: string; oid:string; field:'hash'|'message' } |
+  { type: 'openRemote'; session: string; oid: string } |
+  { type: 'openReference'; session: string; oid: string; prefix: '#' | '!'; number: number } |
   { type: 'diff'|'workingDiff'; session: string; index: number };
 export function parseHistoryAction(value: unknown): HistoryAction {
   if (!value || typeof value !== 'object') throw new Error('Invalid history message.');
@@ -24,6 +26,8 @@ export function parseHistoryAction(value: unknown): HistoryAction {
   if (item.type === 'compare') return { type: 'compare', session, from: text('from'), to: text('to') };
   if(item.type==='comparePage'&&(item.side==='left'||item.side==='right')&&Number.isInteger(item.offset)&&Number(item.offset)>=0&&Number(item.offset)<=1_000_000&&Number(item.offset)%25===0)return {type:'comparePage',session,side:item.side,offset:Number(item.offset)};
   if(item.type==='copy'&&(item.field==='hash'||item.field==='message'))return {type:'copy',session,oid:validateOid(text('oid')),field:item.field};
+  if (item.type === 'openRemote') return { type: 'openRemote', session, oid: validateOid(text('oid')) };
+  if (item.type === 'openReference' && (item.prefix === '#' || item.prefix === '!') && Number.isInteger(item.number) && Number(item.number) >= 1 && Number(item.number) <= 9_999_999) return { type: 'openReference', session, oid: validateOid(text('oid')), prefix: item.prefix, number: Number(item.number) };
   if (item.type === 'select' && Number.isInteger(item.parent) && Number(item.parent) >= 0 && Number(item.parent) < 128) return { type: 'select', session, oid: validateOid(text('oid')), parent: Number(item.parent) };
   if ((item.type === 'diff'||item.type==='workingDiff') && Number.isInteger(item.index) && Number(item.index) >= 0 && Number(item.index) < 100_000) return { type: item.type, session, index: Number(item.index) };
   throw new Error('Unknown history action.');
