@@ -107,7 +107,7 @@
     };
     const page = (control, fallback, nextOffset) => { const ownedFocus = document.activeElement === control; offset = nextOffset; render(); if (!ownedFocus || !control.disabled || fallback.disabled || (typeof document.hasFocus === 'function' && !document.hasFocus())) return; const active = document.activeElement; if (active && active !== control && active !== document.body && active.tagName !== 'HTML' && active.isConnected && !active.disabled) return; fallback.focus(); }; previous.addEventListener('click', () => { if (!busy && offset > 0) page(previous, next, offset - 200); }); next.addEventListener('click', () => { if (!busy && offset + 200 < files.length) page(next, previous, offset + 200); }); details.append(navigation, list); render();
   };
-  const updateRowText = (node, value) => { if (node.textContent !== value) node.textContent = value; };
+  const updateRowText = (node, value) => { if (node.textContent !== value) { if (node.firstChild?.nodeType === 3 && node.childNodes?.length === 1) node.firstChild.data = value; else node.textContent = value; } };
   const updateRowTitle = (node, value) => { if (node.title !== value) node.title = value; };
   const updateGraphAttribute = (node, name, value) => { if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
   const createVisibleRow = slot => {
@@ -132,8 +132,8 @@
     const count = Math.max(0, end - start);
     if (visibleRows.length !== count) { rows.replaceChildren(); visibleRows = Array.from({ length: count }, (_, slot) => createVisibleRow(slot)); rows.append(...visibleRows.map(view => view.row)); } else if (renderedWindow) {
       const delta = start - renderedWindow.start;
-      if (delta > 0 && delta < count) { const moved = visibleRows.splice(0, delta); visibleRows.push(...moved); rows.append(...moved.map(view => view.row)); }
-      else if (delta < 0 && -delta < count) { const moved = visibleRows.splice(count + delta); visibleRows.unshift(...moved); rows.prepend(...moved.map(view => view.row)); }
+      if (delta > 0 && delta < count) { const moved = visibleRows.splice(0, delta); visibleRows.push(...moved); if (delta <= count - delta) rows.append(...moved.map(view => view.row)); else rows.prepend(...visibleRows.slice(0, count - delta).map(view => view.row)); }
+      else if (delta < 0 && -delta < count) { const moved = visibleRows.splice(count + delta); visibleRows.unshift(...moved); if (-delta <= count + delta) rows.prepend(...moved.map(view => view.row)); else rows.append(...visibleRows.slice(-delta).map(view => view.row)); }
     }
     let formattedDay;
     const displayDate = timestamp => {
@@ -181,6 +181,8 @@
   document.getElementById('zoom').addEventListener('change', event => { laneWidth = [9,12,18].includes(Number(event.target.value)) ? Number(event.target.value) : 12; remember(); draw(); }); viewport.addEventListener('scroll', () => { remember();draw(); });
   viewport.addEventListener('keydown', event => { if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const index = event.key === 'Home' ? 0 : event.key === 'End' ? commits.length - 1 : Math.max(0, Math.min(commits.length - 1, selected + (event.key === 'ArrowDown' ? 1 : -1))); if (busy) return; viewport.scrollTop = Math.max(0, index * ROW - viewport.clientHeight / 2); select(index); } });
   window.addEventListener('resize', draw);
+  const viewportObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(draw) : undefined;
+  viewportObserver?.observe(viewport);
   document.getElementById('filters').addEventListener('submit', event => { event.preventDefault(); if (!busy) send({ type: 'query', ...Object.fromEntries(new FormData(event.currentTarget)) }); });
   document.getElementById('compare').addEventListener('submit', event => { event.preventDefault(); if (!busy) send({ type: 'compare', ...Object.fromEntries(new FormData(event.currentTarget)) }); });
   document.getElementById('compare-swap')?.addEventListener('click', () => { const form = document.getElementById('compare'), from = form?.querySelector?.('[name=from]'), to = form?.querySelector?.('[name=to]'); if (!busy && from && to) [from.value, to.value] = [to.value, from.value]; });
