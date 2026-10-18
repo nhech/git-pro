@@ -96,6 +96,16 @@ test('panel menu commands need the section of the element they are for and a liv
   await assert.rejects(h.run('gitPro.menu.conflicts.merge', argument('conflict')), /Git Pro panel menu/, 'a command of another panel');
 });
 
+test('the History row menu names its move to the panel that was clicked, and a Compare tab cannot use it', async () => {
+  const h = harness(), handled: string[][] = [];
+  h.menus.register('gitPro.history', session, { repositoryId: 'repo-1', handle: (action, context) => { handled.push([action, context!.section]); } });
+  const argument = (webview: string, section = 'commit') => ({ webview, webviewSection: section, preventDefaultContextMenuItems: true, session, oid: oid('a') });
+  for (const name of ['goToHead', 'goToParent', 'goToChild']) await h.run(`gitPro.menu.history.${name}`, argument('gitPro.history'));
+  assert.deepEqual(handled, [['goToHead', 'commit'], ['goToParent', 'commit'], ['goToChild', 'commit']]);
+  await assert.rejects(h.run('gitPro.menu.history.goToParent', argument('gitPro.compare')), /Git Pro panel menu/); await assert.rejects(h.run('gitPro.menu.history.goToParent', argument('gitPro.history', 'file')), /Git Pro panel menu/);
+  await assert.rejects(h.run('gitPro.menu.history.goToParent', undefined), /Git Pro panel menu/);
+});
+
 test('a keyboard shortcut runs a Conflicts or planner command on the active tab\'s own selection, and nothing else', async () => {
   const h = harness(), handled: [string, string][] = [];
   let first = true;

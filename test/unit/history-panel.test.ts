@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import * as path from 'node:path';
+import { MenuRouter } from '../../src/webviews/menu-context';
 
 const oid=(index:number)=>String(index).padStart(40,'0');
 const commit=(index:number)=>({oid:oid(index),parents:[oid(index+1),oid(index+2)],author:'Fixture',email:'test@example.invalid',timestamp:1700000000,subject:`Commit ${index}`});
@@ -17,7 +18,7 @@ for(const total of [2000,2001])test(`History distinguishes exact ${total}-commit
   await h.send({type:'ready'});assert.equal(h.last('page')?.limitReached,total===2001);
   await h.send({type:'query',ref:'HEAD',path:'',text:'',author:'',from:'',to:''});assert.equal((h.last('page')?.commits as unknown[]).length,25);assert.equal(h.last('page')?.limitReached,false);h.host.dispose();
 });
-function harness(history:Record<string,unknown>,executeCommand=async()=>undefined,filePath:string|undefined='new.txt',links?:unknown){
+function harness(history:Record<string,unknown>,executeCommand=async()=>undefined,filePath:string|undefined='new.txt',links?:unknown,menus?:unknown){
   const file=path.resolve(__dirname,'../../src/webviews/graph/history-panel.js'),load=createRequire(file),exports:Record<string,unknown>={};
   const sent:Record<string,unknown>[]=[],disposable={dispose:()=>undefined};
   let receive:(value:unknown)=>Promise<void>=async()=>undefined,onDispose=()=>undefined;
@@ -27,9 +28,9 @@ function harness(history:Record<string,unknown>,executeCommand=async()=>undefine
   runInNewContext(readFileSync(file,'utf8'),{exports,AbortController,require:(name:string)=>name==='vscode'?vscode:load(name)});
   type Host={open(repo:string,file?:string):void;dispose():void;activePanelCount:number};
   const Constructor=exports.HistoryPanel as new(context:unknown,history:unknown,revisions:unknown,menus?:unknown,links?:unknown)=>Host;
-  const host=new Constructor({extensionUri:'owned'},{root:()=>'.',...history},{add:()=> 'owned revision'},undefined,links);host.open('repo',filePath);
+  const host=new Constructor({extensionUri:'owned'},{root:()=>'.',...history},{add:()=> 'owned revision'},menus,links);host.open('repo',filePath);
   const session=/data-session="([^"]+)"/.exec(panel.webview.html)![1]!;
-  return {host,sent,settings,clipboard,opened,send:(value:Record<string,unknown>)=>receive({session,...value}),last:(type:string)=>sent.slice().reverse().find(value=>value.type===type)};
+  return {host,sent,settings,clipboard,opened,session,send:(value:Record<string,unknown>)=>receive({session,...value}),last:(type:string)=>sent.slice().reverse().find(value=>value.type===type)};
 }
 
 test('History renderer readiness preserves pinned file cursor, merge-parent details and explicit refresh semantics',async()=>{
@@ -221,4 +222,16 @@ test('History opens a commit or a reference on the remote only for a commit it s
   h.host.dispose();
   const bare=harness({pin:async()=>({tips:[oid(1)],filters:{}}),checkPinnedQuery:()=>undefined,page:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false}),window:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false})},async()=>undefined,'');
   await bare.send({type:'ready'});await bare.send({type:'openRemote',oid:oid(1)});assert.match(String(bare.last('error')?.message),/not available/);assert.deepEqual(bare.opened,[]);bare.host.dispose();
+});
+
+test('the History row menu asks the renderer to go to HEAD, the parent or a child, and refuses any other action',async()=>{
+  const router=new MenuRouter();
+  const h=harness({pin:async()=>({tips:[oid(1)],filters:{}}),checkPinnedQuery:()=>undefined,page:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false}),window:async()=>({commits:[commit(1)],offset:0,nextOffset:1,hasMore:false})},async()=>undefined,'',undefined,router);
+  try{
+    await h.send({type:'ready'});
+    const menu=(extra:Record<string,unknown>={})=>router.resolve({webview:'gitPro.history',webviewSection:'commit',session:h.session,oid:oid(1),...extra},['gitPro.history'],'commit');
+    for(const [action,where] of [['goToHead','head'],['goToParent','parent'],['goToChild','child']] as const){const {panel,context}=menu();await panel.handle!(action,context);assert.deepEqual(JSON.parse(JSON.stringify(h.last('goto'))),{type:'goto',where,session:h.session});}
+    const {panel,context}=menu();const count=h.sent.length;
+    assert.throws(()=>panel.handle!('goToSideways',context),/Unknown History menu action/);assert.throws(()=>panel.handle!('openRemote',context),/Unknown History menu action/);assert.equal(h.sent.length,count);
+  }finally{h.host.dispose();}
 });

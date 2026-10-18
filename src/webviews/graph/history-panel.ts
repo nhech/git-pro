@@ -22,7 +22,9 @@ export class HistoryPanel implements vscode.Disposable {
     this.panels.add(panel);
     const session = randomUUID(), nonce = randomUUID().replace(/-/g, '');
     // The commit menu's commands act only on a commit this panel really shows: a loaded row, one of the two comparison lists, or the selection.
-    const menu = this.menus?.register('gitPro.history', session, { repositoryId, knowsCommit: oid => selected === oid || comparisonCommits.has(oid) || commits.some(commit => commit.oid === oid) });
+    const menu = this.menus?.register('gitPro.history', session, { repositoryId, knowsCommit: oid => selected === oid || comparisonCommits.has(oid) || commits.some(commit => commit.oid === oid),
+      // Go to HEAD, Parent or Child: the renderer finds the commit among the ones it shows, so the menu only names the move.
+      handle: action => { const where = ({ goToHead: 'head', goToParent: 'parent', goToChild: 'child' } as Record<string, string | undefined>)[action]; if (!where) throw new Error('Unknown History menu action.'); void post({ type: 'goto', where }); } });
     const resource = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', name)).toString();
     let query: PinnedHistory | undefined, offset = 0, hasMore = false, commits: HistoryCommit[] = [], rows: GraphRow[] = [], continuation: readonly (string | null)[] = [];
     let selected: string | undefined, comparison: { from?: string; to: string; files: readonly ChangedFile[] } | undefined;

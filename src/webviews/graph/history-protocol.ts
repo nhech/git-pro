@@ -1,5 +1,6 @@
 import { validateOid } from '../../security/refs';
 import type { HistoryFilters } from '../../git/history/history-builders';
+import { parseHistorySearch } from '../../git/history/history-search';
 export type HistoryAction = { type: 'ready' | 'more' | 'cancel'; session: string } |
   { type: 'query'; session: string; ref: string; filters: HistoryFilters } |
   { type: 'select'; session: string; oid: string; parent: number } |
@@ -21,6 +22,9 @@ export function parseHistoryAction(value: unknown): HistoryAction {
   if (item.type === 'query') {
     const filters: HistoryFilters = {};
     for (const key of ['author', 'text', 'path', 'from', 'to'] as const) { const result = text(key, key === 'path' ? 4096 : 500); if (result) filters[key] = result; }
+    // Prefixes typed in Text (author:alice file:src) are the filters of their own fields and replace what those fields hold: the page answers with the applied filters, so the form shows where they went.
+    const search = filters.text ? parseHistorySearch(filters.text) : undefined;
+    if (search) { delete filters.text; Object.assign(filters, search); }
     return { type: 'query', session, ref: text('ref',65536), filters };
   }
   if (item.type === 'compare') return { type: 'compare', session, from: text('from'), to: text('to') };

@@ -452,6 +452,21 @@
         "category": "%command.category%"
       },
       {
+        "command": "gitPro.menu.history.goToHead",
+        "title": "%command.gitPro.menu.history.goToHead.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.history.goToParent",
+        "title": "%command.gitPro.menu.history.goToParent.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "gitPro.menu.history.goToChild",
+        "title": "%command.gitPro.menu.history.goToChild.title%",
+        "category": "%command.category%"
+      },
+      {
         "command": "gitPro.menu.compare.showFiles",
         "title": "%command.gitPro.menu.compare.showFiles.title%",
         "category": "%command.category%"
@@ -1564,6 +1579,18 @@
           "when": "false"
         },
         {
+          "command": "gitPro.menu.history.goToHead",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.history.goToParent",
+          "when": "false"
+        },
+        {
+          "command": "gitPro.menu.history.goToChild",
+          "when": "false"
+        },
+        {
           "command": "gitPro.menu.compare.showFiles",
           "when": "false"
         },
@@ -1912,6 +1939,21 @@
           "command": "gitPro.menu.commit.copyMessage",
           "when": "(webviewId == 'gitPro.history' || webviewId == 'gitPro.compare') && webviewSection == 'commit'",
           "group": "9_copy@2"
+        },
+        {
+          "command": "gitPro.menu.history.goToHead",
+          "when": "webviewId == 'gitPro.history' && webviewSection == 'commit'",
+          "group": "0_navigate@1"
+        },
+        {
+          "command": "gitPro.menu.history.goToParent",
+          "when": "webviewId == 'gitPro.history' && webviewSection == 'commit'",
+          "group": "0_navigate@2"
+        },
+        {
+          "command": "gitPro.menu.history.goToChild",
+          "when": "webviewId == 'gitPro.history' && webviewSection == 'commit'",
+          "group": "0_navigate@3"
         },
         {
           "command": "gitPro.menu.compare.showFiles",

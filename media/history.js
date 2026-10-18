@@ -183,6 +183,20 @@
     renderedWindow = { start, end, selected, laneWidth, pageRevision };
   };
   const select = index => { if (busy || !commits[index]) return; selected = index; draw(); send({ type: 'select', oid: commits[index].oid, parent: 0 }); };
+  // Go to HEAD, to the first parent or to the nearest child of the selected commit, among the commits loaded. Alt+Home, Alt+Down and Alt+Up do it from the list, and so does the row's menu.
+  let gotoNote = '';
+  const goTo = where => {
+    if (busy) return;
+    const current = commits[selected]; let index = -1, reason = '';
+    if (where === 'head') { const head = refs.find(ref => ref.name === 'HEAD'); index = head ? commits.findIndex(commit => commit.oid === head.oid) : -1; reason = 'HEAD is not among the loaded commits. Refresh with HEAD as the ref, or load more.'; }
+    else if (!current) reason = 'Select a commit first.';
+    else if (where === 'parent') { const parent = current.parents[0]; index = parent ? commits.findIndex(commit => commit.oid === parent) : -1; reason = parent ? 'The parent is not loaded yet. Load more to continue.' : 'This commit has no parent.'; }
+    else if (where === 'child') { for (let i = selected - 1; i >= 0 && index < 0; i--) if (commits[i].parents.includes(current.oid)) index = i; reason = 'No loaded commit has this one as its parent.'; }
+    else return;
+    if (index < 0) { gotoNote = reason; status.textContent = reason; status.className = ''; return; }
+    if (gotoNote && status.textContent === gotoNote) status.textContent = ''; gotoNote = '';
+    viewport.scrollTop = Math.max(0, index * ROW - viewport.clientHeight / 2); select(index);
+  };
   const showSide = (parent, label, side, commits, count, offset = 0) => {
     const shown = (commits || []).slice(0, 25); text(parent, 'h3', `${label}: ${count || 0} unique commit${count === 1 ? '' : 's'}`);
     if (!shown.length) text(parent, 'p', 'No unique commits.');
@@ -195,7 +209,7 @@
     if (offset + 25 > 1000000 && offset + shown.length < count) text(parent, 'p', 'Comparison page limit reached. Choose a narrower revision range.');
   };
   document.getElementById('zoom').addEventListener('change', event => { laneWidth = [9,12,18].includes(Number(event.target.value)) ? Number(event.target.value) : 12; remember(); draw(); }); viewport.addEventListener('scroll', () => { remember();draw(); });
-  viewport.addEventListener('keydown', event => { if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const index = event.key === 'Home' ? 0 : event.key === 'End' ? commits.length - 1 : Math.max(0, Math.min(commits.length - 1, selected + (event.key === 'ArrowDown' ? 1 : -1))); if (busy) return; viewport.scrollTop = Math.max(0, index * ROW - viewport.clientHeight / 2); select(index); } });
+  viewport.addEventListener('keydown', event => { if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && ['ArrowDown', 'ArrowUp', 'Home'].includes(event.key)) { event.preventDefault(); goTo(event.key === 'ArrowDown' ? 'parent' : event.key === 'ArrowUp' ? 'child' : 'head'); return; } if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const index = event.key === 'Home' ? 0 : event.key === 'End' ? commits.length - 1 : Math.max(0, Math.min(commits.length - 1, selected + (event.key === 'ArrowDown' ? 1 : -1))); if (busy) return; viewport.scrollTop = Math.max(0, index * ROW - viewport.clientHeight / 2); select(index); } });
   window.addEventListener('resize', draw);
   const viewportObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(draw) : undefined;
   viewportObserver?.observe(viewport);
@@ -220,6 +234,7 @@
     if (item.type === 'page' || item.type === 'reset') pageRevision++;
     if (item.type === 'reset') { commits = []; graph = []; refs = []; selected = -1; document.getElementById('snapshot').textContent = ''; document.getElementById('filter-summary').textContent = 'No active snapshot'; fileScope = ''; fileOffset = 0; comparisonScope = ''; comparisonExpanded = false; restoreScroll=0;workspace.className = 'split'; viewport.scrollTop = 0; remember();showGuidance(); const pagination = document.getElementById('pagination'); pagination.replaceChildren(); pagination.hidden = true; const more = document.getElementById('more'); more.dataset.available = 'false'; more.disabled = true; draw(); }
     if (item.type === 'page') { commits = item.commits; graph = item.rows; refs = item.refs || []; document.getElementById('more').dataset.available = String(item.hasMore); const pagination = document.getElementById('pagination'); pagination.replaceChildren(); pagination.hidden = false; pagination.className = item.limitReached ? 'load-limit' : ''; icon(pagination, 'info'); text(pagination, 'span', item.limitReached ? `${commits.length.toLocaleString()} commits loaded · Load limit reached. Narrow the filters to find older commits. Refresh starts a new snapshot.` : item.hasMore ? `${commits.length.toLocaleString()} commits loaded · Load more to continue.` : `${commits.length.toLocaleString()} commits loaded · End of matching history.`); const summary = document.getElementById('filter-summary'), count = ['text','author','path','from','to'].filter(name => item.filters?.[name]).length; summary.textContent = `${refsLabel(item.ref)} · ${count ? `${count} active filter${count === 1 ? '' : 's'}` : 'All commits'}`; summary.title = summary.textContent; const snapshot = document.getElementById('snapshot'); snapshot.textContent = `${commits.length} commits · Snapshot ${item.tips.map(tip => tip.slice(0, 8)).join(', ') || 'Unborn branch'} · Refresh to include new commits${item.fileHistory ? ` · Follows all merge parents · ${item.scanned} commit/path states scanned in this page` : ''}`; for(const name of ['ref','text','author','path','from','to']){const control=document.getElementById('filters').querySelector?.(`[name=${name}]`);if(control)control.value=name==='ref'?item.ref||'HEAD':item.filters[name]||'';}status.textContent = commits.length ? '' : item.hasMore ? 'No matching commits in this scan. Load more to continue.' : 'No commits match the current ref and filters.'; status.className = ''; draw();if(restoreScroll){viewport.scrollTop=Math.min(restoreScroll,Math.max(0,commits.length*ROW-viewport.clientHeight));restoreScroll=0;draw();} }
+    if (item.type === 'goto') goTo(item.where);
     if (item.type === 'selection') { selected = commits.findIndex(commit => commit.oid === item.oid); draw(); }
     if (item.type === 'details') {
       comparisonScope = ''; comparisonExpanded = false; workspace.className = 'split'; details.replaceChildren(); const value = item.details;

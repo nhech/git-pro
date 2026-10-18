@@ -39,6 +39,7 @@ export function registerMenus(_context: vscode.ExtensionContext, deps: FeatureDe
   onCommit('copyHash', async (_id, oid) => { await vscode.env.clipboard.writeText(oid); });
   onCommit('copyMessage', async (id, oid) => { await vscode.env.clipboard.writeText(await deps.history.message(id, oid)); });
   for (const name of ['showFiles', 'showInHistory']) onPanel('compare', 'commit', name);
+  for (const name of ['goToHead', 'goToParent', 'goToChild']) onPanel('history', 'commit', name);
   for (const name of ['diff', 'localDiff', 'openFile', 'getFromBranch', 'copyPath', 'markViewed', 'unmarkViewed']) onPanel('compare', 'file', name);
   // The Changes view's own menu: a group row stages or unstages all of its files, and the view title switches between a list and a tree.
   command('gitPro.stageGroup', async node => { await vscode.commands.executeCommand('gitPro.stage', node); });

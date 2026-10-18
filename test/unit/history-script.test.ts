@@ -404,3 +404,43 @@ test('History details turn #123 into a button and offer Open on Remote only when
   // A button does nothing while the panel is loading.
   receive!({data:{type:'busy',session:'s',busy:true}});const count=sent.length;gitlab.heading.children[1]!.listeners.get('click')!({});gitlab.actions.children[2]!.listeners.get('click')!({});assert.equal(sent.length,count);
 });
+
+test('History goes to HEAD, the first parent or the nearest child of the selected commit among the loaded ones, by Alt keys or by the host',()=>{
+  const elements=new Map(['viewport','rows','spacer','details','status','filters','compare','more','pagination','filter-disclosure','filter-summary','snapshot','zoom','workspace','cancel-read'].map(id=>[id,new Element()]));
+  const sent:Record<string,unknown>[]=[];let receive:((event:{data:unknown})=>void)|undefined;
+  runInNewContext(readFileSync('media/history.js','utf8'),{document:{body:{dataset:{session:'s'}},getElementById:(id:string)=>elements.get(id),createElement:()=>new Element(),createElementNS:()=>new Element(),querySelectorAll:()=>[]},window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>sent.push(value)})});
+  const id=(index:number)=>(index+1).toString(16).padStart(40,'0');
+  // Newest first, as History lists them: 0 merges 1 and 2, which both continue from 3; 3 -> 4 -> 9 (not loaded); 5 is a root. HEAD is commit 1.
+  const parents:Record<number,number[]>={0:[1,2],1:[3],2:[3],3:[4],4:[9],5:[]};
+  const commits=Object.keys(parents).map(Number).map(index=>({oid:id(index),parents:parents[index]!.map(id),subject:`Commit ${index}`,author:'Fixture',email:'',timestamp:1700000000}));
+  const graph=layoutGraph(commits),page=(refs:{name:string;oid:string}[])=>receive!({data:{type:'page',session:'s',commits,rows:graph.rows,tips:[commits[0]!.oid],refs,filters:{},hasMore:true}});
+  page([{name:'HEAD',oid:id(1)},{name:'main',oid:id(0)}]);
+  const viewport=elements.get('viewport')!,status=elements.get('status')!;
+  const press=(key:string,extra:Record<string,unknown>={})=>{let prevented=false;viewport.listeners.get('keydown')!({key,altKey:true,ctrlKey:false,metaKey:false,shiftKey:false,...extra,preventDefault:()=>{prevented=true;}});return prevented;};
+  const last=()=>sent.filter(item=>item.type==='select').at(-1)?.oid;
+  const select=(index:number)=>{receive!({data:{type:'selection',session:'s',oid:id(index)}});};
+
+  assert.equal(press('Home'),true,'the keys are taken');assert.equal(last(),id(1),'HEAD is the commit the HEAD ref names, not the first row');
+  select(1);press('ArrowDown');assert.equal(last(),id(3),'the parent');
+  select(0);press('ArrowDown');assert.equal(last(),id(1),'the first parent of a merge');
+  select(3);press('ArrowUp');assert.equal(last(),id(2),'the nearest child above: 2 is closer than 1, and both have 3 as a parent');
+  select(1);press('ArrowUp');assert.equal(last(),id(0),'a child that is a merge');
+  assert.equal(status.textContent,'');
+
+  // What cannot be reached is said, and nothing is selected.
+  const before=sent.length;
+  select(4);press('ArrowDown');assert.match(status.textContent,/parent is not loaded yet/);
+  select(5);press('ArrowDown');assert.equal(status.textContent,'This commit has no parent.');
+  select(0);press('ArrowUp');assert.match(status.textContent,/No loaded commit has this one as its parent/);
+  assert.equal(sent.length,before,'a move that finds nothing sends nothing');
+  select(3);press('ArrowUp');assert.equal(status.textContent,'','a move that works clears its own note');
+  page([{name:'main',oid:id(0)}]);
+  press('Home');assert.match(status.textContent,/HEAD is not among the loaded commits/);
+
+  // Only the plain Alt chord is a move; with another key held the list keeps its own keys.
+  press('Home',{shiftKey:true});assert.equal(last(),id(0),'Alt+Shift+Home is the list\'s own Home: the first row');
+  // The host's menu asks for the same moves.
+  select(1);receive!({data:{type:'goto',session:'s',where:'parent'}});assert.equal(last(),id(3));receive!({data:{type:'goto',session:'s',where:'child'}});assert.equal(last(),id(2));
+  const moved=sent.length;receive!({data:{type:'goto',session:'s',where:'sideways'}});receive!({data:{type:'goto',session:'expired',where:'parent'}});assert.equal(sent.length,moved,'an unknown move or another session does nothing');
+  receive!({data:{type:'busy',session:'s',busy:true}});press('ArrowDown');receive!({data:{type:'goto',session:'s',where:'parent'}});assert.equal(sent.length,moved,'nothing moves while loading');
+});
