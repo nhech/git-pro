@@ -222,3 +222,24 @@ test('the Git Pro sidebar lists the views a day of work uses first, and Reposito
   const manifest=JSON.parse(readFileSync('package.json','utf8'));
   assert.deepEqual((manifest.contributes.views.gitPro as {id:string}[]).map(view=>view.id),['gitPro.commitView','gitPro.changes','gitPro.branchesView','gitPro.toolsView','gitPro.repositories']);
 });
+
+test('the Vietnamese strings translate every string of the manifest, and cannot add a command, a code span or a placeholder of their own',()=>{
+  const english=JSON.parse(readFileSync('package.nls.json','utf8')) as Record<string,string>,vietnamese=JSON.parse(readFileSync('package.nls.vi.json','utf8')) as Record<string,string>;
+  assert.deepEqual(Object.keys(vietnamese).sort(),Object.keys(english).sort(),'the same keys: a new string is translated when it is added, and nothing is left over');
+  const commands=(text:string)=>[...text.matchAll(/\(command:([\w.]+)[^)]*\)/g)].map(match=>match[1]!).sort(),spans=(text:string)=>[...text.matchAll(/`[^`]*`/g)].map(match=>match[0]).sort();
+  const technical=(text:string)=>[...text.matchAll(/--vscode-[\w-]+|#123|\{ "[^}]*" \}|\b(?:release\/\*|github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)\b/g)].map(match=>match[0]).sort();
+  for(const [key,value] of Object.entries(english)){
+    const translated=vietnamese[key]!;
+    assert.equal(typeof translated,'string',key);assert.ok(translated.trim().length>0&&translated.length<=1000,`${key} has a translation of reasonable length`);
+    assert.deepEqual(commands(translated),commands(value),`${key} links to the same commands`);
+    assert.deepEqual(spans(translated),spans(value),`${key} keeps its code spans as they are`);
+    assert.deepEqual(technical(translated),technical(value),`${key} keeps its values, examples and variable names as they are`);
+    assert.equal(translated.split('\n').length,value.split('\n').length,`${key} keeps its lines`);
+    assert.equal(/^\s|\s$/.test(translated)&&!/^\s|\s$/.test(value),false,`${key} has no stray blanks`);
+  }
+  assert.equal(vietnamese['command.category'],'Git Pro','the brand is not translated');
+  assert.equal(vietnamese['container.gitPro.title'],'Git Pro');
+  // A translated title that is still the English one is allowed only where it is a Git term (Fetch, Pull, Push, Merge…, Pick and so on).
+  const same=Object.keys(english).filter(key=>vietnamese[key]===english[key]).sort();
+  assert.ok(same.length<=24,`${same.length} strings were left in English: ${same.join(', ')}`);
+});

@@ -15,7 +15,7 @@ What Git Pro costs, as measured, and where it is bounded by design. Everything h
 | Reading and parsing the status of 5,000 changed files | 93 ms |
 | 500 repository change events fired at once | 1 status read |
 | Memory of the whole Node process that held the repositories and ran the test | 97 MB |
-| Size of the package | 338 KB, 39 files, 1.2 MB unpacked; no runtime dependencies |
+| Size of the package | 343 KB, 40 files, 1.2 MB unpacked; no runtime dependencies |
 
 Run on 2026-10-18, version 0.3.1, Windows 11, an 11th Gen Intel Core i5-11400F at 2.6 GHz, Git 2.36.0 for Windows (the oldest Git that Git Pro supports is 2.32, and newer Git is not slower at these reads), Node 24. Your repository, disk, antivirus and Git will give other numbers; the figures above are one machine's, not a promise.
 
