@@ -85,7 +85,7 @@
         <header class="section-head">
           <p class="eyebrow">Comparison</p>
           <h1 id="compare-title" class="compare-title">How Git Pro compares</h1>
-          <p class="section-lead">Last checked <strong>15 October 2026</strong> against Git Pro {{VERSION}}, Visual Studio Code 1.142 (built-in Source Control), GitLens 19.3.0 and Git Graph 1.30.0. This page is written by the author of Git Pro. Every cell below comes from the sources linked underneath, and "not listed" means the linked documentation does not describe it, not that it cannot exist.</p>
+          <p class="section-lead">Last checked <strong>15 October 2026</strong> against Git Pro {{VERSION}}, Visual Studio Code 1.142 (built-in Source Control), GitLens 19.3.0 and Git Graph 1.30.0, and on <strong>18 October 2026</strong> against GitStudio 1.21.1 and Git Tree Compare 1.21.0 (the second table). This page is written by the author of Git Pro. Every cell below comes from the sources linked underneath, and "not listed" means the linked documentation does not describe it, not that it cannot exist.</p>
         </header>
 
         <div class="table-wrap" role="region" aria-labelledby="compare-title" tabindex="0">
@@ -124,14 +124,14 @@
               </tr>
               <tr>
                 <th scope="row">Compare branches</th>
-                <td>Compare with Another Branch… (branch to branch), a branch or tag with the working tree, commits on each side, files since the fork or tip to tip, and Open All Changes.</td>
+                <td>Compare with Another Branch… (branch to branch), a branch or tag with the working tree or one folder of it, commits on each side with copies of the same change marked, changed files as a nested tree where you can mark each file as viewed, files since the fork or tip to tip, and Open All Changes.</td>
                 <td>Compare with… and Compare with Merge Base from the graph, in version 1.142.</td>
                 <td>Side bar views for comparing references; see its documentation.</td>
                 <td>Compare any two commits, or uncommitted changes with a commit.</td>
               </tr>
               <tr>
                 <th scope="row">Commit graph</th>
-                <td>History with filters, details and a parent choice for merges; up to 2,000 loaded commits.</td>
+                <td>History with filters, details, a parent choice for merges and a right-click menu on each commit; up to 2,000 loaded commits.</td>
                 <td>The Source Control Graph.</td>
                 <td>The Commit Graph: free for public repositories with a free GitKraken account; private repositories need a paid plan.</td>
                 <td>Its main feature.</td>
@@ -163,6 +163,41 @@
 
         <p class="note">Versions and plans change. If a cell is out of date or wrong, <a href="https://github.com/nhech/git-pro/issues/new/choose">open an issue</a> and it will be corrected.</p>
 
+        <section class="compare-newer" aria-labelledby="newer-title">
+          <h2 id="newer-title">Newer extensions in the same space</h2>
+          <p class="section-lead">Two extensions that people reach for beside, or instead of, the ones above. Checked on <strong>18 October 2026</strong> against the sources linked under the tables, with the same rule: "not listed" means the documentation does not describe it.</p>
+          <div class="table-wrap" role="region" aria-labelledby="newer-title" tabindex="0">
+            <table class="compare-table">
+              <caption class="sr-only">GitStudio 1.21.1 and Git Tree Compare 1.21.0, last checked 18 October 2026</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Extension</th>
+                  <th scope="col">What it is for</th>
+                  <th scope="col">Pull requests and AI</th>
+                  <th scope="col">Account and usage data</th>
+                  <th scope="col">License, price and requirements</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">GitStudio 1.21.1</th>
+                  <td>A Git GUI and commit graph with inline blame, file and line history, hunk and line staging, a three-pane merge editor, interactive rebase with Undo, stashes and worktrees.</td>
+                  <td>GitHub pull requests in the editor, with a GitHub sign-in. Optional AI (commit messages, explain, review) through the VS&nbsp;Code Language Model API, a provider key or a local model.</td>
+                  <td>No account and no usage analytics. Anonymous crash reports are on by default and have a setting to turn them off; commit authors' pictures are looked up on Gravatar or GitHub, and Gravatar has a setting too.</td>
+                  <td>Apache-2.0, free. Requires VS&nbsp;Code 1.78 or newer; it also lists Cursor and VSCodium.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Git Tree Compare 1.21.0</th>
+                  <td>Your working tree against a branch, tag or commit as a tree or a list, which suits a pull request preview. It also switches to linked worktrees and can limit the comparison to a range of commits.</td>
+                  <td>Compare GitHub Pull Request… fetches the pull request's head and checks out its branch, with VS&nbsp;Code's GitHub sign-in. AI: not listed in its README.</td>
+                  <td>Not described in its README.</td>
+                  <td>MIT, free. Requires VS&nbsp;Code 1.108 or newer.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <div class="compare-columns">
           <section aria-labelledby="choose-title">
             <h2 id="choose-title">Which one to choose</h2>
@@ -171,6 +206,8 @@
               <li><strong>GitLens</strong> if you want rich blame, hovers and CodeLens, pull request integrations or AI-assisted workflows, and a GitKraken account and paid plans for some features suit you.</li>
               <li><strong>Git Graph</strong> if you mainly want a configurable commit graph with right-click actions and do not need staging or conflict tools.</li>
               <li><strong>Git Pro</strong> if you want conflicts, branch comparison, interactive rebase and reviewed destructive actions in one sidebar, with no account and no telemetry, and you can live with the limits on the right.</li>
+              <li><strong>GitStudio</strong> if you want one free extension with inline blame, line staging, GitHub pull requests and optional AI, and its crash reports and picture lookups, or the settings that turn them off, suit you.</li>
+              <li><strong>Git Tree Compare</strong> if what you mostly want is your working tree, or a GitHub pull request, against a branch in a tree.</li>
               <li>They are not exclusive: Git Pro builds on VS&nbsp;Code's built-in Git, and any of them can sit beside the GitHub Pull Requests extension.</li>
             </ul>
           </section>
@@ -178,7 +215,6 @@
             <h2 id="limits-title">Where Git Pro is behind</h2>
             <ul class="ticks" role="list">
               <li>No pull request or issue integration.</li>
-              <li>No actions on a commit row in History yet; checkout, branch, cherry-pick and reset are Advanced Actions that ask for the commit.</li>
               <li>Line-level staging stays in native Source Control; Git Pro commits that index.</li>
               <li>No blame heatmap or line history. Active-line blame and the File History CodeLens are optional and off by default.</li>
               <li>Not available in untrusted or virtual workspaces. Remote WSL and Dev Containers have not completed release validation.</li>
@@ -193,9 +229,11 @@
             <li><strong>VS Code:</strong> <a href="https://code.visualstudio.com/docs/sourcecontrol/merge-conflicts">merge conflicts</a>, <a href="https://code.visualstudio.com/docs/sourcecontrol/history">history</a> and the <a href="https://github.com/microsoft/vscode/blob/1.142.0/extensions/git/package.json">Git extension manifest at 1.142.0</a>.</li>
             <li><strong>GitLens:</strong> its <a href="https://github.com/gitkraken/vscode-gitlens/blob/main/README.md">README</a>, <a href="https://help.gitkraken.com/gitlens/gitlens-community-vs-gitlens-pro/">Community and Pro</a> help page and <a href="https://github.com/gitkraken/vscode-gitlens/blob/main/LICENSE">license</a>.</li>
             <li><strong>Git Graph:</strong> its <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/README.md">README</a>, <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/LICENSE">license</a> and <a href="https://github.com/mhutchie/vscode-git-graph/blob/v1.30.0/src/life-cycle/startup.ts">start-up code</a>.</li>
+            <li><strong>GitStudio</strong> (checked 18 October 2026): its <a href="https://marketplace.visualstudio.com/items?itemName=gitstudio.gitstudio">Marketplace page</a> (README with its Privacy, pull request and AI sections), the <a href="https://github.com/GitStudioHQ/gitstudio">repository</a> and its <a href="https://github.com/GitStudioHQ/gitstudio/blob/main/LICENSE">license</a>.</li>
+            <li><strong>Git Tree Compare</strong> (checked 18 October 2026): its <a href="https://github.com/letmaik/vscode-git-tree-compare/blob/master/README.md">README</a>, <a href="https://github.com/letmaik/vscode-git-tree-compare/blob/master/LICENSE">license</a> and <a href="https://github.com/letmaik/vscode-git-tree-compare/blob/master/package.json">package.json</a>.</li>
             <li><strong>Git Pro:</strong> its <a href="https://github.com/nhech/git-pro/blob/main/README.md">README</a>, <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/WORKFLOWS.md">workflows</a> and <a href="https://github.com/nhech/git-pro/blob/main/docs/user-guide/RELEASE_STATUS.md">compatibility</a> pages.</li>
           </ul>
-          <p class="note">This comparison was written by the author of Git Pro and reflects the versions and public documentation linked above as of 15 October 2026. Product names belong to their owners; Git Pro is not affiliated with or endorsed by Microsoft, GitKraken or the authors of Git Graph. Git and the Git logo are either registered trademarks or trademarks of Software Freedom Conservancy, Inc.</p>
+          <p class="note">This comparison was written by the author of Git Pro and reflects the versions and public documentation linked above as of 15 October 2026. Product names belong to their owners; Git Pro is not affiliated with or endorsed by Microsoft, GitKraken, GitStudio or the authors of Git Graph and Git Tree Compare. Git and the Git logo are either registered trademarks or trademarks of Software Freedom Conservancy, Inc.</p>
         </section>
       </div>
     </section>
