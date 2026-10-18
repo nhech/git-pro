@@ -7,6 +7,7 @@
 - **Conventional Commits in the commit box.** The menu beside Commit has a type (feat, fix, docs and the rest of the list in `gitPro.commit.conventionalTypes`), a scope and Breaking change. Choosing writes `type(scope)!: ` at the start of the first line and nothing else; the choices read the prefix back as you type, and a first line such as `note: this` that does not start with a listed type is left alone.
 - **Search prefixes in History.** The Text box takes `author:`, `file:` (or `path:`), `since:`, `until:` and `message:` next to plain words: `fix crash author:alice file:src since:2026-01-01`. A prefix fills the filter of the same name and the form shows where it went; quote a value with spaces (`author:"Alice Smith"`).
 - **Go to HEAD, Parent and Child in History.** Alt+Home, Alt+Down and Alt+Up in the list, or the same names in a commit's right-click menu, select HEAD, the first parent and the nearest child among the loaded commits, and say so when the commit is not loaded yet.
+- **Compare Pull Request…** reviews a pull request (a merge request on GitLab) without an account, a token or any request to the host's API. Type its number or link and pick the branch it is merged into; Git Pro fetches the ref the host publishes for it (`refs/pull/123/head` and its GitLab and Bitbucket Server equivalents) with the built-in Git's own credentials into `refs/gitpro/pr/<remote>/<number>`, and opens it in the Compare tab as `PR #123`. No branch, tag or working file is touched. Bitbucket Cloud publishes no such refs.
 
 ## 0.3.1 — 2026-10-17
 

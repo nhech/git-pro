@@ -13,6 +13,7 @@ import { historyPath } from '../../git/history/history-builders';
 import { LinkOutsideError, refuseGitMetadata } from '../../security/paths';
 import type { MenuContext } from '../menu-context';
 import { ViewedStore, viewedId } from './viewed-store';
+import { pullRequestLabel } from '../../git/pull-request';
 
 /** What the Compare tab reads from the feature dependencies; a narrow type keeps the panel testable with stand-ins. */
 export type CompareDeps = Pick<FeatureDeps, 'registry' | 'history' | 'policy' | 'revisions' | 'historyPanels' | 'git' | 'tools' | 'surfaces'>;
@@ -425,7 +426,7 @@ export class ComparePanels implements CompareSurface, vscode.Disposable {
   }
   /** Display name and current-branch marker for a pinned ref; the brand accent marks only the checked-out branch. */
   side(repositoryId: string, ref: string, oid: string): Side {
-    const head = this.head(repositoryId), label = ref === 'HEAD' ? head ?? 'HEAD' : isOid(ref) ? ref.slice(0, 8) : ref.replace(/^refs\/(?:heads|remotes|tags)\//, '');
+    const head = this.head(repositoryId), label = ref === 'HEAD' ? head ?? 'HEAD' : isOid(ref) ? ref.slice(0, 8) : pullRequestLabel(ref) ?? ref.replace(/^refs\/(?:heads|remotes|tags)\//, '');
     return Object.freeze({ ref, label, oid, current: Boolean(head) && (ref === 'HEAD' || ref === head || ref === `refs/heads/${head}`) });
   }
   head(repositoryId: string): string | undefined { const head = this.deps.registry.store.get(repositoryId)?.head; return head && head !== '(detached)' ? head : undefined; }

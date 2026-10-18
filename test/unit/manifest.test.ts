@@ -133,12 +133,13 @@ test('the Branches view context menu offers Compare with Another Branch… for l
   assert.ok(!shows('gitPro.compareWithBranch','gitProXbranchXlocal'),'the dots of the context pattern are escaped, not wildcards');
 });
 
-test('the Branches view title offers Search, Fetch and Refresh for open repositories',()=>{
+test('the Branches view title offers Search, Fetch and Refresh as buttons and Compare Pull Request in its overflow menu, for open repositories',()=>{
   const manifest=JSON.parse(readFileSync('package.json','utf8')) as {contributes:{menus:Record<string,{command:string;when?:string;group?:string}[]>}};
   const title=manifest.contributes.menus['view/title']!.filter(entry=>entry.when?.includes('view == gitPro.branchesView')===true);
-  assert.deepEqual(title.map(entry=>entry.command).sort(),['gitPro.branches','gitPro.fetch','gitPro.refresh']);
-  assert.ok(title.every(entry=>/^navigation(@\d+)?$/.test(entry.group??'')),'all three are icon buttons');
-  for(const command of ['gitPro.fetch','gitPro.refresh'])assert.ok(title.find(entry=>entry.command===command)?.when?.includes('gitPro.hasRepositories'),`${command} needs an open repository`);
+  assert.deepEqual(title.map(entry=>entry.command).sort(),['gitPro.branches','gitPro.comparePullRequest','gitPro.fetch','gitPro.refresh']);
+  assert.deepEqual(title.filter(entry=>/^navigation(@\d+)?$/.test(entry.group??'')).map(entry=>entry.command).sort(),['gitPro.branches','gitPro.fetch','gitPro.refresh'],'three icon buttons');
+  assert.equal(title.find(entry=>entry.command==='gitPro.comparePullRequest')?.group,'1_compare@1','the rest is in the overflow menu');
+  for(const command of ['gitPro.fetch','gitPro.refresh','gitPro.comparePullRequest'])assert.ok(title.find(entry=>entry.command===command)?.when?.includes('gitPro.hasRepositories'),`${command} needs an open repository`);
 });
 
 test('the welcome text and the workspace capability notes are localizable, not literal',()=>{

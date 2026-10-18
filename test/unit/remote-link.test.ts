@@ -92,3 +92,11 @@ test('the hosts of the setting are used, and what a repository answers is kept f
   assert.equal(await new RemoteLinks(source({}).result).pages('r'), undefined);
   assert.match(github.help, /gitPro\.remoteHosts/);
 });
+
+test('the target of the links names the remote with its web address, for the fetch of a pull request', async () => {
+  const two = [{ name: 'origin', fetch: ['https://github.com/me/fork.git'] }, { name: 'upstream', fetch: ['https://github.com/org/project.git'] }];
+  assert.deepEqual(JSON.parse(JSON.stringify(await new RemoteLinks(source({ remotes: two, upstream: 'upstream/main' }).result).target('r'))), { remote: 'upstream', web: { kind: 'github', base: 'https://github.com/org/project' } });
+  assert.equal((await new RemoteLinks(source({ remotes: two }).result).target('r'))!.remote, 'origin');
+  assert.equal(await new RemoteLinks(source({ remotes: [] }).result).target('r'), undefined);
+  assert.equal(await new RemoteLinks(source({ remotes: [{ name: 'origin', fetch: ['https://example.com/o/r'] }] }).result).target('r'), undefined, 'an unknown host has no target');
+});

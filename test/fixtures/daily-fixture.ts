@@ -19,7 +19,7 @@ export async function dailyFixture() {
   const backend: DailyBackend = {
     stage: async (root, files) => { f.git(['--literal-pathspecs', 'add', '--', ...files], root); },
     commit: async (root, message, opts) => { f.git(['commit', '-m', message, ...(opts.amend ? ['--amend'] : []), ...(opts.signoff ? ['--signoff'] : []), ...(opts.noVerify ? ['--no-verify'] : [])], root); },
-    fetch: async (root, remote) => { f.git(['fetch', remote ?? 'origin'], root); },
+    fetch: async (root, remote, refspec) => { f.git(['fetch', remote ?? 'origin', ...(refspec ? [refspec] : [])], root); },
     push: async (root, remote, branch, upstream) => { f.git(['push', ...(upstream ? ['--set-upstream'] : []), remote, branch], root); },
     createBranch: async (root, name, checkout, base) => { f.git(checkout ? ['checkout', '-b', name, ...(base ? [base] : [])] : ['branch', name, ...(base ? [base] : [])], root); },
     checkout: async (root, name) => { f.git(['checkout', name], root); },

@@ -375,6 +375,12 @@
         "category": "%command.category%"
       },
       {
+        "command": "gitPro.comparePullRequest",
+        "title": "%command.gitPro.comparePullRequest.title%",
+        "category": "%command.category%",
+        "icon": "$(git-pull-request)"
+      },
+      {
         "command": "gitPro.compareWithRef",
         "title": "%command.gitPro.compareWithRef.title%",
         "category": "%command.category%",
@@ -933,6 +939,11 @@
           "command": "gitPro.refresh",
           "when": "view == gitPro.branchesView && gitPro.hasRepositories",
           "group": "navigation@3"
+        },
+        {
+          "command": "gitPro.comparePullRequest",
+          "when": "view == gitPro.branchesView && gitPro.hasRepositories",
+          "group": "1_compare@1"
         },
         {
           "command": "gitPro.history",

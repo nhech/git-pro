@@ -6,6 +6,7 @@ import { DailyError } from '../../src/git/git.service';
 import { DiffService } from '../../src/git/diff/diff.service';
 import { changedPathsInFolder } from '../../src/views/changes/folder-selection';
 import { dailyFixture, options } from '../fixtures/daily-fixture';
+import { parseRemoteUrl } from '../../src/git/remote-link';
 
 test('warm branch displays follow create, checkout, rename and delete across linked worktrees', async () => {
   const f = await dailyFixture();
@@ -240,5 +241,41 @@ test('local bare remote: publish, fetch, FF pull, divergence, merge and push fai
     const authenticatedFailure=await f.git.commit(await f.git.preview(f.id),'committed once before auth failure',options,true);
     assert.equal(authenticatedFailure.pushed,false);assert.equal(pushes,1);assert.match(authenticatedFailure.pushError!,/credential helper/);assert.equal(authenticatedFailure.pushError!.includes('PRIVATE_SENTINEL'),false);
     assert.equal((authenticatedFailure.pushError!.match(/Check repository access/g)||[]).length,1);assert.equal(Number(f.rawGit(['rev-list','--count','HEAD'])),count+1);assert.equal(f.rawGit(['rev-parse','HEAD']).trim(),authenticatedFailure.oid);assert.equal(f.rawGit(['for-each-ref','--format=%(refname) %(objectname)'],bare),remoteRefs);
+  } finally { await f.close(); }
+});
+
+test('a pull request is fetched from the ref the host publishes into a private ref, and nothing else in the repository changes', async () => {
+  const f = await dailyFixture();
+  try {
+    const bare = path.join(f.parent, 'remote.git'); await mkdir(bare); f.rawGit(['init', '--bare', '--initial-branch=main'], bare);
+    f.rawGit(['remote', 'add', 'origin', bare]); await writeFile(path.join(f.root, 'base'), 'base'); await f.git.stage(f.id, ['base']); await f.git.commit(await f.git.preview(f.id), 'base', options);
+    await f.git.push(f.id, { remote: 'origin', branch: 'main' });
+    // What a host does: a pull request is a ref of the repository, made from a branch that is not among its branches.
+    const other = path.join(f.parent, 'other'); f.rawGit(['clone', bare, other], f.parent); f.rawGit(['config', 'commit.gpgsign', 'false'], other);
+    f.rawGit(['checkout', '-b', 'feature'], other); await writeFile(path.join(other, 'feature'), 'one'); f.rawGit(['add', '.'], other); f.rawGit(['commit', '-m', 'feature one'], other);
+    const first = f.rawGit(['rev-parse', 'HEAD'], other).trim(); f.rawGit(['push', 'origin', 'HEAD:refs/pull/7/head'], other);
+    const github = parseRemoteUrl('https://github.com/o/r.git')!, gitlab = parseRemoteUrl('https://gitlab.com/g/r.git')!;
+    const before = { status: f.rawGit(['status', '--porcelain']), head: f.rawGit(['rev-parse', 'HEAD']), branches: f.rawGit(['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes', 'refs/tags']) };
+
+    assert.equal(await f.git.fetchPullRequest(f.id, 'origin', github, 7), 'refs/gitpro/pr/origin/7');
+    assert.equal(f.rawGit(['rev-parse', 'refs/gitpro/pr/origin/7']).trim(), first, 'the ref is the pull request\'s head');
+    assert.equal(f.rawGit(['rev-parse', 'refs/gitpro/pr/origin/7^{commit}']).trim(), first); assert.equal(await readFile(path.join(f.root, 'base'), 'utf8'), 'base');
+    assert.deepEqual({ status: f.rawGit(['status', '--porcelain']), head: f.rawGit(['rev-parse', 'HEAD']), branches: f.rawGit(['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes', 'refs/tags']) }, before, 'no branch, tag, remote branch, file or status changed');
+    assert.equal((await f.git.branchSearchSnapshot(f.id)).some(branch => branch.ref.startsWith('refs/gitpro')), false, 'the Branches view never lists it');
+    assert.equal(f.rawGit(['for-each-ref', '--format=%(refname)', 'refs/gitpro']).trim(), 'refs/gitpro/pr/origin/7');
+
+    // A pull request pushed over is replaced by the next fetch; the same ref, not a second one.
+    await writeFile(path.join(other, 'feature'), 'two'); f.rawGit(['commit', '-am', 'rewritten', '--amend'], other);
+    const second = f.rawGit(['rev-parse', 'HEAD'], other).trim(); assert.notEqual(second, first); f.rawGit(['push', '--force', 'origin', 'HEAD:refs/pull/7/head'], other);
+    await f.git.fetchPullRequest(f.id, 'origin', github, 7); assert.equal(f.rawGit(['rev-parse', 'refs/gitpro/pr/origin/7']).trim(), second);
+    assert.equal(f.rawGit(['for-each-ref', '--format=%(refname)', 'refs/gitpro']).trim(), 'refs/gitpro/pr/origin/7');
+
+    // A number that does not exist, a host that publishes no refs, and a remote that is not one are refused before or by Git, and leave no ref behind.
+    await assert.rejects(f.git.fetchPullRequest(f.id, 'origin', github, 999), /couldn't find remote ref/i);
+    await assert.rejects(f.git.fetchPullRequest(f.id, 'origin', gitlab, 7), /couldn't find remote ref/i, 'GitLab\'s ref is another one');
+    await assert.rejects(f.git.fetchPullRequest(f.id, 'origin', parseRemoteUrl('git@bitbucket.org:t/r.git')!, 7), /does not publish pull requests as Git refs/);
+    await assert.rejects(f.git.fetchPullRequest(f.id, 'nowhere', github, 7), /Choose a remote/);
+    await assert.rejects(f.git.fetchPullRequest(f.id, '--upload-pack=x', github, 7), /Invalid Git branch name|Choose a remote/);
+    assert.equal(f.rawGit(['for-each-ref', '--format=%(refname)', 'refs/gitpro']).trim(), 'refs/gitpro/pr/origin/7');
   } finally { await f.close(); }
 });

@@ -8,6 +8,7 @@ import { runInNewContext } from 'node:vm';
 import type { BranchInfo } from '../../src/git/git.service';
 import type { ChangedFile } from '../../src/git/history/history-parser';
 import { loadWithVscode } from './compare-loader';
+import { parseRemoteUrl } from '../../src/git/remote-link';
 
 type Exports = Record<string, unknown>;
 /** Runs a compiled command module against a stand-in `vscode`; every other import is the real compiled module unless stubbed. */
@@ -30,12 +31,12 @@ function compareHarness(head = 'main') {
   const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'git-pro-compare-commands-')));
   writeFileSync(path.join(root, 'app.ts'), 'working\n'); mkdirSync(path.join(root, 'src'));
   const repo = { id: 'owned', root }, store = { head, changes: [] as { group: string; path: string }[] };
-  const picks: { items: Pick[]; title: string }[] = [], warnings: { text: string; detail: string; choices: string[] }[] = [], infos: string[] = [], executed: unknown[][] = [], previews: unknown[] = [], executions: unknown[] = [];
+  const inputs: { validateInput?: (value: string) => string | undefined }[] = [], picks: { items: Pick[]; title: string }[] = [], warnings: { text: string; detail: string; choices: string[] }[] = [], infos: string[] = [], executed: unknown[][] = [], previews: unknown[] = [], executions: unknown[] = [];
   const state = { input: undefined as string | undefined, pick: ((): Pick | undefined => undefined) as (items: Pick[]) => Pick | undefined, confirm: undefined as string | undefined, resolved: new Map<string, string>(), trees: new Map<string, string>(), activeEditor: undefined as { document: { uri: Uri } } | undefined };
-  const vscode = { Uri, ThemeIcon, ThemeColor, ProgressLocation: { Window: 10 },
+  const vscode = { Uri, ThemeIcon, ThemeColor, ProgressLocation: { Window: 10, Notification: 15 },
     window: { get activeTextEditor() { return state.activeEditor; },
       showQuickPick: async (items: Pick[], options: { title: string }) => { picks.push({ items, title: options.title }); return state.pick(items); },
-      showInputBox: async () => state.input,
+      showInputBox: async (options: { validateInput?: (value: string) => string | undefined }) => { inputs.push(options); return state.input; },
       showWarningMessage: async (text: string, options: { detail: string }, ...choices: string[]) => { warnings.push({ text, detail: options.detail, choices }); return state.confirm; },
       showInformationMessage: async (text: string) => { infos.push(text); return undefined; }, withProgress: (_options: unknown, run: () => Promise<unknown>) => run() },
     commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); } } };
@@ -59,13 +60,13 @@ function compareHarness(head = 'main') {
   const commands = new Map<string, (...args: unknown[]) => Promise<unknown>>(), context = { subscriptions: [] as { dispose(): void }[] };
   (module.registerCompare as (...args: unknown[]) => void)(context, deps, (id: string, action: (...args: unknown[]) => Promise<unknown>) => { commands.set(id, action); });
   const run = (id: string, ...args: unknown[]) => commands.get(id)!(...args);
-  return { root, repo, store, registry, deps, surface, context, commands, run, picks, warnings, infos, executed, previews, executions, preview, state, restores, module, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, repo, store, registry, deps, surface, context, commands, run, inputs, picks, warnings, infos, executed, previews, executions, preview, state, restores, module, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test('registerCompare publishes the Compare tab through the trusted wrapper and withdraws it on disposal', () => {
   const h = compareHarness();
   try {
-    assert.deepEqual([...h.commands.keys()].sort(), ['gitPro.compareBranches', 'gitPro.compareWithBranch', 'gitPro.compareWithCurrent', 'gitPro.compareWithRef', 'gitPro.diffWithWorkingTree', 'gitPro.mergeIntoCurrent', 'gitPro.rebaseCurrentOnto']);
+    assert.deepEqual([...h.commands.keys()].sort(), ['gitPro.compareBranches', 'gitPro.comparePullRequest', 'gitPro.compareWithBranch', 'gitPro.compareWithCurrent', 'gitPro.compareWithRef', 'gitPro.diffWithWorkingTree', 'gitPro.mergeIntoCurrent', 'gitPro.rebaseCurrentOnto']);
     assert.equal(h.deps.surfaces.compare, h.surface);
     for (const disposable of h.context.subscriptions) disposable.dispose();
     assert.equal(h.surface.disposed, 1); assert.equal(h.deps.surfaces.compare, undefined);
@@ -343,5 +344,53 @@ test('Enter a revision takes a commit ID, HEAD~3 or a branch name, pins nothing 
     h.state.input = 'HEAD~3'; let calls = 0; h.state.pick = items => calls++ === 0 ? items.find(item => item.custom) : items.find(item => item.label === 'main');
     await h.run('gitPro.compareWithBranch');
     assert.deepEqual(h.surface.refs.at(-1), ['owned', 'HEAD~3', 'refs/heads/main']);
+  } finally { h.cleanup(); }
+});
+
+test('Compare Pull Request fetches the ref the host publishes and opens it against a branch of the same remote', async () => {
+  const h = compareHarness(), fetched: unknown[][] = [];
+  let target: unknown = { remote: 'origin', web: parseRemoteUrl('https://github.com/o/r.git') };
+  Object.assign(h.deps, { links: { help: 'Name the host.', target: async () => target } });
+  const git = h.deps.git as unknown as Record<string, unknown>;
+  let fetchError: unknown;
+  git.fetchPullRequest = async (...args: unknown[]) => { fetched.push(args); if (fetchError) throw fetchError; return `refs/gitpro/pr/${String(args[1])}/${String(args[3])}`; };
+  git.branchSearchSnapshot = async () => [branch('main'), branch('origin/dev', true, oid('d')), branch('origin/main', true, oid('a')), branch('upstream/main', true)];
+  h.state.resolved.set('refs/remotes/origin/HEAD', oid('a')); (h.store as { upstream?: string }).upstream = 'origin/dev';
+  try {
+    h.state.input = '#123'; h.state.pick = items => items[0];
+    await h.run('gitPro.comparePullRequest');
+    assert.match(h.picks[0]!.title, /pull request #123/);
+    assert.deepEqual(plain(h.picks[0]!.items.map(item => [item.label, item.description])), [['origin/main', 'Default branch'], ['origin/dev', 'Upstream of the current branch']], 'only the remote\'s own branches, its default first');
+    assert.equal(plain(fetched).length, 1); assert.deepEqual(plain(fetched[0]!.slice(0, 2)), ['owned', 'origin']); assert.equal(fetched[0]![3], 123);
+    assert.deepEqual(h.surface.refs, [['owned', 'refs/remotes/origin/main', 'refs/gitpro/pr/origin/123']], 'the tab compares the base with the fetched ref');
+    assert.equal(h.inputs[0]!.validateInput!('12'), undefined); assert.match(h.inputs[0]!.validateInput!('abc')!, /Enter a number/); assert.match(h.inputs[0]!.validateInput!('https://github.com/o/other/pull/1')!, /another repository/);
+
+    // A link of this repository is as good as a number, and the base is the one picked.
+    h.state.input = 'https://github.com/o/r/pull/77/files'; h.state.pick = items => items.find(item => item.label === 'origin/dev');
+    await h.run('gitPro.comparePullRequest'); assert.equal(fetched[1]![3], 77); assert.deepEqual(h.surface.refs.at(-1), ['owned', 'refs/remotes/origin/dev', 'refs/gitpro/pr/origin/77']);
+
+    // Cancelling either question fetches nothing and opens nothing.
+    const done = { fetched: fetched.length, tabs: h.surface.refs.length };
+    h.state.input = undefined; await h.run('gitPro.comparePullRequest');
+    h.state.input = '5'; h.state.pick = () => undefined; await h.run('gitPro.comparePullRequest');
+    assert.deepEqual({ fetched: fetched.length, tabs: h.surface.refs.length }, done);
+    h.state.input = 'not a number'; await assert.rejects(h.run('gitPro.comparePullRequest'), /Enter a number/);
+
+    // A missing pull request is said plainly; any other failure is passed on as it is.
+    h.state.input = '9'; h.state.pick = items => items[0];
+    fetchError = Object.assign(new Error('Failed to execute git'), { stderr: "fatal: couldn't find remote ref refs/pull/9/head" });
+    await assert.rejects(h.run('gitPro.comparePullRequest'), /Pull request #9 was not found on origin/); assert.equal(h.surface.refs.length, done.tabs, 'no tab for a pull request that was not fetched');
+    fetchError = new Error('Authentication failed'); await assert.rejects(h.run('gitPro.comparePullRequest'), /Authentication failed/);
+    fetchError = undefined;
+
+    // GitLab calls it a merge request; a remote without a known host says how to name it; Bitbucket Cloud has no such refs; no downloaded branch of the remote means nothing to compare with.
+    target = { remote: 'origin', web: parseRemoteUrl('git@gitlab.com:g/r.git') }; h.state.input = '!4';
+    await h.run('gitPro.comparePullRequest'); assert.match(h.picks.at(-1)!.title, /merge request #4/); assert.equal(plain(fetched.at(-1)!)[3], 4);
+    const before = fetched.length;
+    target = undefined; await assert.rejects(h.run('gitPro.comparePullRequest'), /Name the host/);
+    target = { remote: 'origin', web: parseRemoteUrl('git@bitbucket.org:t/r.git') }; await assert.rejects(h.run('gitPro.comparePullRequest'), /Bitbucket Cloud does not publish pull requests/);
+    target = { remote: 'origin', web: parseRemoteUrl('https://github.com/o/r.git') }; git.branchSearchSnapshot = async () => [branch('main'), branch('upstream/main', true)];
+    await assert.rejects(h.run('gitPro.comparePullRequest'), /No branch of origin is downloaded yet/);
+    assert.equal(fetched.length, before, 'none of these fetched anything');
   } finally { h.cleanup(); }
 });

@@ -3,7 +3,8 @@ export interface RemoteInfo { name: string; fetchUrl?: string; pushUrl?: string 
 export interface DailyBackend {
   stage(root: string, paths: readonly string[]): Promise<void>;
   commit(root: string, message: string, options: CommitRequest): Promise<void>;
-  fetch(root: string, remote?: string): Promise<void>;
+  /** With a refspec, only that is fetched from `remote` (a pull request into one of Git Pro's own refs). */
+  fetch(root: string, remote?: string, refspec?: string): Promise<void>;
   push(root: string, remote: string, branch: string, setUpstream: boolean): Promise<void>;
   createBranch(root: string, name: string, checkout: boolean, base?: string): Promise<void>;
   checkout(root: string, name: string): Promise<void>;

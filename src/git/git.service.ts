@@ -16,6 +16,8 @@ import { displayBranchOutput } from './branch-display';
 import { Emitter } from '../utils/events';
 import { chunkPaths } from './argv-chunks';
 import { parseIndex } from './conflicts/index-parser';
+import { pullRequestRef, pullRequestRefspec } from './pull-request';
+import type { RemoteWeb } from './remote-link';
 
 interface Ready { repo: RepositoryDescriptor; status: StatusSnapshot; raw: Buffer }
 export interface DailyPreview { repositoryId: string; head: string | undefined; refs: string; index: string; working: string; paths: readonly string[]; status: StatusSnapshot }
@@ -275,6 +277,18 @@ export class GitService implements RestoreFromSource {
     return this.run(id, async () => {
       const repo = this.repository(id); await this.backend.fetch(repo.root, await this.remote(repo, remote));
       this.fetchTimes.set(id, Date.now()); this.fetched.fire(id);
+    });
+  }
+  /**
+   * Brings pull request `number` of `remote` in as `refs/gitpro/pr/<remote>/<number>` and returns that ref. The built-in Git does the transfer, so its credentials apply, and nothing else
+   * in the repository changes: no branch, no working tree, no status.
+   */
+  fetchPullRequest(id: string, remote: string, web: RemoteWeb, number: number): Promise<string> {
+    return this.run(id, async () => {
+      const repo = this.repository(id), name = await this.remote(repo, remote), refspec = pullRequestRefspec(web, name, number);
+      if (!refspec) throw new Error('This host does not publish pull requests as Git refs. Fetch the source branch instead.');
+      await this.backend.fetch(repo.root, name, refspec);
+      return pullRequestRef(name, number);
     });
   }
   /** `known` must come from a read taken inside this coordinator slot with no mutation since; otherwise Git is asked again. */

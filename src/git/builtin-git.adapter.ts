@@ -64,7 +64,7 @@ export class BuiltinGitAdapter implements vscode.Disposable {
         if (!options.amend && !repo.state.indexChanges.length) throw new Error('Stage changes before committing.');
         await repo.commit(message, { ...options, all: false, postCommitCommand: null });
       },
-      fetch: async (root, remote) => { await (await this.repository(root)).fetch(remote ? { remote } : {}); },
+      fetch: async (root, remote, refspec) => { await (await this.repository(root)).fetch(remote ? { remote, ...(refspec ? { ref: refspec } : {}) } : {}); },
       push: async (root, remote, branch, setUpstream) => { await (await this.repository(root)).push(remote, branch, setUpstream); },
       createBranch: async (root, name, checkout, base) => { await (await this.repository(root)).createBranch(name, checkout, base); },
       checkout: async (root, name) => { await (await this.repository(root)).checkout(name); },

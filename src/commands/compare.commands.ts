@@ -11,9 +11,10 @@ import { canonicalFilePath } from '../security/paths';
 import { redact } from '../security/redaction';
 import { branchVisual } from '../views/tree-visuals';
 import { getFromBranch } from './get-from-branch';
+import { parsePullRequestInput, pullRequestLabel, pullRequestNoun, pullRequestSource } from '../git/pull-request';
 
 export type BranchEntry = Extract<BranchNode, { kind: 'branch' }>;
-type CompareDeps = Pick<FeatureDeps, 'registry' | 'policy' | 'executor' | 'git' | 'advanced' | 'tools' | 'history' | 'revisions'>;
+type CompareDeps = Pick<FeatureDeps, 'registry' | 'policy' | 'executor' | 'git' | 'advanced' | 'tools' | 'history' | 'revisions' | 'links'>;
 interface RefChoice { readonly ref: string; readonly name: string; readonly kind: 'local' | 'remote' | 'tag' | 'revision'; readonly current: boolean }
 
 /** A Branches view node as VS Code hands it back to a command: only its shape is trusted, and its repository must still be open. */
@@ -108,6 +109,46 @@ export class CompareCommands {
     const [left, right] = first.current ? [second, first] : [first, second];
     await this.surface.openRefs(id, left.ref, right.ref);
   }
+  /**
+   * Compare Pull Request…: the number (or link) of a pull request, a merge request on GitLab, becomes the ref its host publishes, `git fetch` brings that in with the credentials the
+   * built-in Git already has, and the Compare tab opens it against a branch of the same remote, since the fork. No account, token or HTTP request is involved.
+   */
+  async comparePullRequest(): Promise<void> {
+    const id = activeId(this.deps), target = await this.deps.links.target(id);
+    if (!target) throw new Error(this.deps.links.help);
+    const { remote, web } = target, noun = pullRequestNoun(web);
+    if (!pullRequestSource(web, 1)) throw new Error(`Bitbucket Cloud does not publish ${noun}s as Git refs. Fetch the source branch and compare it with Compare with Another Branch instead.`);
+    const typed = await vscode.window.showInputBox({ title: `Compare ${noun} of ${redact(remote)}`, prompt: `The number or the link of the ${noun}`, placeHolder: '123', ignoreFocusOut: true,
+      validateInput: value => { const result = parsePullRequestInput(value, web); return 'error' in result ? result.error : undefined; } });
+    if (typed === undefined) return;
+    const parsed = parsePullRequestInput(typed, web);
+    if ('error' in parsed) throw new Error(parsed.error);
+    const base = await this.pullRequestBase(id, remote, parsed.number, noun);
+    if (!base) return;
+    let ref: string;
+    try {
+      ref = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Git Pro: Fetching ${noun} #${parsed.number} from ${redact(remote)}…` }, () => this.deps.git.fetchPullRequest(id, remote, web, parsed.number));
+    } catch (error) {
+      const text = [error instanceof Error ? error.message : '', (error as { stderr?: unknown } | undefined)?.stderr].filter(item => typeof item === 'string').join('\n');
+      if (/couldn't find remote ref/i.test(text)) throw new Error(`${noun[0]!.toUpperCase()}${noun.slice(1)} #${parsed.number} was not found on ${redact(remote)}. Check the number, and that this remote is the repository it belongs to.`);
+      throw error;
+    }
+    await this.surface.openRefs(id, base, ref);
+  }
+  /** The branch a pull request is compared with: the remote's own branches, its default branch first, then the upstream of the current branch. */
+  private async pullRequestBase(id: string, remote: string, number: number, noun: string): Promise<string | undefined> {
+    const branches = (await this.deps.git.branchSearchSnapshot(id)).filter(branch => branch.remote && branch.name.startsWith(`${remote}/`));
+    if (!branches.length) throw new Error(`No branch of ${redact(remote)} is downloaded yet. Fetch first, then compare the ${noun} again.`);
+    // The remote's HEAD names its default branch; the branch list leaves HEAD out, so the default is the listed branch that points where it does.
+    const headOid = await this.deps.history.resolveRef(id, `refs/remotes/${remote}/HEAD`).catch(() => undefined);
+    const matching = headOid ? branches.filter(branch => branch.oid === headOid) : [];
+    const defaultBranch = matching.find(branch => /\/(?:main|master)$/.test(branch.name)) ?? matching[0], upstream = this.deps.registry.store.get(id)?.upstream;
+    const rank = (branch: { name: string }) => branch === defaultBranch ? 0 : branch.name === upstream ? 1 : 2;
+    const items = [...branches].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).map(branch => ({ label: redact(branch.name), description: branch === defaultBranch ? 'Default branch' : branch.name === upstream ? 'Upstream of the current branch' : '', branch }));
+    const picked = await vscode.window.showQuickPick(items, { title: `Compare ${noun} #${number}: the branch it is merged into`, placeHolder: `A branch of ${redact(remote)}`, matchOnDescription: true });
+    if (picked && !this.deps.registry.list().some(repo => repo.id === id)) throw new Error('Repository is no longer open.');
+    return picked?.branch.ref;
+  }
   /** §3.9: the ref's bounded blob as a read-only snapshot on the left, the real file (editable) on the right. */
   async compareWithRef(value: unknown): Promise<void> {
     const target = value instanceof vscode.Uri ? value : vscode.window.activeTextEditor?.document.uri;
@@ -148,7 +189,7 @@ export class CompareCommands {
 }
 
 /** How the Compare tab names a pinned ref in its header: the short branch or tag name, eight characters of an OID. */
-export function refLabel(ref: string): string { return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(ref) ? ref.slice(0, 8) : ref.replace(/^refs\/(?:heads|remotes|tags)\//, ''); }
+export function refLabel(ref: string): string { return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(ref) ? ref.slice(0, 8) : pullRequestLabel(ref) ?? ref.replace(/^refs\/(?:heads|remotes|tags)\//, ''); }
 
 /** Builds the Compare tab with WP4's factory, publishes it for Tags → Compare With HEAD, and registers the entry points through the trusted wrapper. */
 export function registerCompare(context: vscode.ExtensionContext, deps: FeatureDeps, command: TrustedCommand): void {
@@ -165,6 +206,7 @@ export function registerCompare(context: vscode.ExtensionContext, deps: FeatureD
   command('gitPro.compareBranches', (value, selected) => commands.compareBranches(value, selected));
   command('gitPro.compareWithBranch', value => commands.compareWithAnother(value));
   command('gitPro.compareWithRef', value => commands.compareWithRef(value));
+  command('gitPro.comparePullRequest', () => commands.comparePullRequest());
   command('gitPro.mergeIntoCurrent', value => commands.integrate(value, 'merge'));
   command('gitPro.rebaseCurrentOnto', value => commands.integrate(value, 'rebase'));
 }
