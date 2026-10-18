@@ -4,7 +4,7 @@ Review changes, commit, browse History, compare branches, resolve merge conflict
 
 Website: [git-pro.longtd.me](https://git-pro.longtd.me/) · Source: [github.com/nhech/git-pro](https://github.com/nhech/git-pro)
 
-Requirements and known limits are in [compatibility and limitations](docs/user-guide/RELEASE_STATUS.md). Report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
+Requirements and known limits are in [compatibility and limitations](docs/user-guide/RELEASE_STATUS.md), and measured timings and bounds in [performance](docs/user-guide/PERFORMANCE.md). Report problems on [GitHub Issues](https://github.com/nhech/git-pro/issues).
 
 ## See Git Pro in action
 
