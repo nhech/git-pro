@@ -17,7 +17,7 @@ What Git Pro costs, as measured, and where it is bounded by design. Everything h
 | Memory of the whole Node process that held the repositories and ran the test | 97 MB |
 | Size of the package | 343 KB, 40 files, 1.2 MB unpacked; no runtime dependencies |
 
-Run on 2026-10-18, version 0.3.1, Windows 11, an 11th Gen Intel Core i5-11400F at 2.6 GHz, Git 2.36.0 for Windows (the oldest Git that Git Pro supports is 2.32, and newer Git is not slower at these reads), Node 24. Your repository, disk, antivirus and Git will give other numbers; the figures above are one machine's, not a promise.
+Run on 2026-10-18, version 0.3.1, Windows 11, an 11th Gen Intel Core i5-11400F at 2.6 GHz, Git 2.36.0 for Windows (the oldest Git that Git Pro supports is 2.32), Node 24. Your repository, disk, antivirus and Git will give other numbers; the figures above are one machine's, not a promise.
 
 What this measures is Git Pro's own path: starting Git, reading its output with the bounds below, and parsing it. It does not measure VS Code's start-up, the time the extension takes to activate inside VS Code, the memory of the extension host, or how fast a webview draws. Those depend on the machine and on the other extensions that are installed, and no figure for them is published here.
 
