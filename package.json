@@ -2129,6 +2129,16 @@
           "scope": "resource",
           "description": "%setting.gitPro.confirmBeforePush.description%"
         },
+        "gitPro.protectedBranches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "maxItems": 100,
+          "scope": "resource",
+          "description": "%setting.gitPro.protectedBranches.description%"
+        },
         "gitPro.pull.strategy": {
           "type": "string",
           "enum": [

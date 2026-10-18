@@ -43,6 +43,7 @@
   "setting.gitPro.logging.level.description": "Git Pro operation metadata logging; credentials are always redacted.",
   "setting.gitPro.commit.confirmBeforeCommit.description": "Confirm each staged-only commit.",
   "setting.gitPro.confirmBeforePush.description": "Confirm pushes to the configured upstream.",
+  "setting.gitPro.protectedBranches.description": "Branches that ask before you commit on them, push them, force push them or delete them. Glob patterns: * is within one path segment (release/*), ** crosses segments, ? is one character. Empty by default.",
   "setting.gitPro.pull.strategy.description": "Pull strategy. Divergence requires an explicit merge or rebase choice.",
   "setting.gitPro.commit.subjectLimit.description": "Commit subject warning length.",
   "setting.gitPro.commit.messageHistoryLimit.description": "Maximum messages stored per repository in workspace state.",

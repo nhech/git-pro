@@ -4,6 +4,7 @@ import { GitService, DailyError, type BranchInfo } from '../git/git.service';
 import type { CommitRequest } from '../git/daily-backend';
 import { DiffService } from '../git/diff/diff.service';
 import { NativeDiffError } from '../git/diff/native-diff-error';
+import { isProtectedBranch } from '../security/protected-branches';
 import { RevisionProvider } from '../documents/revision-provider';
 import type { ChangeNode } from '../views/changes/changes.provider';
 import type { BranchNode } from '../views/branches/branches.provider';
@@ -144,7 +145,11 @@ export class DailyCommands implements vscode.Disposable {
     if (options.amend && await vscode.window.showWarningMessage(`Amend ${preview.head?.slice(0, 12)}? This rewrites the last commit.`, { modal: true }, 'Amend') !== 'Amend') return false;
     if (options.noVerify && await vscode.window.showWarningMessage('Skip Git hooks for this commit?', { modal: true }, 'Skip Hooks') !== 'Skip Hooks') return false;
     const config = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.git.repository(id).root));
-    if (config.get<boolean>('commit.confirmBeforeCommit', false) && await vscode.window.showInformationMessage(`Commit ${preview.status.changes.filter(change => change.group === 'staged').length + (preview.status.omitted?.filter(change => change.group === 'staged').length ?? 0)} staged files?`, { modal: true }, 'Commit') !== 'Commit') return false;
+    const staged = preview.status.changes.filter(change => change.group === 'staged').length + (preview.status.omitted?.filter(change => change.group === 'staged').length ?? 0);
+    // A protected branch asks once, in its own words, instead of the plain confirmation.
+    if (isProtectedBranch(preview.status.head, config.get('protectedBranches'))) {
+      if (await vscode.window.showWarningMessage(`Commit ${staged} staged files${push ? ' and push' : ''} on protected branch ${redact(preview.status.head ?? '')}?`, { modal: true, detail: 'This branch is listed in gitPro.protectedBranches. Create a branch first if this change should be reviewed before it lands here.' }, 'Commit') !== 'Commit') return false;
+    } else if (config.get<boolean>('commit.confirmBeforeCommit', false) && await vscode.window.showInformationMessage(`Commit ${staged} staged files?`, { modal: true }, 'Commit') !== 'Commit') return false;
     const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Git Pro: Commit staged changes', cancellable: false }, () => this.git.commit(preview, message, options, push));
     if (result.pushError) await vscode.window.showWarningMessage(`Commit ${result.oid.slice(0, 8)} created; push failed. ${redact(result.pushError)}`, 'Push').then(async choice => { if (choice) { try { await this.push(id); } catch (error) { await this.error(error); } } });
     else await vscode.window.showInformationMessage(`Commit ${result.oid.slice(0, 8)} created${result.pushed ? ' and pushed' : ''}.`);
@@ -159,7 +164,9 @@ export class DailyCommands implements vscode.Disposable {
   private async push(id = this.active()): Promise<void> {
     const preview = await this.git.preview(id);
     const config = vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.git.repository(id).root));
-    if (config.get<boolean>('confirmBeforePush', false) && await vscode.window.showInformationMessage(`Push ${preview.status.head} to upstream?`, { modal: true }, 'Push') !== 'Push') return;
+    if (isProtectedBranch(preview.status.head, config.get('protectedBranches'))) {
+      if (await vscode.window.showWarningMessage(`Push protected branch ${redact(preview.status.head ?? '')}?`, { modal: true, detail: 'This branch is listed in gitPro.protectedBranches. A push publishes your commits to everyone who follows it.' }, 'Push') !== 'Push') return;
+    } else if (config.get<boolean>('confirmBeforePush', false) && await vscode.window.showInformationMessage(`Push ${preview.status.head} to upstream?`, { modal: true }, 'Push') !== 'Push') return;
     if (!preview.status.upstream) {
       const remote = await this.chooseRemote(id); if (!remote) return;
       if (!preview.status.head || preview.status.head === '(detached)') throw new DailyError('detached', 'Create a local branch before pushing.');
@@ -303,7 +310,8 @@ export class DailyCommands implements vscode.Disposable {
       if (name) await this.git.branchAction(preview, branch.name, 'rename', name); return;
     }
     if (choice === 'Unset Upstream') { await this.git.branchAction(preview, branch.name, 'unset-upstream'); return; }
-    if (await vscode.window.showWarningMessage(`${choice} ${redact(branch.name)} at ${branch.oid.slice(0, 12)}?${choice === 'Force Delete' ? ' Unmerged commits may become unreachable.' : ''}`, { modal: true }, choice) === choice) await this.git.branchAction(preview, branch.name, choice === 'Force Delete' ? 'force-delete' : 'delete');
+    const deleting = choice === 'Delete' || choice === 'Force Delete', guarded = deleting && isProtectedBranch(branch.name, vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.git.repository(id).root)).get('protectedBranches'));
+    if (await vscode.window.showWarningMessage(`${choice} ${guarded ? 'protected branch ' : ''}${redact(branch.name)} at ${branch.oid.slice(0, 12)}?${choice === 'Force Delete' ? ' Unmerged commits may become unreachable.' : ''}`, { modal: true, ...(guarded ? { detail: 'This branch is listed in gitPro.protectedBranches.' } : {}) }, choice) === choice) await this.git.branchAction(preview, branch.name, choice === 'Force Delete' ? 'force-delete' : 'delete');
   }
   private async copyPath(arg: unknown, selected: unknown): Promise<void> { await vscode.env.clipboard.writeText((await this.selection(arg, selected)).paths.join('\n')); }
   /** Same conflict handling as the trusted wrapper in extension.ts: a pull that stops on conflicts opens Conflicts on the active repository, and the toast offers Abort…. */

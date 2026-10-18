@@ -7,6 +7,7 @@ import type { AdvancedMutation } from '../git/advanced/advanced-builders';
 import { canonicalFilePath } from '../security/paths';
 import { redact } from '../security/redaction';
 import { validateOid } from '../security/refs';
+import { isProtectedBranch } from '../security/protected-branches';
 import * as path from 'node:path';
 import { LeaseService } from '../git/advanced/lease.service';
 import { InteractiveService } from '../git/rebase/interactive.service';
@@ -52,6 +53,8 @@ export class AdvancedCommands {
     const names=await this.advanced.git.remotes(id),remote=await vscode.window.showQuickPick(names.map(item=>({label:redact(item.name),name:item.name})),{title:'Git Pro: Force-with-lease remote'});if(!remote)return;
     const branch=await vscode.window.showInputBox({title:'Remote branch to replace',value:this.advanced.git.registry.store.get(id)?.head??'',prompt:'Review the exact remote branch and current OID before rewriting history.'});if(!branch)return;
     const preview=await this.leases.preview(id,remote.name,branch);
+    // A protected branch asks first, apart from the lease review that every force push gets.
+    if(isProtectedBranch(branch,vscode.workspace.getConfiguration('gitPro',vscode.Uri.file(repo.root)).get('protectedBranches'))&&await vscode.window.showWarningMessage(`Rewrite the history of protected branch ${redact(branch)}?`,{modal:true,detail:'It is listed in gitPro.protectedBranches. Everyone who follows it will have to repair their copy.'},'Continue')!=='Continue')return;
     if(await vscode.window.showWarningMessage('Replace remote branch history with an explicit lease?',{modal:true,detail:redact(`${repo.root}\n${preview.url}\nrefs/heads/${branch}\nExpected remote: ${preview.expected}\nReplacement: ${preview.source}\nThe push will fail if the remote branch has changed.`)},'Push with lease')!=='Push with lease')return;
     await vscode.window.withProgress({location:vscode.ProgressLocation.Window,title:'Git Pro: Push with lease'},()=>this.leases.push(preview));
   }
