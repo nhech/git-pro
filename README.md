@@ -12,7 +12,7 @@ Screenshots use a demo repository in VS Code with dark and light themes. Layout 
 
 ### Review, stage and commit
 
-See staged, modified and untracked files at a glance in VS Code's own tree. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks, Conventional Commits (a type, a scope and a `!`) and message history.
+See staged, modified and untracked files at a glance in VS Code's own tree. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history, and Conventional Commit… in the view's title asks for a type, a scope and a `!` and writes them at the start of the message.
 
 ![Git Pro sidebar with the Commit box and the Changes tree of staged, modified and untracked files, next to the diff of src/cart.ts](docs/images/changes-and-commit.jpg)
 

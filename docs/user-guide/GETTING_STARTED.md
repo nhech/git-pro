@@ -6,7 +6,7 @@ Requires VS Code 1.100.0 or newer, Git 2.32 or newer and the built-in Git extens
 2. Open your repository folder and review workspace trust before enabling Git operations.
 3. Select **Git Pro** in the Activity Bar. Choose the repository if more than one is available.
 4. Open Changes, review a diff and stage the intended files. Selecting rows does not stage them.
-5. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks, Conventional Commits (a type, a scope and a `!`) and message history. The composer commits the current index.
+5. Type a message in the Commit box above Changes and press Ctrl+Enter (⌘Enter on macOS) or Commit; the menu beside Commit offers Commit & Push, Amend, Sign-off, Skip hooks and message history, and **Conventional Commit…** in the Commit view's title asks for a type, a scope and a `!` and writes them at the start of the message. The composer commits the current index.
 
 Use the Command Palette's **Git Pro** commands to open History, File History, branches, advanced actions or repository tools. Hover a Changes row for inline actions or right-click it for all file actions. Assign shortcuts in VS Code's Keyboard Shortcuts editor; Git Pro does not assign global shortcuts by default.
 

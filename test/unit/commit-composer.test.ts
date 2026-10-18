@@ -5,6 +5,7 @@ import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import * as path from 'node:path';
 
+const plain=<T>(value:T):T=>JSON.parse(JSON.stringify(value)) as T;
 test('composer busy focus returns after failure, success or repo switch without stealing focus',()=>{
   let receive:((event:{data:unknown})=>void)|undefined,focused=true;
   class Control{
@@ -79,56 +80,108 @@ test('Ctrl+Enter in the message box commits like the Commit button, and only whe
   assert.equal(elements.get('staged')!.textContent,'merging in progress · resolve in Git Pro Conflicts');assert.equal(elements.get('commit')!.disabled,true);
 });
 
-test('the Conventional Commits choice reads and rewrites only the prefix of the first line, for the types the setting lists',()=>{
+test('a Conventional Commit choice from the host rewrites only the prefix of the first line, for the types the setting lists',()=>{
   let receive:((event:{data:unknown})=>void)|undefined;const posted:Record<string,unknown>[]=[];
   class Control{
-    value='';textContent='';title='';placeholder='';checked=false;disabled=false;hidden=false;open=false;isConnected=true;children:{text:string;value:string}[]=[];dataset:Record<string,string>={};attributes=new Map<string,string>();handlers=new Map<string,((event:Record<string,unknown>)=>void)[]>();
-    focus(){document.activeElement=this;}setAttribute(key:string,value:string){this.attributes.set(key,value);}addEventListener(type:string,callback:(event:Record<string,unknown>)=>void){this.handlers.set(type,[...(this.handlers.get(type)??[]),callback]);}fire(type:string){for(const callback of this.handlers.get(type)??[])callback({type});}
-    dispatchEvent(event:{type:string}){this.fire(event.type);}click(){this.fire('click');}replaceChildren(...children:{text:string;value:string}[]){this.children=children;}querySelector(){return undefined;}contains(){return false;}
+    value='';textContent='';title='';placeholder='';checked=false;disabled=false;hidden=false;open=false;isConnected=true;selection:number[]=[];dataset:Record<string,string>={};attributes=new Map<string,string>();handlers=new Map<string,((event:Record<string,unknown>)=>void)[]>();
+    focus(){document.activeElement=this;}setAttribute(key:string,value:string){this.attributes.set(key,value);}addEventListener(type:string,callback:(event:Record<string,unknown>)=>void){this.handlers.set(type,[...(this.handlers.get(type)??[]),callback]);}
+    fire(type:string){for(const callback of this.handlers.get(type)??[])callback({type});}dispatchEvent(event:{type:string}){this.fire(event.type);}click(){this.fire('click');}replaceChildren(){}querySelector(){return undefined;}contains(){return false;}
+    setSelectionRange(start:number,end:number){this.selection=[start,end];}
   }
-  const ids=['repository','staged','message','warning','amend','signoff','noVerify','commit','commit-label','advanced-label','push','history','clearHistory','result','conventional','cc-type','cc-scope','cc-breaking','commit-menu'];
+  const ids=['repository','staged','message','warning','amend','signoff','noVerify','commit','commit-label','advanced-label','push','history','clearHistory','result','commit-menu'];
   const body=new Control(),elements=new Map(ids.map(id=>[id,new Control()]));body.dataset.session='s';
   const document={body,activeElement:body as Control,hasFocus:()=>true,addEventListener:()=>undefined,getElementById:(id:string)=>elements.get(id)};
   runInNewContext(readFileSync('media/commit.js','utf8'),{document,window:{addEventListener:(type:string,callback:typeof receive)=>{if(type==='message')receive=callback;}},navigator:{platform:'Win32'},acquireVsCodeApi:()=>({postMessage:(value:Record<string,unknown>)=>posted.push(value)}),Option:class{constructor(readonly text:string,readonly value:string){}},Event:class{constructor(readonly type:string){}}});
-  const message=elements.get('message')!,type=elements.get('cc-type')!,scope=elements.get('cc-scope')!,breaking=elements.get('cc-breaking')!,menu=elements.get('commit-menu')!,group=elements.get('conventional')!;
-  const state=(extra:Record<string,unknown>={})=>receive!({data:{type:'state',session:'s',repositoryId:'repo',repository:'repo',message:'',busy:false,staged:1,operation:'idle',subjectLimit:72,history:[],conventionalTypes:['feat','fix','docs','my-type'],...extra}});
+  const message=elements.get('message')!;
+  // The message box that was just written to has the focus, and a refresh does not take a message from under the cursor: the tests look away first.
+  const state=(extra:Record<string,unknown>={})=>{document.activeElement=body;receive!({data:{type:'state',session:'s',repositoryId:'repo',repository:'repo',message:'',busy:false,staged:1,operation:'idle',subjectLimit:72,history:[],conventionalTypes:['feat','fix','docs','my-type'],...extra}});};
+  const choose=(type:string,scope='',breaking=false,extra:Record<string,unknown>={})=>receive!({data:{type:'conventional',session:'s',repositoryId:'repo',value:{type,scope,breaking},...extra}});
   const typed=(value:string)=>{message.value=value;message.fire('input');};
-  const choose=(value:string)=>{type.value=value;type.fire('change');};
+  const drafts=()=>posted.filter(item=>item.type==='draft').map(item=>item.message);
   state();
-  assert.equal(group.hidden,false);assert.deepEqual(type.children.map(item=>item.text),['No type','feat — a new feature','fix — a bug fix','docs — documentation only','my-type']);assert.deepEqual(type.children.map(item=>item.value),['','feat','fix','docs','my-type']);
-  assert.equal(scope.disabled,true,'a scope needs a type');assert.equal(breaking.disabled,true);
-  const options=type.children;state();assert.equal(type.children,options,'a refresh with the same types leaves the open drop-down alone');
 
-  typed('add parser');assert.equal(type.value,'');
-  menu.open=true;choose('feat');
-  assert.equal(message.value,'feat: add parser');assert.equal(posted.filter(item=>item.type==='draft').at(-1)?.message,'feat: add parser','the draft follows the rewrite');
-  assert.equal(menu.open,false,'choosing a type closes the menu');assert.equal(document.activeElement,message,'and returns to the message');assert.equal(scope.disabled,false);assert.equal(breaking.disabled,false);
-  scope.value='api';scope.fire('change');assert.equal(message.value,'feat(api): add parser');
-  breaking.checked=true;breaking.fire('change');assert.equal(message.value,'feat(api)!: add parser');
-  scope.value=' (a)(b)\n ';scope.fire('change');assert.equal(message.value,'feat(ab)!: add parser','brackets and line breaks cannot end up in the scope');
-  scope.value='';scope.fire('change');assert.equal(message.value,'feat!: add parser');
+  typed('add parser');choose('feat');
+  assert.equal(message.value,'feat: add parser');assert.equal(drafts().at(-1),'feat: add parser','the draft follows the rewrite');assert.equal(document.activeElement,message,'and the message is where the next keystroke goes');assert.deepEqual(message.selection,[16,16],'at the end of the first line');
+  choose('feat','api');assert.equal(message.value,'feat(api): add parser','a type that is already there is replaced, not added to');
+  choose('feat','api',true);assert.equal(message.value,'feat(api)!: add parser');
+  choose('feat',' (a)(b)\n ');assert.equal(message.value,'feat(ab): add parser','brackets and line breaks cannot end up in the scope');
+  choose('feat','x'.repeat(60));assert.equal(message.value,`feat(${'x'.repeat(40)}): add parser`,'a scope is at most 40 characters');
+  choose('fix','',false);assert.equal(message.value,'fix: add parser');
 
   // Only the first line changes; the body is kept as it is.
-  typed('feat(api)!: add parser\n\nBody text\nsecond: line');
-  assert.deepEqual([type.value,scope.value,breaking.checked],['feat','api',true],'the controls read the message');
-  choose('fix');assert.equal(message.value,'fix(api)!: add parser\n\nBody text\nsecond: line');
-  choose('');assert.equal(message.value,'add parser\n\nBody text\nsecond: line');assert.deepEqual([type.value,scope.value,breaking.checked,scope.disabled],['','',false,true]);
+  typed('feat(api)!: add parser\n\nBody text\nsecond: line');choose('fix','core');assert.equal(message.value,'fix(core): add parser\n\nBody text\nsecond: line');assert.deepEqual(message.selection,['fix(core): add parser'.length,'fix(core): add parser'.length]);
+  choose('');assert.equal(message.value,'add parser\n\nBody text\nsecond: line','no type removes the prefix');choose('');assert.equal(message.value,'add parser\n\nBody text\nsecond: line','and there is nothing more to remove');
 
   // A prefix that is not one of the listed types is part of the subject, not a type.
   typed('note: keep this');choose('fix');assert.equal(message.value,'fix: note: keep this');
-  typed('wip(x): y');assert.equal(type.value,'');typed('Feat: capital');assert.equal(type.value,'');typed('feat:no space');assert.deepEqual([type.value],['feat']);
-  typed('my-type(x): y');assert.equal(type.value,'my-type');typed('feat (x): y');assert.equal(type.value,'','a space before the scope is not a prefix');
+  typed('Feat: capital');choose('docs');assert.equal(message.value,'docs: Feat: capital');typed('feat (x): y');choose('docs');assert.equal(message.value,'docs: feat (x): y','a space before the scope is not a prefix');
+  typed('my-type(x): y');choose('fix','z');assert.equal(message.value,'fix(z): y');typed('feat:no space');choose('docs');assert.equal(message.value,'docs: no space');
   typed('');choose('docs');assert.equal(message.value,'docs: ','an empty message gets just the prefix');
 
-  // A draft restored by a refresh (the message box is not focused) is read too; the settings decide what is offered, and none hides the choice.
-  document.activeElement=body;state({message:'fix(core): restored'});assert.deepEqual([type.value,scope.value],['fix','core']);
-  state({conventionalTypes:['feat']});assert.deepEqual(type.children.map(item=>item.value),['','feat']);assert.equal(type.value,'','fix is no longer a type');
-  state({conventionalTypes:['Feat','x'.repeat(30),5,null,'ok-1']});assert.deepEqual(type.children.map(item=>item.value),['','ok-1'],'only lower-case words of at most 20 characters');
-  state({conventionalTypes:[]});assert.equal(group.hidden,true);state({conventionalTypes:undefined});assert.equal(group.hidden,true);
+  // What the host cannot ask for: a type that is not listed, a type that is not text, another repository or session, a message without a value, a commit in progress, no repository.
+  typed('keep');const before=posted.length;
+  choose('nope');choose('Feat');choose('feat; rm -rf');receive!({data:{type:'conventional',session:'s',repositoryId:'repo',value:{type:5,scope:'',breaking:false}}});receive!({data:{type:'conventional',session:'s',repositoryId:'repo'}});receive!({data:{type:'conventional',session:'s',repositoryId:'repo',value:null}});
+  choose('feat','',false,{repositoryId:'elsewhere'});choose('feat','',false,{session:'expired'});
+  assert.equal(message.value,'keep');assert.equal(posted.length,before,'nothing was written, so nothing was posted');
+  choose('feat','',7 as unknown as boolean);assert.equal(message.value,'feat: keep','only true is a breaking change');
+  state({busy:true,message:'keep'});choose('fix');assert.equal(message.value,'keep');
+  state({repositoryId:'',repository:'Choose a repository'});choose('fix','',false,{repositoryId:''});assert.equal(message.value,'');
+  // The types the setting holds, as the view reads them: lower-case words only, none when the list is not one.
+  state({message:'add'});choose('feat');assert.equal(message.value,'feat: add');
+  state({conventionalTypes:['Feat','x'.repeat(30),5,null,'ok-1'],message:'add'});choose('feat');assert.equal(message.value,'add','feat is no longer a type');choose('ok-1');assert.equal(message.value,'ok-1: add');
+  state({conventionalTypes:undefined,message:'add'});choose('ok-1');assert.equal(message.value,'add');state({conventionalTypes:'feat',message:'add'});choose('feat');assert.equal(message.value,'add');
+});
 
-  // Nothing is rewritten while a commit runs or without a repository.
-  state({message:'add'});const before=message.value;state({busy:true,message:'add'});assert.equal(type.disabled,true);choose('feat');assert.equal(message.value,before);
-  state({repositoryId:'',repository:'Choose a repository'});assert.equal(type.disabled,true);
+/** The composer host over stand-ins, for the Quick Picks of Conventional Commit… */
+function conventionalHarness(options:{types?:unknown;visible?:boolean;active?:boolean}={}){
+  const file=path.resolve(__dirname,'../../src/webviews/commit/commit-composer.js'),load=createRequire(file),exports:Record<string,unknown>={};
+  const disposable={dispose:()=>undefined},messages:Record<string,unknown>[]=[],executed:string[]=[],picks:{title:string;items:{label:string;description?:string;value:unknown}[]}[]=[],inputs:{title:string;validateInput?:(value:string)=>string|undefined}[]=[];
+  const answers={type:((items:{value:unknown}[])=>items.find(item=>item.value==='feat')) as (items:{value:unknown}[])=>unknown,scope:'api' as string|undefined,breaking:((items:{value:unknown}[])=>items.find(item=>item.value===false)) as (items:{value:unknown}[])=>unknown};
+  let view:{visible:boolean;webview:Record<string,unknown>;onDidDispose:()=>unknown}|undefined,active:{id:string;root:string}|undefined=options.active===false?undefined:{id:'repo',root:'fixture'};
+  const vscode={workspace:{onDidChangeConfiguration:()=>disposable,getConfiguration:()=>({get:(key:string)=>key==='commit.conventionalTypes'?('types' in options?options.types:['feat','fix','my-type']):undefined})},Uri:{file:(value:string)=>value,joinPath:(_root:unknown,...parts:string[])=>parts.join('/')},
+    commands:{executeCommand:async(id:string)=>{executed.push(id);if(view)view.visible=true;}},
+    window:{showQuickPick:async(items:{label:string;description?:string;value:unknown}[],pickOptions:{title:string})=>{picks.push({title:pickOptions.title,items:Array.from(items)});return pickOptions.title.endsWith(': type')?answers.type(items):answers.breaking(items);},
+      showInputBox:async(inputOptions:{title:string;validateInput?:(value:string)=>string|undefined})=>{inputs.push(inputOptions);return answers.scope;}}};
+  runInNewContext(readFileSync(file,'utf8'),{exports,setTimeout:(callback:()=>void)=>{callback();return 0;},require:(name:string)=>name==='vscode'?vscode:load(name)});
+  const context={extensionUri:'owned',workspaceState:{get:(_key:string,fallback:unknown)=>fallback,update:async()=>undefined}};
+  const git={registry:{get active(){return active;},onDidChange:()=>disposable,store:new Map([['repo',{changes:[],operation:'idle',head:'main'}]])},repository:()=>({root:'fixture'})};
+  type Composer={resolveWebviewView(view:unknown):Promise<void>;chooseConventional():Promise<void>;dispose():void};
+  const composer=new (exports.CommitComposer as new(context:unknown,git:unknown,commit:()=>Promise<boolean>)=>Composer)(context,git,async()=>true);
+  return {composer,messages,executed,picks,inputs,answers,setActive:(value:typeof active)=>{active=value;},
+    async show(){view={visible:options.visible!==false,webview:{html:'',asWebviewUri:String,cspSource:'owned:',onDidReceiveMessage:()=>disposable,postMessage:async(value:Record<string,unknown>)=>{messages.push(value);return true;}},onDidDispose:()=>disposable};await composer.resolveWebviewView(view);messages.length=0;return view;},
+    hide(){if(view)view.visible=false;},dropView(){view=undefined;}};
+}
+
+test('Conventional Commit… asks for a type, a scope and a breaking mark in Quick Picks, then has the Commit view write them',async()=>{
+  const h=conventionalHarness();await h.show();
+  try{
+    await h.composer.chooseConventional();
+    assert.deepEqual(h.picks.map(pick=>pick.title),['Conventional Commit: type','Conventional Commit: breaking change?']);
+    assert.deepEqual(h.picks[0]!.items.map(item=>[item.label,item.description,item.value]),[['$(close) No type','Remove the type from the first line',''],['feat','a new feature','feat'],['fix','a bug fix','fix'],['my-type','','my-type']],'the types of the setting, with what the usual ones mean');
+    assert.deepEqual(h.picks[1]!.items.map(item=>[item.label,item.description,item.value]),[['No','feat(api): …',false],['Yes, a breaking change','feat(api)!: …',true]]);
+    assert.equal(h.inputs[0]!.title,'Conventional Commit: scope');assert.equal(h.inputs[0]!.validateInput!('api'),undefined);assert.equal(h.inputs[0]!.validateInput!(''),undefined);for(const bad of ['a(b','a)','(a)','a\nb'])assert.equal(h.inputs[0]!.validateInput!(bad),'A scope has no brackets.',JSON.stringify(bad));
+    // The view's state goes first, so it knows the types, and then the choice, for the session and repository of the view.
+    assert.deepEqual(h.messages.map(message=>message.type),['state','conventional']);assert.deepEqual(plain(h.messages[1]!.value),{type:'feat',scope:'api',breaking:false});assert.equal(h.messages[1]!.repositoryId,'repo');assert.equal(typeof h.messages[1]!.session,'string');
+    assert.deepEqual(plain(h.messages[0]!.conventionalTypes),['feat','fix','my-type']);
+    // Breaking, and no scope; "no type" asks nothing more.
+    h.messages.length=0;h.answers.scope='';h.answers.breaking=items=>items.find(item=>item.value===true);await h.composer.chooseConventional();assert.deepEqual(plain(h.messages.at(-1)!.value),{type:'feat',scope:'',breaking:true});assert.equal(h.picks.at(-1)!.items[0]!.description,'feat: …');assert.equal(h.picks.at(-1)!.items[1]!.description,'feat!: …');
+    h.messages.length=0;const asked={picks:h.picks.length,inputs:h.inputs.length};h.answers.type=items=>items.find(item=>item.value==='');await h.composer.chooseConventional();assert.deepEqual(plain(h.messages.at(-1)!.value),{type:'',scope:'',breaking:false});assert.equal(h.picks.length,asked.picks+1);assert.equal(h.inputs.length,asked.inputs,'no scope is asked for when there is no type');
+  }finally{h.composer.dispose();}
+});
+
+test('Conventional Commit… stops where the user stops, and says what is missing',async()=>{
+  // Cancelling any question writes nothing.
+  const cancelType=conventionalHarness();await cancelType.show();cancelType.answers.type=()=>undefined;await cancelType.composer.chooseConventional();assert.deepEqual(cancelType.messages,[]);assert.equal(cancelType.inputs.length,0);cancelType.composer.dispose();
+  const cancelScope=conventionalHarness();await cancelScope.show();cancelScope.answers.scope=undefined;await cancelScope.composer.chooseConventional();assert.deepEqual(cancelScope.messages,[]);assert.equal(cancelScope.picks.length,1);cancelScope.composer.dispose();
+  const cancelBreaking=conventionalHarness();await cancelBreaking.show();cancelBreaking.answers.breaking=()=>undefined;await cancelBreaking.composer.chooseConventional();assert.deepEqual(cancelBreaking.messages,[]);cancelBreaking.composer.dispose();
+  // No repository, no types, and a repository that changed while the questions were open.
+  const none=conventionalHarness({active:false});await none.show();await assert.rejects(none.composer.chooseConventional(),/Select a repository first/);none.composer.dispose();
+  for(const types of [[],undefined,'feat',['Feat',5]]){const empty=conventionalHarness({types});await empty.show();await assert.rejects(empty.composer.chooseConventional(),/No commit types are listed in gitPro\.commit\.conventionalTypes/);assert.equal(empty.picks.length,0);empty.composer.dispose();}
+  const moved=conventionalHarness();await moved.show();moved.answers.scope=undefined as unknown as string;moved.answers.type=items=>{moved.setActive({id:'other',root:'elsewhere'});return items.find(item=>item.value==='feat');};moved.answers.scope='api';
+  await assert.rejects(moved.composer.chooseConventional(),/Repository changed/);assert.deepEqual(moved.messages,[]);moved.composer.dispose();
+  // A Commit view that is hidden is shown first, and the choice waits for it; one that never comes is an error, not a lost choice.
+  const hidden=conventionalHarness({visible:false});await hidden.show();await hidden.composer.chooseConventional();assert.deepEqual(hidden.executed,['gitPro.commitView.focus']);assert.deepEqual(hidden.messages.map(message=>message.type),['state','conventional']);hidden.composer.dispose();
+  const absent=conventionalHarness();await absent.show();absent.dropView();(absent.composer as unknown as {view:undefined}).view=undefined;await assert.rejects(absent.composer.chooseConventional(),/Commit view is not available/);assert.deepEqual(absent.executed,['gitPro.commitView.focus']);absent.composer.dispose();
 });
 
 test('the composer sends the renderer only the commit types the setting holds that are valid, and none without a repository',async()=>{

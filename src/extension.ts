@@ -195,6 +195,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       await configuration.update('blame.enabled', !configuration.get('blame.enabled', false), target);
     });
     command('gitPro.openBlameCommit',async()=>blame.openCurrentCommit());
+    // A type, a scope and a ! for the first line of the Commit view's message, chosen in Quick Picks.
+    command('gitPro.commit.conventional',()=>composer.chooseConventional());
     // Blame of the whole file in the gutter, and the links of its hover card (which name a commit of a repository that is open).
     command('gitPro.blame.toggleFile',()=>fileBlame.toggle());
     command('gitPro.blame.openCommit',async argument=>fileBlame.open(argument));

@@ -4,7 +4,7 @@ import type { GitService } from '../../git/git.service';
 import { parseCommitMessage } from '../protocol';
 import { redact } from '../../security/redaction';
 import { commitHtml } from './commit-html';
-import { boundedInteger, conventionalTypes } from '../../utils/settings';
+import { boundedInteger, conventionalHelp, conventionalTypes } from '../../utils/settings';
 import { recoveryFor } from '../../utils/recovery';
 import { silentLogger, type Logger } from '../../utils/logging';
 
@@ -89,6 +89,42 @@ export class CommitComposer implements vscode.WebviewViewProvider, vscode.Dispos
       history: this.context.workspaceState.get<string[]>(`gitPro.messages:${repo.id}`, []).slice(0,historyLimit),
       // The placeholder names the branch, as native Source Control does; detached HEAD shows none.
       branch: snapshot?.head && snapshot.head !== '(detached)' ? snapshot.head : '' });
+  }
+  /**
+   * Conventional Commit…: a type, a scope and a ! are asked for in Quick Picks, which VS Code draws whole (the menu of the Commit view is clipped to the little room the view has), and the Commit view
+   * writes `type(scope)!: ` at the start of the first line of its message. The view does the writing, so that it stays the one place that knows what the message says.
+   */
+  async chooseConventional(): Promise<void> {
+    const repo = this.git.registry.active; if (!repo) throw new Error('Select a repository first.');
+    if (this.busy) throw new Error('A commit is already in progress.');
+    const types = conventionalTypes(vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(repo.root)).get('commit.conventionalTypes'));
+    if (!types.length) throw new Error('No commit types are listed in gitPro.commit.conventionalTypes.');
+    const type = await vscode.window.showQuickPick([{ label: '$(close) No type', description: 'Remove the type from the first line', value: '' }, ...types.map(name => ({ label: name, description: conventionalHelp[name] ?? '', value: name }))],
+      { title: 'Conventional Commit: type', placeHolder: 'The type of this change', matchOnDescription: true });
+    if (!type) return;
+    let scope = '', breaking = false;
+    if (type.value) {
+      const typed = await vscode.window.showInputBox({ title: 'Conventional Commit: scope', prompt: 'The part of the code this changes, if you want one. Press Enter to leave it out.', placeHolder: 'api', validateInput: value => /[()\r\n]/.test(value) ? 'A scope has no brackets.' : undefined });
+      if (typed === undefined) return;
+      scope = typed.trim();
+      const shape = `${type.value}${scope ? `(${scope})` : ''}`;
+      const kind = await vscode.window.showQuickPick([{ label: 'No', description: `${shape}: …`, value: false }, { label: 'Yes, a breaking change', description: `${shape}!: …`, value: true }], { title: 'Conventional Commit: breaking change?', placeHolder: 'A ! after the type says that users must change something' });
+      if (!kind) return;
+      breaking = kind.value;
+    }
+    const view = await this.shownView();
+    if (this.git.registry.active?.id !== repo.id || this.busy) throw new Error('Repository changed. Choose the type again.');
+    // The view's own state first, so that it knows the types when the choice arrives, even when it was only just shown.
+    await this.update();
+    await view.webview.postMessage({ type: 'conventional', session: this.session, repositoryId: repo.id, value: { type: type.value, scope, breaking } });
+  }
+  private async shownView(): Promise<vscode.WebviewView> {
+    if (!this.view || this.view.visible === false) {
+      await vscode.commands.executeCommand('gitPro.commitView.focus');
+      for (let attempt = 0; attempt < 30 && (!this.view || this.view.visible === false); attempt++) await new Promise<void>(resolve => setTimeout(resolve, 100));
+    }
+    if (!this.view || this.view.visible === false) throw new Error('The Commit view is not available.');
+    return this.view;
   }
   async clearHistory(): Promise<void> {
     const repo = this.git.registry.active; if (!repo) return;

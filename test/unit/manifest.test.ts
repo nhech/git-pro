@@ -241,5 +241,9 @@ test('the Vietnamese strings translate every string of the manifest, and cannot 
   assert.equal(vietnamese['container.gitPro.title'],'Git Pro');
   // A translated title that is still the English one is allowed only where it is a Git term (Fetch, Pull, Push, Merge…, Pick and so on).
   const same=Object.keys(english).filter(key=>vietnamese[key]===english[key]).sort();
-  assert.ok(same.length<=24,`${same.length} strings were left in English: ${same.join(', ')}`);
+  // Named, so that a string cannot be left in English by forgetting it: the brand, and the words that are Git's or the name of a command that has none in Vietnamese.
+  const kept=['command.category','container.gitPro.title','view.gitPro.commitView.name','command.gitPro.commit.conventional.title','command.gitPro.fetch.title','command.gitPro.pull.title','command.gitPro.push.title','command.gitPro.branch.checkout.title','command.gitPro.conflicts.merge.title','command.gitPro.menu.conflicts.merge.title',
+    'command.gitPro.menu.commit.revert.title','command.gitPro.menu.rebasePlanner.pick.title','command.gitPro.menu.rebasePlanner.reword.title','command.gitPro.menu.rebasePlanner.edit.title','command.gitPro.menu.rebasePlanner.squash.title','command.gitPro.menu.rebasePlanner.fixup.title','command.gitPro.menu.rebasePlanner.drop.title',
+    'command.gitPro.repository.fetch.title','command.gitPro.repository.pull.title','command.gitPro.repository.push.title','command.gitPro.tools.remote.fetch.title','command.gitPro.tools.remote.prune.title','command.gitPro.tools.stash.drop.title','command.gitPro.tools.stash.pop.title','command.gitPro.tools.tag.push.title'].sort();
+  assert.deepEqual(same,kept,'the strings left in English are exactly these');
 });

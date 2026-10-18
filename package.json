@@ -395,6 +395,12 @@
         "category": "%command.category%"
       },
       {
+        "command": "gitPro.commit.conventional",
+        "title": "%command.gitPro.commit.conventional.title%",
+        "category": "%command.category%",
+        "icon": "$(symbol-keyword)"
+      },
+      {
         "command": "gitPro.undo",
         "title": "%command.gitPro.undo.title%",
         "category": "%command.category%",
@@ -916,6 +922,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "gitPro.commit.conventional",
+          "when": "view == gitPro.commitView && gitPro.hasRepositories",
+          "group": "navigation"
+        },
         {
           "command": "gitPro.refresh",
           "when": "view == gitPro.repositories || view == gitPro.changes",

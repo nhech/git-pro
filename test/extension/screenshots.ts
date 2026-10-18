@@ -223,11 +223,30 @@ async function conflictsTour(): Promise<void> {
   pointer.move(1714, 127); await sleep(500); await capture('_c-done', true); await frame('conflicts-tour', 4);
 }
 
+/**
+ * Probes of what a release adds, for looking at in a real VS Code (`npm run screenshots -- --only=_verify`): the gutter blame and its card, the commit box's Conventional Commits
+ * choice, History's search prefixes. They stay in .shots/ as `_verify-*.png` and are not published.
+ */
+async function verify(): Promise<void> {
+  await arrange();
+  await pointer.click(428, 163); await typeText('add a cart limit');
+  void exec('gitPro.commit.conventional'); await sleep(1200); await capture('_verify-conventional-type', true);
+  await typeText('fe'); await keys('Return'); await sleep(1000); await capture('_verify-conventional-scope', true);
+  await typeText('api'); await keys('Return'); await sleep(1000); await capture('_verify-conventional-breaking', true);
+  await keys('Return'); await sleep(1200); await capture('_verify-conventional-done', true);
+  await exec('workbench.action.closeSidebar'); await sleep(600);
+  await exec('vscode.open', vscode.Uri.file(path.join(projectRoot, 'src', 'cart.ts'))); await sleep(2000);
+  await exec('gitPro.blame.toggleFile'); await sleep(4000);
+  pointer.move(330, 130); await sleep(2000); await capture('_verify-blame-hover', true);
+  await exec('workbench.action.closeAllEditors'); await sleep(600);
+  await exec('gitPro.history'); await webviewTab('History'); await sleep(2500); await capture('_verify-history', true);
+}
+
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<ExtensionDiagnostics>('longtd.git-pro');
   if (!extension) throw new Error('Git Pro is not installed in the test host.');
   const api = await extension.activate();
   await waitFor(() => api.repositories() === 1 && api.activeSnapshot()?.changes.length, 'the repository and its changes');
   await fitWindow();
-  if (scenario === 'merging') await merging(); else if (scenario === 'light') await light(); else if (scenario === 'compare-tour') await compareTour(api); else if (scenario === 'conflicts-tour') await conflictsTour(); else await project(api);
+  if (scenario === 'merging') await merging(); else if (scenario === 'light') await light(); else if (scenario === 'compare-tour') await compareTour(api); else if (scenario === 'conflicts-tour') await conflictsTour(); else if (scenario === 'verify') await verify(); else await project(api);
 }

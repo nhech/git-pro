@@ -14,6 +14,8 @@ const scenarios = [
   // The animated tours change what they show (files marked as viewed, conflicts resolved), so they come last and each has its own VS Code.
   { name: 'compare-tour', workspace: 'project', shots: ['compare-tour'] },
   { name: 'conflicts-tour', workspace: 'merging', shots: ['conflicts-tour'] },
+  // Probes for looking at a release in a real VS Code, with hovers on; only when asked for (--only=_verify).
+  { name: 'verify', workspace: 'project', shots: ['_verify'], optional: true, settings: { 'editor.hover.enabled': true, 'workbench.hover.delay': 300, 'editor.hover.delay': 300 } },
 ];
 
 const settings = {
@@ -62,7 +64,7 @@ const settings = {
   for (const name of await fs.readdir(out)) if (name.startsWith('gif-') && scenarios.some(scenario => runs(scenario) && scenario.shots.some(shot => name.startsWith(`gif-${shot}-`)))) await fs.rm(path.join(out, name));
   const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'gitconfig'), GIT_PRO_SHOTS_OUT: out, GIT_PRO_SHOTS_PROJECT: demo.project };
   for (const scenario of scenarios) {
-    if (only && !only.split(',').some(name => scenario.shots.includes(name))) continue;
+    if (only ? !only.split(',').some(name => scenario.shots.includes(name)) : scenario.optional) continue;
     const profile = path.join(root, `profile-${scenario.name}`);
     await fs.mkdir(path.join(profile, 'User'), { recursive: true });
     await fs.writeFile(path.join(profile, 'User', 'settings.json'), JSON.stringify({ ...settings, ...scenario.settings }, null, 2));

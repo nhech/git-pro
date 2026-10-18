@@ -16,43 +16,21 @@
     const target = saved.repositoryId === repositoryId && saved.node.isConnected && !saved.node.disabled ? saved.node : element('message');
     if (!target.disabled) target.focus();
   };
-  // Conventional Commits: the type, scope and ! of the message's first line are chosen from the menu. The message stays the one source of truth: the controls read its prefix, and
-  // choosing rewrites that prefix and nothing else. Only a prefix whose type is in the list is read or replaced, so a subject such as "note: this" is never taken apart.
-  const conventional = element('conventional');
+  // Conventional Commits: after a type, a scope and a ! have been chosen in Quick Picks (Conventional Commit…, in the view's title), the host sends them here, and this rewrites the
+  // prefix of the message's first line and nothing else. Only a prefix whose type is in the list is read or replaced, so a subject such as "note: this" is never taken apart.
   let types = [];
-  const typeHelp = { feat: 'a new feature', fix: 'a bug fix', docs: 'documentation only', style: 'formatting, no code change', refactor: 'neither a fix nor a feature', perf: 'a performance improvement', test: 'tests', build: 'build system or dependencies', ci: 'CI configuration', chore: 'other changes', revert: 'reverts a commit' };
   const prefixPattern = /^([a-z][a-z0-9-]*)(?:\(([^()\r\n]*)\))?(!)?:[ \t]*/;
   const firstLine = () => { const value = element('message').value, end = value.search(/\r?\n/); return { subject: end < 0 ? value : value.slice(0, end), rest: end < 0 ? '' : value.slice(end) }; };
-  const readPrefix = subject => { const match = prefixPattern.exec(subject); return match && types.includes(match[1]) ? { length: match[0].length, type: match[1], scope: match[2] ?? '', breaking: Boolean(match[3]) } : undefined; };
-  const showPrefix = () => {
-    if (!conventional) return;
-    const found = readPrefix(firstLine().subject);
-    element('cc-type').value = found ? found.type : ''; element('cc-scope').value = found ? found.scope : ''; element('cc-breaking').checked = Boolean(found?.breaking);
-  };
-  const writePrefix = () => {
-    if (busy || !repositoryId) return;
-    const { subject, rest } = firstLine(), found = readPrefix(subject), type = element('cc-type').value, description = subject.slice(found ? found.length : 0).replace(/^\s+/, '');
-    const scope = element('cc-scope').value.replace(/[()\r\n]/g, '').trim();
-    const next = type ? `${type}${scope ? `(${scope})` : ''}${element('cc-breaking').checked ? '!' : ''}: ${description}` : description;
+  const readPrefix = subject => { const match = prefixPattern.exec(subject); return match && types.includes(match[1]) ? { length: match[0].length } : undefined; };
+  const writePrefix = (type, scope, breaking) => {
+    if (busy || !repositoryId || (type !== '' && !types.includes(type))) return;
+    const { subject, rest } = firstLine(), found = readPrefix(subject), description = subject.slice(found ? found.length : 0).replace(/^\s+/, '');
+    const cleaned = String(scope).replace(/[()\r\n]/g, '').trim().slice(0, 40);
+    const next = type ? `${type}${cleaned ? `(${cleaned})` : ''}${breaking === true ? '!' : ''}: ${description}` : description;
     element('message').value = next + rest; element('message').dispatchEvent(new Event('input'));
-    element('message').setSelectionRange?.(next.length, next.length);
+    element('message').focus(); element('message').setSelectionRange?.(next.length, next.length);
   };
-  const showTypes = list => {
-    const wanted = Array.isArray(list) ? list.filter(item => typeof item === 'string' && /^[a-z][a-z0-9-]{0,19}$/.test(item)).slice(0, 30) : [];
-    // The options are rebuilt only when the list changes, so a refresh never closes a drop-down the user has open.
-    if (wanted.join(' ') !== types.join(' ')) { types = wanted; element('cc-type').replaceChildren(new Option('No type', ''), ...types.map(type => new Option(typeHelp[type] ? `${type} — ${typeHelp[type]}` : type, type))); }
-    conventional.hidden = !types.length;
-  };
-  if (conventional) {
-    element('cc-type').addEventListener('change', () => {
-      writePrefix(); updateButtons();
-      // Like a copied history entry, a chosen type closes the menu and returns to the message, where the description is typed next.
-      const popover = document.getElementById('commit-menu'); if (popover?.open) popover.open = false;
-      if (!element('message').disabled) element('message').focus();
-    });
-    element('cc-scope').addEventListener('change', writePrefix);
-    element('cc-breaking').addEventListener('change', writePrefix);
-  }
+  const readTypes = list => { types = Array.isArray(list) ? list.filter(item => typeof item === 'string' && /^[a-z][a-z0-9-]{0,19}$/.test(item)).slice(0, 30) : []; };
   const updateButtons = () => {
     document.body.setAttribute('aria-busy', String(busy));
     // Amend with nothing staged rewrites only the message of the last commit.
@@ -60,7 +38,6 @@
     element('commit').disabled = disabled; element('push').disabled = disabled;
     element('commit-label').textContent = busy ? 'Committing…' : 'Commit';
     for (const id of ['message', 'history', 'clearHistory', 'amend', 'signoff', 'noVerify']) element(id).disabled = busy || !repositoryId;
-    if (conventional) { const off = busy || !repositoryId, untyped = !element('cc-type').value; element('cc-type').disabled = off; element('cc-scope').disabled = off || untyped; element('cc-breaking').disabled = off || untyped; }
     element('warning').textContent = element('message').value.split('\n')[0].length > subjectLimit ? `Subject exceeds ${subjectLimit} characters (warning only).` : '';
   };
   const updateOptions = () => {
@@ -82,7 +59,7 @@
   element('message').addEventListener('input', () => {
     if (busy || !repositoryId) return;
     api.postMessage({ type: 'draft', session, repositoryId, message: element('message').value });
-    showPrefix(); updateButtons();
+    updateButtons();
   });
   for (const [id, push] of [['commit', false], ['push', true]]) element(id).addEventListener('click', () => {
     if (busy || element(id).disabled) return;
@@ -112,6 +89,7 @@
   window.addEventListener('message', event => {
     const state = event.data;
     if (!state || state.session !== session) return;
+    if (state.type === 'conventional') { if (state.repositoryId === repositoryId && state.value && typeof state.value.type === 'string') writePrefix(state.value.type, typeof state.value.scope === 'string' ? state.value.scope : '', state.value.breaking); return; }
     if (state.type === 'error') { busy = false; element('result').textContent = state.message; updateButtons(); restoreFocus(); return; }
     if (state.type !== 'state') return;
     const changed = repositoryId !== state.repositoryId;
@@ -129,9 +107,8 @@
     element('staged').setAttribute('aria-label', description);
     element('staged').setAttribute('data-ready', String(!busy && !!repositoryId && staged > 0 && operation === 'idle'));
     setPlaceholder(typeof state.branch === 'string' ? state.branch : '');
-    if (conventional) showTypes(state.conventionalTypes);
+    readTypes(state.conventionalTypes);
     if (changed || document.activeElement !== element('message') || busy || wasBusy) element('message').value = state.message;
-    showPrefix();
     if (changed) { for (const id of ['amend', 'signoff', 'noVerify']) element(id).checked = false; element('result').textContent = ''; }
     element('history').replaceChildren(new Option('Choose previous message…', ''), ...state.history.map(message => new Option(message.split('\n')[0], message)));
     updateOptions(); updateButtons();
