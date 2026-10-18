@@ -102,9 +102,9 @@ async function arrange(): Promise<void> {
 
 /** Where things are in the 2160 x 1350 picture, with the side bar widened by dragging its edge. Look at the probes (`_*.png` in .shots/) after any change of layout. */
 const at = {
-  sash: { x: 636, y: 700 }, sashTo: 760,
-  message: { x: 396, y: 227 },
-  rows: { cart: { x: 330, y: 767 }, feature: { x: 734, y: 595 } },
+  sash: { x: 639, y: 700 }, sashTo: 760,
+  message: { x: 396, y: 163 },
+  rows: { cart: { x: 330, y: 703 }, feature: { x: 400, y: 539 } },
   /** Empty editor space: a click there puts the focus in the editor, and the pointer rests there. */
   quiet: { x: 1500, y: 1000 },
 };
@@ -130,8 +130,8 @@ async function project(api: ExtensionDiagnostics): Promise<void> {
 
     // Branches: how far each branch is from its upstream, and its right-click menu.
     await exec('gitPro.branchesView.focus'); await sleep(1200);
-    await pointer.click(183, 446); await sleep(800); // collapses Changes
-    await pointer.click(143, 551); await sleep(1200); // opens the Local group
+    await pointer.click(183, 390); await sleep(800); // collapses Changes
+    await pointer.click(143, 496); await sleep(1200); // opens the Local group
     await pointer.click(at.rows.feature.x, at.rows.feature.y, 3); await sleep(1000);
     await capture('branches');
     await keys('Escape');
