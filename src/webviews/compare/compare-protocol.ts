@@ -11,7 +11,8 @@ export type CompareAction = { type: 'ready'; session: string } | { type: 'refres
   { type: 'filter'; session: string; revision: number; text: string; statuses: string } |
   /** Marks files of the comparison as viewed or not viewed (by index into the captured list); a presentation choice, kept with the comparison. */
   { type: 'viewed'; session: string; revision: number; indexes: number[]; viewed: boolean } |
-  { type: 'diff' | 'localDiff' | 'openFile' | 'copyPath'; session: string; revision: number; index: number } |
+  /** `focus` (diff and localDiff only): the diff takes the focus, as after a click; without it the focus stays in the list, as when the keyboard steps through the files. */
+  { type: 'diff' | 'localDiff' | 'openFile' | 'copyPath'; session: string; revision: number; index: number; focus?: true } |
   { type: 'getFromBranch'; session: string; revision: number; indexes: number[] };
 const index = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0 && Number(value) < 1_000_000;
 /** Strict: unknown types and malformed fields throw; fields a type does not name are dropped. */
@@ -45,7 +46,7 @@ export function parseCompareAction(value: unknown): CompareAction {
       if (index(item.offset) && item.offset % 200 === 0) return { type: 'filesPage', session, revision, offset: item.offset };
       break;
     case 'diff': case 'localDiff': case 'openFile': case 'copyPath':
-      if (index(item.index)) return { type: item.type, session, revision, index: item.index };
+      if (index(item.index)) return { type: item.type, session, revision, index: item.index, ...(item.focus === true && (item.type === 'diff' || item.type === 'localDiff') ? { focus: true as const } : {}) };
       break;
     case 'getFromBranch': {
       const indexes = item.indexes;

@@ -12,6 +12,9 @@ test('Compare protocol accepts only session-bound, revision-carrying actions on 
   assert.deepEqual(parseCompareAction({ type: 'filesMode', session: s, revision: 2, mode: 'tips' }), { type: 'filesMode', session: s, revision: 2, mode: 'tips' });
   assert.deepEqual(parseCompareAction({ type: 'filesPage', session: s, revision: 2, offset: 400 }), { type: 'filesPage', session: s, revision: 2, offset: 400 });
   for (const type of ['diff', 'localDiff', 'openFile'] as const) assert.deepEqual(parseCompareAction({ type, session: s, revision: 2, index: 7, path: '/etc/passwd' }), { type, session: s, revision: 2, index: 7 });
+  for (const type of ['diff', 'localDiff'] as const) assert.deepEqual(parseCompareAction({ type, session: s, revision: 2, index: 7, focus: true }), { type, session: s, revision: 2, index: 7, focus: true }, 'a click asks for the focus to move into the diff');
+  for (const focus of [false, 1, 'true', null]) assert.deepEqual(parseCompareAction({ type: 'diff', session: s, revision: 2, index: 7, focus }), { type: 'diff', session: s, revision: 2, index: 7 }, 'anything but true leaves the focus in the list');
+  for (const type of ['openFile', 'copyPath'] as const) assert.deepEqual(parseCompareAction({ type, session: s, revision: 2, index: 7, focus: true }), { type, session: s, revision: 2, index: 7 }, 'only a diff has focus to move');
   assert.deepEqual(parseCompareAction({ type: 'getFromBranch', session: s, revision: 2, indexes: [3, 1] }), { type: 'getFromBranch', session: s, revision: 2, indexes: [3, 1] });
 });
 

@@ -155,7 +155,8 @@ class ComparePanel {
     switch (action) {
       case 'showFiles': return this.receive({ ...base, type: 'selectCommit', oid });
       case 'showInHistory': return this.receive({ ...base, type: 'showInHistory', oid });
-      case 'diff': case 'localDiff': case 'openFile': case 'copyPath': return this.receive({ ...base, type: action, index });
+      // A menu is the pointer's: the diff it opens takes the focus.
+      case 'diff': case 'localDiff': case 'openFile': case 'copyPath': return this.receive({ ...base, type: action, index, ...(action === 'diff' || action === 'localDiff' ? { focus: true } : {}) });
       case 'getFromBranch': return this.receive({ ...base, type: 'getFromBranch', indexes: indexList(indexes) });
       case 'markViewed': case 'unmarkViewed': return this.receive({ ...base, type: 'viewed', indexes: indexList(indexes), viewed: action === 'markViewed' });
     }
@@ -220,7 +221,7 @@ class ComparePanel {
         if (action.offset > 0 && action.offset >= total) throw new Error('Choose an available file page.');
         this.loaded = { ...loaded, offset: action.offset }; return true;
       }
-      case 'diff': case 'localDiff': case 'openFile': await this.open(action.type, loaded, this.file(loaded, action.index), signal); return false;
+      case 'diff': case 'localDiff': case 'openFile': await this.open(action.type, loaded, this.file(loaded, action.index), signal, action.focus === true); return false;
       case 'copyPath': await vscode.env.clipboard.writeText(this.file(loaded, action.index).path); return false;
       case 'openAll': await this.openAll(loaded); return false;
       case 'getFromBranch': return this.getFromBranch(loaded, action.indexes, signal);
@@ -308,11 +309,16 @@ class ComparePanel {
       : files.scope === 'tips' ? [`${this.left.label} ${short(files.from)}`, `${this.right?.label ?? ''} ${short(files.to)}`] : [`${this.left.label} ${short(files.from)}`, 'Working Tree'];
     return { from: absentFrom ? undefined : files.from, to: absentTo ? undefined : files.to, labels };
   }
-  /** Diffs open beside the tab with focus left in it, so the list stays in view and the next click replaces the diff (a preview editor). */
-  private diffOptions(): vscode.TextDocumentShowOptions | undefined {
-    return vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.root)).get<boolean>('compare.openDiffsBeside', true) === false ? undefined : { viewColumn: vscode.ViewColumn.Beside, preview: true, preserveFocus: true };
+  /** Diffs open beside the tab, so the list stays in view and the next click replaces the diff (a preview editor). The focus stays in the list for the keyboard, which goes on stepping through the files; after a click it moves to the diff, because VS Code shows the toolbar of a diff (next change, whitespace, split) only in the active group and leaves an inactive one with `…`. */
+  private diffOptions(focus: boolean): vscode.TextDocumentShowOptions | undefined {
+    return vscode.workspace.getConfiguration('gitPro', vscode.Uri.file(this.root)).get<boolean>('compare.openDiffsBeside', true) === false ? undefined : { viewColumn: this.diffColumn(), preview: true, preserveFocus: !focus };
   }
-  private async open(kind: 'diff' | 'localDiff' | 'openFile', loaded: Loaded, file: ChangedFile, signal: AbortSignal): Promise<void> {
+  /** The group right of this tab, by number. `Beside` is relative to the active group, which after a click is the diff's own, and the next diff would open one more group to its right. */
+  private diffColumn(): vscode.ViewColumn {
+    const own = this.panel.viewColumn;
+    return own !== undefined && own >= vscode.ViewColumn.One && own < vscode.ViewColumn.Nine ? own + 1 as vscode.ViewColumn : vscode.ViewColumn.Beside;
+  }
+  private async open(kind: 'diff' | 'localDiff' | 'openFile', loaded: Loaded, file: ChangedFile, signal: AbortSignal, focus: boolean): Promise<void> {
     const history = this.owner.deps.history, revisions = this.owner.deps.revisions, id = this.repositoryId, name = path.posix.basename(file.path), before = file.originalPath ?? file.path;
     if (kind === 'openFile') { const uri = await this.workingFile(file.path); if (!uri) throw new Error(`${name} does not exist in the working tree.`); await vscode.commands.executeCommand('vscode.open', uri); return; }
     if (statFor(loaded.view.files, file)?.added === null) throw new Error(`${name}: binary file — no text diff.`);
@@ -325,11 +331,11 @@ class ComparePanel {
       if (!working && !worktree) throw new Error(`${name} does not exist in the working tree.`);
       const snapshot = revisions.add(content, blobPath), local = working ?? revisions.add(Buffer.alloc(0), file.path);
       const [left, right, leftLabel, rightLabel] = worktree && this.swapped ? [local, snapshot, 'Working Tree', label] : [snapshot, local, label, 'Working Tree'];
-      await vscode.commands.executeCommand('vscode.diff', left, right, redact(`${name} (${leftLabel} ↔ ${rightLabel})`), this.diffOptions()); return;
+      await vscode.commands.executeCommand('vscode.diff', left, right, redact(`${name} (${leftLabel} ↔ ${rightLabel})`), this.diffOptions(focus)); return;
     }
     const [left, right] = await Promise.all([history.revision(id, from, before, signal), history.revision(id, to, file.path, signal)]);
     if (this.disposed || signal.aborted) return;
-    await vscode.commands.executeCommand('vscode.diff', revisions.add(left, before), revisions.add(right, file.path), redact(`${name} (${labels[0]} ↔ ${labels[1]})`), this.diffOptions());
+    await vscode.commands.executeCommand('vscode.diff', revisions.add(left, before), revisions.add(right, file.path), redact(`${name} (${labels[0]} ↔ ${labels[1]})`), this.diffOptions(focus));
   }
   private async openAll(loaded: Loaded): Promise<void> {
     const files = loaded.view.files;

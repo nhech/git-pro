@@ -91,8 +91,10 @@ test('Compare files show a directory tree with status, stats and inline actions,
   const app = rows[1]!; assert.equal(app.dataset.status, 'M'); assert.equal(app.getAttribute('aria-level'), '2'); assert.equal(app.getAttribute('aria-label'), 'src/app.ts, Modified, 3 added, 1 removed');
   assert.equal(app.find(node => node.className === 'file-status')?.textContent, 'M');
   assert.equal(rows[2]!.find(node => node.className === 'file-origin')?.textContent, '← src/old.ts'); assert.equal(rows[3]!.find(node => node.className === 'file-stat')?.textContent, 'Binary');
-  app.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 4, index: 0, session: 'session-1' });
-  app.find(node => node.dataset.inlineAction === 'localDiff')!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'localDiff', revision: 4, index: 0, session: 'session-1' });
+  app.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 4, index: 0, focus: true, session: 'session-1' }, 'a click moves the focus into the diff, where its toolbar shows');
+  app.find(node => node.dataset.inlineAction === 'localDiff')!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'localDiff', revision: 4, index: 0, focus: true, session: 'session-1' });
+  app.find(node => node.dataset.inlineAction === 'openFile')!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'openFile', revision: 4, index: 0, session: 'session-1' });
+  app.focus(); app.key('Enter'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 4, index: 0, session: 'session-1' }, 'Enter keeps the focus in the list, so the keyboard goes on stepping');
   assert.deepEqual(context(app), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 0, indexes: '0', compareWorktree: false, fileOnlyInBranch: false, viewedAvailable: false, fileViewed: false });
   assert.deepEqual(context(rows[2]!), { preventDefaultContextMenuItems: true, session: 'session-1', revision: 4, webviewSection: 'file', index: 2, indexes: '2', compareWorktree: false, fileOnlyInBranch: false, viewedAvailable: false, fileViewed: false });
   app.fire('contextmenu'); assert.equal(h.body.children.length, 0, 'no menu of ours is drawn');
@@ -172,7 +174,7 @@ test('Working-tree mode shows the WebStorm header and colour legend, and Get fro
   assert.equal(rows[1]!.find(node => node.dataset.inlineAction === 'openFile'), undefined, 'A file only in the branch cannot be opened locally');
   assert.equal(rows[0]!.find(node => node.dataset.inlineAction === 'localDiff'), undefined, 'The diff already is against the working tree');
   assert.equal(h.get('get-from-branch').disabled, true);
-  rows[0]!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 2, index: 0, session: 'session-1' }); assert.equal(rows[0]!.getAttribute('aria-selected'), 'true');
+  rows[0]!.fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'diff', revision: 2, index: 0, focus: true, session: 'session-1' }); assert.equal(rows[0]!.getAttribute('aria-selected'), 'true');
   rows[1]!.fire('click', { ctrlKey: true }); assert.equal(h.sent.at(-1)?.type, 'diff', 'Ctrl-click only changes the selection');
   assert.equal(h.get('get-from-branch').textContent, 'Get 2 Files from feature'); assert.equal(h.get('get-from-branch').disabled, false);
   h.get('get-from-branch').fire('click'); assert.deepEqual(h.sent.at(-1), { type: 'getFromBranch', revision: 2, indexes: [0, 1], session: 'session-1' });
@@ -200,7 +202,7 @@ test('a diff opened over the tab keeps the Get from Branch selection and the foc
   const before = harness({ flat: true });
   before.post(state); const rows = before.get('file-rows').children;
   rows[0]!.fire('click'); rows[1]!.fire('click', { ctrlKey: true }); rows[1]!.focus();
-  assert.deepEqual(before.sent.at(-1), { type: 'diff', revision: 2, index: 0, session: 'session-1' }, 'a plain click opens the diff, which hides this tab');
+  assert.deepEqual(before.sent.at(-1), { type: 'diff', revision: 2, index: 0, focus: true, session: 'session-1' }, 'a plain click opens the diff, which hides this tab');
   const saved = before.states.at(-1) as Record<string, unknown>;
   assert.deepEqual(saved, { flat: true, session: 'session-1', revision: 2, chosen: [0, 1], anchor: 1, focusKey: 'file:1' });
   // VS Code recreates the renderer (retainContextWhenHidden: false) and the host replays the same revision.
@@ -260,6 +262,7 @@ test('Next and Previous File open the neighbouring diff in the order the list sh
   rows[2]!.focus(); rows[2]!.fire('keydown', { key: 'ArrowUp', altKey: true }); assert.equal(opened().at(-1), 1);
   const plainArrow = opened().length; rows[1]!.fire('keydown', { key: 'ArrowDown' }); assert.equal(opened().length, plainArrow, 'a plain arrow only moves focus');
   h.post({ type: 'busy', busy: true }); assert.equal(next.disabled, true); assert.equal(previous.disabled, true);
+  assert.equal(h.sent.some(message => message.type === 'diff' && 'focus' in message), false, 'stepping, with the keys or the buttons, keeps the focus in the list');
   const before = h.sent.length; rows[1]!.fire('keydown', { key: 'ArrowDown', altKey: true }); assert.equal(h.sent.length, before, 'busy blocks it like every other request');
   h.post({ type: 'busy', busy: false });
   // A new list starts over: the file opened last may not be in it.

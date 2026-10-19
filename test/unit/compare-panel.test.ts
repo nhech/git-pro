@@ -16,7 +16,7 @@ interface Uri { scheme: string; fsPath?: string; path: string; label?: string; c
 const uri = (scheme: string, value: string): Uri => ({ scheme, path: value, ...(scheme === 'file' ? { fsPath: value } : {}), toString: () => `${scheme}:${value}` });
 
 class FakePanel {
-  readonly sent: Message[] = []; visible = true; revealed = 0; disposed = false; iconPath: unknown; title: string;
+  readonly sent: Message[] = []; visible = true; revealed = 0; disposed = false; iconPath: unknown; title: string; viewColumn: number | undefined;
   receive: (value: unknown) => Promise<void> = async () => undefined; private onDispose: () => void = () => undefined;
   readonly webview = { html: '', cspSource: 'owned:', asWebviewUri: (value: Uri) => value, postMessage: async (value: Message) => { this.sent.push(value); return true; },
     onDidReceiveMessage: (listener: (value: unknown) => Promise<void>) => { this.receive = listener; return { dispose: () => undefined }; } };
@@ -44,7 +44,7 @@ async function harness(options: { files?: unknown; worktree?: unknown; head?: st
     commands: { executeCommand: async (...args: unknown[]) => { executed.push(args); if (args[0] === 'vscode.changes') tabs.push({ label: String(args[1]), input: { textDiffs: args[2] } }); } },
     workspace: { getConfiguration: () => ({ get: (key: string) => key === 'compare.openDiffsBeside' ? settings.beside : settings.mode }), registerTextDocumentContentProvider: () => ({ dispose: () => undefined }) },
     Uri: { file: (value: string) => uri('file', value), joinPath: (base: Uri, ...parts: string[]) => uri(base.scheme ?? 'file', [base.path, ...parts].join('/')), from: ({ scheme, path: value }: { scheme: string; path: string }) => uri(scheme, value) },
-    ViewColumn: { Active: -1, Beside: -2 }, env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }
+    ViewColumn: { Active: -1, Beside: -2, One: 1, Nine: 9 }, env: { clipboard: { writeText: async (value: string) => { clipboard.push(value); } } }
   };
   const files = (scope: string, from: string | undefined, to: string | undefined, entries: { status: string; path: string; originalPath?: string }[], binary: string[] = []) =>
     ({ scope, from, to, files: entries, stats: entries.map(entry => ({ path: entry.path, ...(entry.originalPath ? { originalPath: entry.originalPath } : {}), added: binary.includes(entry.path) ? null : 1, removed: binary.includes(entry.path) ? null : 0 })), omitted: false });
@@ -386,7 +386,7 @@ test('Native menu commands reach the tab through the router and are checked like
     assert.throws(() => h.menus.commit(argument('file', { oid: listed }), ['gitPro.compare']), /Git Pro panel menu/, 'a file row is not a commit');
     const revision = state.revision;
     await run('copyPath', 'file', { index: 2, indexes: '2', revision }); assert.deepEqual(h.clipboard, ['README.md']);
-    await run('diff', 'file', { index: 0, indexes: '0', revision }); assert.equal(h.executed.at(-1)![0], 'vscode.diff');
+    await run('diff', 'file', { index: 0, indexes: '0', revision }); assert.equal(h.executed.at(-1)![0], 'vscode.diff'); assert.equal((h.executed.at(-1)![4] as { preserveFocus?: boolean }).preserveFocus, false, 'a menu is a pointer action: the diff takes the focus');
     await run('localDiff', 'file', { index: 0, indexes: '0', revision }); assert.equal((h.executed.at(-1)![2] as Uri).scheme, 'file');
     await run('openFile', 'file', { index: 0, indexes: '0', revision }); assert.equal(h.executed.at(-1)![0], 'vscode.open');
     const failures = errors();
@@ -433,7 +433,7 @@ test('A folder comparison lists only the files inside the folder, keeps its own 
   } finally { await h.cleanup(); }
 });
 
-test('Diffs open beside the tab as a preview without taking focus, unless the setting is off', async () => {
+test('Diffs open beside the tab as a preview, taking the focus after a click but not from the keyboard, unless the setting is off', async () => {
   const h = await harness();
   try {
     await h.surface.openRefs('repo', 'feature', 'main'); const panel = h.panels[0]!, revision = panel.state.revision;
@@ -441,7 +441,14 @@ test('Diffs open beside the tab as a preview without taking focus, unless the se
     assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: -2, preview: true, preserveFocus: true }], 'the list stays in view and the next click replaces the diff');
     await panel.send({ type: 'localDiff', revision, index: 0 });
     assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: -2, preview: true, preserveFocus: true }]);
+    // VS Code shows a diff's toolbar (next change, whitespace, split) only in the active group: after a click the diff takes the focus.
+    for (const type of ['diff', 'localDiff'] as const) { await panel.send({ type, revision, index: 0, focus: true }); assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: -2, preview: true, preserveFocus: false }], `${type} by click`); }
     await panel.send({ type: 'openFile', revision, index: 0 }); assert.deepEqual(h.executed.at(-1), ['vscode.open', h.executed.at(-1)![1]], 'opening the file itself is an explicit move to the editor');
+    // Beside means beside the active group, which after a click is the diff's: the column is the one right of the tab, so the next diff replaces this one.
+    panel.viewColumn = 1; await panel.send({ type: 'diff', revision, index: 0, focus: true });
+    assert.deepEqual(JSON.parse(JSON.stringify(h.executed.at(-1)!.slice(4))), [{ viewColumn: 2, preview: true, preserveFocus: false }]);
+    panel.viewColumn = 9; await panel.send({ type: 'diff', revision, index: 0 });
+    assert.equal((h.executed.at(-1)![4] as { viewColumn: number }).viewColumn, -2, 'there is no column 10: Beside');
     h.settings.beside = false;
     await panel.send({ type: 'diff', revision, index: 0 }); assert.equal(h.executed.at(-1)![4], undefined, 'off: the diff opens in the tab\'s own group');
   } finally { await h.cleanup(); }

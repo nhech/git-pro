@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The diff opened from the Compare tab shows its toolbar.** The diff opened beside the tab left the focus in the list, and VS Code shows the toolbar of a diff (previous and next change, whitespace, minimap, side by side or inline) only in the active group, so the group beside the list had nothing but `…`. A click on a file, Compare with Local or a menu entry now moves the focus into the diff, where those buttons and F7 are at hand. Enter and Alt+Up / Alt+Down in the list, and the Next File and Previous File buttons, keep the focus in the list as before, so the keyboard goes on stepping through the files.
+
 ## 0.4.0 — 2026-10-19
 
 A safety net under Discard, hard reset and force push, pull requests reviewed by fetching their ref, blame of a whole file, and a set of smaller tools for History, the commit box and remotes.

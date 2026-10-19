@@ -258,17 +258,18 @@
     for (const [type, label, icon] of [...(worktree ? [] : [['localDiff', 'Compare with Local', 'git-compare']]), ['openFile', 'Open File', 'go-to-file'], ...(state.files.viewedCount !== undefined ? [['viewed', item.viewed ? 'Mark as Not Viewed' : 'Mark as Viewed', item.viewed ? 'eye-closed' : 'eye']] : [])]) {
       if (type === 'openFile' && item.presence === 'branch') continue;
       const inline = button('icon-button', undefined); inline.tabIndex = -1; inline.title = label; inline.setAttribute('aria-label', label); inline.dataset.inlineAction = type; inline.disabled = busy; inline.append(glyph(icon));
-      inline.addEventListener('click', event => { event.stopPropagation(); act(type, type === 'viewed' ? { indexes: viewedTargets(item), viewed: !item.viewed } : { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
+      inline.addEventListener('click', event => { event.stopPropagation(); act(type, type === 'viewed' ? { indexes: viewedTargets(item), viewed: !item.viewed } : type === 'localDiff' ? { index: item.index, focus: true } : { index: item.index }); }); inline.addEventListener('dblclick', event => event.stopPropagation()); actions.append(inline);
     }
     row.append(actions);
     const letter = node('span', 'file-status', item.status); letter.setAttribute('aria-hidden', 'true'); row.append(letter);
-    const open = () => { openedIndex = item.index; act('diff', { index: item.index }); };
+    // A pointer opens the diff with the focus in it, so its toolbar (next change, whitespace, split) shows; the keyboard keeps the focus in this list, so Enter and Alt+Arrow go on stepping.
+    const open = focus => { openedIndex = item.index; act('diff', focus === true ? { index: item.index, focus: true } : { index: item.index }); };
     // What a plain click does, which Next File and Previous File also run: the row takes focus, becomes the selection and its diff opens.
-    const choose = () => { rove(treeRows, row); if (worktree) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } open(); };
+    const choose = focus => { rove(treeRows, row); if (worktree) { chosen.clear(); chosen.add(item.index); anchor = item.index; markChosen(); } open(focus); };
     fileOpeners.set(item.index, choose);
     row.addEventListener('click', event => {
       if (worktree && (event.ctrlKey || event.metaKey || event.shiftKey)) { rove(treeRows, row); pick(item.index, event); return; }
-      choose();
+      choose(true);
     });
     row.addEventListener('focus', () => { lastTreeKey = row.dataset.focusKey; remember(); });
     // As in the Explorer, a right-click on a row outside the selection selects just that row before the menu opens.
